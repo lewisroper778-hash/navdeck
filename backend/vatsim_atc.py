@@ -5,6 +5,9 @@ import requests
 VATSPY = "https://raw.githubusercontent.com/vatsimnetwork/vatspy-data-project/master/"
 _ref = {"at": 0, "data": None}
 APT_TYPES = {"DEL", "GND", "TWR", "APP", "DEP"}
+TRACONS = {"SCT": "KLAX", "PCT": "KIAD", "D10": "KDFW", "I90": "KIAH", "HNL": "PHNL", "N90": "KJFK", "A80": "KATL", "C90": "KORD",
+           "NCT": "KSFO", "L30": "KLAS", "P50": "KPHX", "D01": "KDEN", "A90": "KBOS", "F11": "KMCO", "S46": "KSEA", "M98": "KMSP",
+           "D21": "KDTW", "T75": "KSTL", "P80": "KPDX", "S56": "KSLC", "R90": "KOMA", "Y90": "KBDL", "MUNSTER": "EDDG"}
 
 
 def _load_reference():
@@ -70,8 +73,8 @@ def build_atc(controllers):
                 sectors.append(pos | {"name": name, "geometries": geoms})
         elif kind in APT_TYPES:
             code = parts[0]
-            icao = code if code in ref["airports"] else ref["lids"].get(code) or ("K" + code if "K" + code in ref["airports"] else None)
-            if icao:
+            icao = TRACONS.get(code) or (code if code in ref["airports"] else ref["lids"].get(code) or ("K" + code if "K" + code in ref["airports"] else None))
+            if icao and icao in ref["airports"]:
                 apt = airports.setdefault(icao, ref["airports"][icao] | {"positions": []})
                 apt["positions"].append(pos)
     return {"sectors": sectors, "airports": list(airports.values())}

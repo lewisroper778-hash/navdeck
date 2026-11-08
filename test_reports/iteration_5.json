@@ -1,0 +1,35 @@
+{
+  "summary": "Tested the new VATSIM map features with live data. Backend: GET /api/vatsim/atc and /api/vatsim/pilots, 8/8 pytest passed. Frontend (signed in with a Clerk ticket, 1920x1080): traffic search (partial match, no-match, click a result, Enter), flyTo then popup (callsign, route, aircraft, alt, GS, heading, airline logo img and fallback), popup fully inside the map (3 of 3 checks), clicking a marker directly, switching popup to another plane, closing the popup, ATC toggle on/off/on (canvas pixel check: green/orange/red go from 61478/637/378 to 0 and back), sector hover tooltip ('Edmonton CZEG_FSS · 135.025 · Jack'), and regressions (pilot count 1564, CID validation toast, prefile href). All requested features work. Only minor issues found.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/vatsim/atc", "issue": "US TRACON / combined approach callsigns are dropped because they don't resolve to a VATSpy airport: SCT_APP, PCT_APP, D10_E_APP, I90_D_APP, HNL_H_APP, CZQM_L_APP, SBWR_APP, MUNSTER_APP (8 of 101 airport positions live). Some of these are major approach positions (SoCal, Potomac, DFW, Houston) and get no ring. Possible fix: map them with the SimAware TRACON boundaries dataset, or use a small alias table."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "VATSIM map", "issues": [
+        "When a popup opens near the top, Leaflet autoPan moves the map past the north edge of the world and leaves a grey band without tiles at the top of the map. No maxBounds or maxBoundsViscosity is set. Fix: set maxBounds=[[-85,-180],[85,180]] (or allow world wrap) and maxBoundsViscosity=1.",
+        "A sticky sector tooltip near the top edge of the map gets partly cut off (the 'Edmonton' title was clipped). Minor."
+      ]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_vatsim_atc_iter5.py", "/app/backend/tests/atc_coverage_check.py", "/app/test_reports/pytest/pytest_vatsim_iter5.xml"],
+  "action_items": [
+    "Optional: resolve TRACON-style APP callsigns (SCT/PCT/D10/I90/HNL...) so they get approach rings",
+    "Optional: add map maxBounds so popup autoPan can't move the view past the edge of the world"
+  ],
+  "critical_code_review_comments": [
+    "VatsimPage.focusPilot uses map.once('moveend'). If the user picks two results quickly, both handlers stay registered and the first one can briefly select the wrong CID. Remove the earlier handler (map.off) before adding a new one.",
+    "vatsim_atc builds geometry on cache-key change (feed update_timestamp). The response is large (full FIR polygons rounded to 2 dp) and the frontend fetches it every 30s. Consider an ETag/304 or splitting static geometry from the live position list.",
+    "Every pilot Marker gets a new eventHandlers object on each render, so all ~1600 markers are re-bound each time the 30s feed refresh runs. Fine for now but costly on low-end devices."
+  ],
+  "updated_files": ["/app/backend/tests/test_vatsim_atc_iter5.py", "/app/backend/tests/atc_coverage_check.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "None. The CID import was tested only with an invalid value (client-side validation), so the profile was not changed.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Use python /app/backend/tests/make_ticket.py to get a fresh sign-in ticket URL for each browser_automation run (sessions are not kept between runs). Open the ticket, wait 7s, then goto /vatsim. The map uses preferCanvas: sectors and circles are drawn on a canvas in .leaflet-overlay-pane, so check them through canvas pixels. Markers are DOM .leaflet-marker-icon elements. The Leaflet popup is .leaflet-popup and contains [data-testid=traffic-popup]."
+}

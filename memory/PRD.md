@@ -30,3 +30,10 @@ Iteration 3: "make this more rounded edges, and make sure airline logos are visi
 ## Backlog
 - P1: Direct VATSIM filing (needs VATSIM Connect OAuth app approval); in-app SimBrief generation (needs SimBrief API key)
 - P2: Logbook CSV export, share read-only report link
+
+## 2026-06 VATSIM map upgrades
+- Traffic shown as heading-rotated plane icons
+- Callsign search box (flyTo + popup)
+- Click traffic -> popup with airline logo, route, aircraft, alt, GS, heading
+- ATC coverage layer (VATSpy data, /api/vatsim/atc): CTR/FSS sectors shaded, APP rings (70km), TWR rings (16km), on/off toggle; US TRACON alias table
+- Tested: iteration_5 (100% backend/frontend)

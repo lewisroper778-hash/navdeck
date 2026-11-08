@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@clerk/react";
 import { toast } from "sonner";
 import { MapContainer, TileLayer, Tooltip, Marker } from "react-leaflet";
@@ -48,11 +48,14 @@ export default function VatsimPage() {
   const [showAtc, setShowAtc] = useState(true);
   const [map, setMap] = useState(null);
   const [selectedCid, setSelectedCid] = useState(null);
+  const pendingFocus = useRef(null);
   const selected = feed?.pilots.find((p) => p.cid === selectedCid);
   const focusPilot = (p) => {
     if (!map) return setSelectedCid(p.cid);
     setSelectedCid(null);
-    map.once("moveend", () => setSelectedCid(p.cid));
+    if (pendingFocus.current) map.off("moveend", pendingFocus.current);
+    pendingFocus.current = () => setSelectedCid(p.cid);
+    map.once("moveend", pendingFocus.current);
     map.flyTo([p.lat, p.lon], Math.max(map.getZoom(), 7), { duration: 1.2 });
   };
   const lookup = async (id = cid) => {
@@ -103,7 +106,7 @@ export default function VatsimPage() {
           </div>
         </div>
         <div data-testid="vatsim-map" className="h-[460px] overflow-hidden rounded-[28px] border border-slate-200/80 dark:border-slate-800">
-          <MapContainer ref={setMap} center={me ? [me.lat, me.lon] : [35, 0]} zoom={me ? 6 : 2} preferCanvas style={{ height: "100%", width: "100%" }}>
+          <MapContainer ref={setMap} center={me ? [me.lat, me.lon] : [35, 0]} zoom={me ? 6 : 2} minZoom={2} maxBounds={[[-85, -200], [85, 200]]} maxBoundsViscosity={1} preferCanvas style={{ height: "100%", width: "100%" }}>
             <TileLayer url={tiles(theme)} attribution="Tiles &copy; Esri · VATSIM data · VATSpy" />
             {showAtc && <AtcLayer atc={atc} />}
             {(feed?.pilots || []).map((p) => (
