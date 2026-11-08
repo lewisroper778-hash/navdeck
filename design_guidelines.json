@@ -1,0 +1,84 @@
+{
+  "theme": "light",
+  "typography": {
+    "headings": "Work Sans",
+    "body": "IBM Plex Sans",
+    "monospace": "IBM Plex Mono",
+    "rules": [
+      "Headings should use Work Sans, tightly tracked.",
+      "Use IBM Plex Mono for all flight data, waypoints, altitudes, fuel numbers, etc.",
+      "Never use Inter for headings."
+    ]
+  },
+  "colors": {
+    "background": "#F8FAFC",
+    "surface": "#FFFFFF",
+    "primary": "#0369A1",
+    "accent": "#D946EF",
+    "destructive": "#DC2626",
+    "text_primary": "#0F172A",
+    "text_secondary": "#64748B",
+    "border": "#E2E8F0",
+    "rules": [
+      "Strict light theme with high contrast to mimic EFB (Electronic Flight Bag) software.",
+      "Aviation blue (primary) and magenta (accent) for route indicators.",
+      "Background should be off-white (slate-50) to reduce glare, surfaces pure white with crisp 1px borders."
+    ]
+  },
+  "layouts": {
+    "app_container": "Flex column with Top Navigation Bar, followed by main content area. Do not center-align.",
+    "dashboard": "Dense list or bento grid for saved flights, showcasing origin/dest, aircraft, and block times.",
+    "flight_detail": "Modular panels: Header summary, Fuel planning card, Navlog Table. Use dense padding for tables.",
+    "navlog_table": "Dense border-collapse table. Right-align numeric values. Use monospaced font for all data columns.",
+    "spacing": "Generous spacing around containers (p-8 or p-12), but dense spacing within data tables (p-2 to p-3)."
+  },
+  "components": {
+    "buttons": "Sharp or slightly rounded (rounded-sm) buttons. Primary buttons use aviation blue. Avoid pill shapes for EFB.",
+    "cards": "Flat, rectangular, subtle 1px border. No drop shadows. Use border-slate-200.",
+    "tables": "Crisp borders, dense layout, sticky headers. Hover states on rows."
+  },
+  "motion": {
+    "rules": "Minimalist. Micro-interactions for hover states. No bouncy animations. Immediate, precise feedback."
+  },
+  "accessibility": {
+    "contrast": "APCA/WCAG AA compliant.",
+    "data-testid": "All interactive elements and key informational elements MUST include data-testid attribute."
+  },
+  "media": {
+    "image_urls": [
+      {
+        "url": "https://images.unsplash.com/photo-1569629743817-70d8db6c323b?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDF8MHwxfHNlYXJjaHwzfHxjb21tZXJjaWFsJTIwYWlybGluZXIlMjBpbiUyMGZsaWdodCUyMGNsZWFyJTIwc2t5fGVufDB8fHx8MTc5NDE2Njc0NHww&ixlib=rb-4.1.0&q=85",
+        "description": "Commercial airliner mid-air",
+        "category": "login_background or hero header image"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1580826237584-fda5b612e1bc?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NTJ8MHwxfHNlYXJjaHwyfHxtaW5pbWFsaXN0JTIwd2hpdGUlMjBjbG91ZHMlMjBibHVlJTIwc2t5fGVufDB8fHx8MTc5NDE2Njc0NHww&ixlib=rb-4.1.0&q=85",
+        "description": "Minimalist white clouds",
+        "category": "dashboard_empty_state_or_header"
+      }
+    ]
+  },
+  "instructions_to_main_agent": [
+    "Build a robust layout: A Top navbar containing Logo, My Flights, SimBrief Profile, and Auth (Logout).",
+    "Add the required fonts (Work Sans, IBM Plex Sans, IBM Plex Mono) via Google Fonts in index.html.",
+    "Install and use a suitable icon library like lucide-react or @phosphor-icons/react for aviation icons (plane, map-pin, wind, gas-pump).",
+    "Dashboard page: A list showing imported flights. A prominent button to 'Import latest OFP from SimBrief'.",
+    "Flight Detail page: The core of the app. Layout: Top summary header (callsign, routing, ETE). Fuel card. Main section for the Navlog table.",
+    "Navlog table: Must include Waypoint, Airway, FL, Wind, TAS, GS, Dist, ETE, ETA, FOB, Fuel Burn. Add a checkbox or toggle for 'Live in-flight tracker' to tick off waypoints as you pass them.",
+    "Design aesthetic: Very clean, dense, technical. Flat borders, no shadows. Professional aviation EFB style.",
+    "Provide a 'Export Navlog as PDF' button (can be mocked with window.print() or UI trigger).",
+    "For SimBrief integration, provide a mock form on the Settings page to enter 'Pilot ID' and mock API logic to fetch a dummy OFP.",
+    "Make sure all components use pure Tailwind CSS and do not rely on missing complex Shadcn components if they are not pre-installed. You can build pure HTML/Tailwind tables for the Navlog."
+  ],
+  "UNIVERSAL GUIDELINES FOR MAIN AGENT": [
+    "You tend to converge toward generic outputs. Avoid this: make creative, distinctive frontends that surprise and delight.",
+    "DO NOT apply universal transition like 'transition: all'. This results in breaking transforms.",
+    "DO NOT center align the app container. Remove text-align: center from App.css. It disrupts the human natural reading flow.",
+    "Always use modern precise styles relevant to the app style.",
+    "Every interaction needs micro-animations - hover states, transitions.",
+    "Use generous spacing for main layout, but dense spacing for data tables.",
+    "Use sonner for toasts.",
+    "Prioritize using pre-existing components from src/components/ui.",
+    "Include data-testid on all interactive elements (buttons, links, form inputs) using kebab-case role-based names."
+  ]
+}
