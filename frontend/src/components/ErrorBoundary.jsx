@@ -28,6 +28,11 @@ export default class ErrorBoundary extends Component {
 
   componentDidCatch(error, info) {
     reportError(error.message, `${error.stack}\n${info.componentStack}`);
+    // After a new deploy an open tab may ask for page files that no longer exist; reload once to get the new ones
+    if (/ChunkLoadError|Loading chunk|dynamically imported module/i.test(`${error.name} ${error.message}`) && !sessionStorage.getItem("navdeck-chunk-reload")) {
+      sessionStorage.setItem("navdeck-chunk-reload", "1");
+      window.location.reload();
+    }
   }
 
   reset = async () => {

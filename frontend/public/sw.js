@@ -1,4 +1,4 @@
-const CACHE = "navdeck-v2";
+const CACHE = "navdeck-v3";
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (e) =>
@@ -22,7 +22,10 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(
     fetch(req)
       .then((res) => {
-        if (res.ok || res.type === "opaque") {
+        // Never store the SPA's index.html under a script/style URL (a missing old chunk falls back to HTML)
+        const type = res.headers.get("content-type") || "";
+        const wrongType = (req.destination === "script" || req.destination === "style") && type.includes("text/html");
+        if ((res.ok || res.type === "opaque") && !wrongType) {
           const copy = res.clone();
           caches.open(CACHE).then((c) => c.put(req, copy));
         }

@@ -28,11 +28,39 @@
         -->
         <title>NAVDECK · Flight Sim EFB</title>
         <script>window.addEventListener("error",function(e){if(e.error instanceof DOMException&&e.error.name==="DataCloneError"&&e.message&&e.message.includes("PerformanceServerTiming")){e.stopImmediatePropagation();e.preventDefault()}},true);</script>
-        <script src="https://assets.emergent.sh/scripts/emergent-main.js"></script>
+        <script defer src="https://assets.emergent.sh/scripts/emergent-main.js"></script>
+        <style>html,body{background:#020617;margin:0}#boot-fallback{display:none;min-height:100vh;place-items:center;color:#fff;font-family:system-ui,sans-serif;text-align:center;padding:24px}#boot-fallback button{min-height:44px;border:0;border-radius:16px;padding:0 20px;margin:6px;font-weight:600;font-size:15px}</style>
     </head>
     <body>
         <noscript>You need to enable JavaScript to run this app.</noscript>
         <div id="root"></div>
+        <div id="boot-fallback" data-testid="boot-fallback">
+            <div>
+                <h1 style="font-size:26px;margin:0 0 8px">NAVDECK didn't start</h1>
+                <p style="opacity:.7;max-width:420px;margin:0 auto 16px;font-size:14px">The app files didn't load on this device. This is usually an old saved copy of the app. Tap Reset app to fetch a fresh copy; your flights are safe on the server.</p>
+                <button data-testid="boot-reload" style="background:#fff;color:#0f172a" onclick="location.reload()">Reload</button>
+                <button data-testid="boot-reset" style="background:#334155;color:#fff" onclick="navdeckReset()">Reset app</button>
+            </div>
+        </div>
+        <script>
+            // Shown only if the app bundle never starts (e.g. a stale cached copy or a blocked script)
+            function navdeckReset() {
+                var done = function () { location.replace("/?fresh=" + Date.now()); };
+                var jobs = [];
+                try { localStorage.clear(); } catch (e) {}
+                if (navigator.serviceWorker) jobs.push(navigator.serviceWorker.getRegistrations().then(function (rs) { return Promise.all(rs.map(function (r) { return r.unregister(); })); }));
+                if (window.caches) jobs.push(caches.keys().then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k); })); }));
+                Promise.all(jobs).then(done, done);
+            }
+            setTimeout(function () {
+                if (window.__navdeckBooted) return;
+                document.getElementById("boot-fallback").style.display = "grid";
+                try {
+                    var scripts = Array.prototype.map.call(document.scripts, function (s) { return s.src; }).filter(Boolean).join(" ");
+                    navigator.sendBeacon && navigator.sendBeacon("/api/client-errors", new Blob([JSON.stringify({ message: "App bundle did not boot within 10s", stack: scripts.slice(0, 5000), url: location.href.slice(0, 500), ua: navigator.userAgent.slice(0, 400) })], { type: "application/json" }));
+                } catch (e) {}
+            }, 10000);
+        </script>
         <!--
       This HTML file is a template.
       If you open it directly in the browser, you will see an empty page.
