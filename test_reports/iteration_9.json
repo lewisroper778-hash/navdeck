@@ -1,0 +1,38 @@
+{
+  "summary": "Preview only. Clerk-blocked flow: I aborted **/*clerk.accounts.dev/** and **/api/__clerk/npm/** in Chromium. On '/', the splash 'Loading flight deck…' changes to app-signin-unreachable at 12.5s (Protected stuck timer). On '/sign-in', the overlay appears at 15.5s (SlowSignIn). The page shows the marketing half with no form until then. The text is the blocked-service note ('Can't reach the sign-in service. A content blocker, private DNS or network filter may be blocking it…'). app-retry-button reloads the page (window marker cleared), and the screen returns again after the timeout. The page is never blank and the splash never runs forever. ClerkFailed does fire, but not immediately: Clerk's script loader retries, so status 'error' arrives about 16s in. On /sign-in this means FailedScreen and SlowSignIn both render at about the same time (2 stacked overlays, identical, harmless). At 768x1024 the screen looks clean and centred. Normal flow: signed-out '/' goes to /sign-in with the Clerk email field. After ticket sign-in, home stayed 20s+ with no overlay or splash, and /flights, /vatsim (17s wait), /logbook, /settings and /flights/<id> all rendered with no overlay and no page errors. Bad cache (flights='\"x\"', profile={vatsim_friends:'x'}, flight:<id>={}): home, /flights, /vatsim and /flights/<id> rendered with no app-error-screen, both online and with /api/flights, /api/me and /api/vatsim aborted. Theme: 'purple' and '\"dark\"' are clamped to 'dark' (html.dark, stored value rewritten) and the Clerk card is dark (rgb(33,33,38)). 'light' gives a white card. Backend 10/10 pass: a new TTL index check (created, expireAfterSeconds=604800), 'created' stored as a datetime, and the iter8 regression (gzip on vatsim pilots/atc, client-errors 200/422, AI briefing SSE 356 chunks over about 4.7s, not gzipped).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/client-errors", "issue": "Still no server-side rate limit. The client caps at 5 per page load and the TTL now bounds storage, so this is acceptable. A reload loop still writes up to 5 rows per load."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "ClerkAuthProvider FailedScreen + SlowSignIn", "issue": "On /sign-in with Clerk blocked, ClerkFailed (status 'error' at about 16s) and SlowSignIn (15s) both render the overlay, giving 2 elements with data-testid app-signin-unreachable. Visually identical. Only the top one is clickable, which matters for tests using .first. Suggest that SlowSignIn returns null when useClerk().status === 'error', or render a single overlay.", "selector": "[data-testid=app-signin-unreachable]", "priority": "LOW"},
+      {"component": "FlightProcessPage offline with no valid cache", "issue": "If GET /flights/{id} fails with a network error and the cache has no valid flight, the page shows 'Loading flight…' forever with no message or retry (line 69-74 only toasts when a cache exists). Add an error/offline state.", "selector": "", "priority": "LOW"},
+      {"component": "Clerk script rejection (preview only)", "issue": "Clerk's failed_to_load_clerk_js surfaces as an unhandled promise rejection (2x per load). On preview, the Emergent dev error overlay (data-emergent-overlay-host) then covers the page and intercepts clicks on app-retry-button. This does not happen in production. A user still sees the overlay's own 'Reload app' button.", "selector": "[data-emergent-overlay-host]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_clerk_fail_iter9.py", "/app/backend/tests/test_perf_errors_iter8.py", "/app/test_reports/pytest/pytest_iter9.xml"],
+  "action_items": [
+    "Publish the new build to production. Production still runs the old blank-page build, and nothing was verified there.",
+    "LOW: Avoid the double overlay on /sign-in (SlowSignIn should skip when Clerk status is 'error').",
+    "LOW: FlightProcessPage needs an offline/error state when there is no cached flight, instead of an endless 'Loading flight…'.",
+    "LOW (optional): If faster feedback is wanted, also check useClerk().status === 'error' in Protected; currently '/' shows the message at 12s and /sign-in at 15s."
+  ],
+  "critical_code_review_comments": [
+    "utils-app cache validation is correct: getFlights filters to valid flights, getFlight requires string id + array waypoints, profileOf coerces vatsim_friends. Other fields inside a flight (e.g. a waypoint with a wrong shape) are still trusted, but this is out of scope.",
+    "ThemeProvider clamp is correct and rewrites the stored value.",
+    "ErrorBoundary: the reportError cap of 5 per load works (observed at most 5 rows per page load). reset() unregisters the SWs before navigation.",
+    "FailedScreen reportError runs twice in dev because of StrictMode double effects ('Clerk failed to load' x2). Fine in production.",
+    "server.py: the TTL index ttl_7d on client_errors.created is present in Mongo, and 'created' is a real datetime. The old 'at' ISO string is kept."
+  ],
+  "updated_files": ["/app/backend/tests/test_clerk_fail_iter9.py"],
+  "success_rate": {"backend": "100% (10/10)", "frontend": "100% of requested scenarios passed (3 low-priority findings)"},
+  "seed_data_creation": "None. I deleted the 22 HeadlessChrome client_errors rows created by my browser runs (by _id, created >= 23:08Z) and the TEST_iter9_* rows (fixture). I kept the Windows Chrome rows from 23:07-23:09Z (not created by this agent). Bad localStorage was only set inside throwaway Playwright contexts, and enavlog-theme was removed at the end.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend/tests && python -m pytest test_clerk_fail_iter9.py test_perf_errors_iter8.py -n 0. Ticket: python make_ticket.py (single use, one per browser context). Clerk block: context.route abort on '**/*clerk.accounts.dev/**' and '**/api/__clerk/npm/**'. Then remove [data-emergent-overlay-host] before clicking, and click app-retry-button with .last. Only Chromium was tested (no WebKit in the sandbox)."
+}

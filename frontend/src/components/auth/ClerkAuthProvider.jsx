@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ClerkFailed, ClerkProvider, useAuth } from "@clerk/react";
+import { ClerkFailed, ClerkProvider, useAuth, useClerk } from "@clerk/react";
 import { dark } from "@clerk/ui/themes";
 import { useTheme } from "@/lib/utils-app";
 import Splash, { BLOCKED_NOTE } from "@/components/Splash";
@@ -35,13 +35,14 @@ function FailedScreen() {
 // Covers the sign-in pages too if Clerk hangs without reporting a failure
 function SlowSignIn() {
   const { isLoaded } = useAuth();
+  const { status } = useClerk();
   const [stuck, setStuck] = useState(false);
   useEffect(() => {
     if (isLoaded) return;
     const t = setTimeout(() => setStuck(true), 15000);
     return () => clearTimeout(t);
   }, [isLoaded]);
-  return !isLoaded && stuck ? <Splash overlay retry note={BLOCKED_NOTE} /> : null;
+  return !isLoaded && stuck && status !== "error" ? <Splash overlay retry note={BLOCKED_NOTE} /> : null;
 }
 
 export default function ClerkAuthProvider({ children }) {

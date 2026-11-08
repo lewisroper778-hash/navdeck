@@ -60,3 +60,9 @@ Iteration 3: "make this more rounded edges, and make sure airline logos are visi
 - Helper frontend/public/navdeck-bridge.py (Python SimConnect, 20Hz, --simulate); SimLinkPanel on /settings, SimLinkChip on flight page (polls 10s, reloads flight)
 - GET /health added for platform probe (prod deploy failing on 404)
 - Pending user answer: email+password login question (Clerk already supports it)
+
+## 2026-06 Blank page + speed
+- Root cause: Clerk JS failing to load (blocked) => blank page; prod custom domain navdeck.online unverified (A records wrong, no SSL), clerk.navdeck.online not CNAMEd to Clerk (deployer RCA)
+- ErrorBoundary + /api/client-errors (TTL 7d), Splash + sign-in-unreachable screen (ClerkFailed / 12-15s timeout), cache shape validation, SW v2 cleanup, theme clamp, flight load-failed state
+- Speed: route code-splitting (main 158kB gz), GZip except /api/ai/*, VATSIM/ATC stale-while-revalidate + warm at startup
+- Password reset: built into Clerk SignIn (Forgot password? on password step)

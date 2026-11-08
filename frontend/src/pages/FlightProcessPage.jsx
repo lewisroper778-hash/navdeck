@@ -52,6 +52,7 @@ export default function FlightProcessPage() {
   const navigate = useNavigate();
   const [flight, setFlight] = useState(() => cache.getFlight(id));
   const [printMode, setPrintMode] = useState("navlog");
+  const [loadFailed, setLoadFailed] = useState(false);
   const [profileName, setProfileName] = useState(() => cache.getProfile()?.display_name);
   const api = useMemo(() => makeClient(getToken), [getToken]);
 
@@ -71,6 +72,7 @@ export default function FlightProcessPage() {
         toast.error("Flight not found");
         navigate("/");
       } else if (cache.getFlight(id)) toast.info("Offline — showing cached flight");
+      else setLoadFailed(true);
     });
     // eslint-disable-next-line
   }, [id]);
@@ -90,7 +92,11 @@ export default function FlightProcessPage() {
     return (
       <div className="min-h-screen bg-slate-100 dark:bg-slate-950">
         <Navbar />
-        <div className="p-10 font-mono text-sm text-slate-500">LOADING FLIGHT…</div>
+        <div className="p-10 font-mono text-sm text-slate-500">
+          {loadFailed ? (
+            <span data-testid="flight-load-failed">Couldn't load this flight — check your connection. <button onClick={() => window.location.reload()} className="ml-2 font-semibold text-sky-600 underline">Retry</button></span>
+          ) : "LOADING FLIGHT…"}
+        </div>
       </div>
     );
 
