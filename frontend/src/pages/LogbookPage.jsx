@@ -21,12 +21,16 @@ export default function LogbookPage() {
   }, [api]);
 
   const openPdf = async (docId) => {
-    const w = window.open("", "_blank");
     try {
       const r = await api.get(`/documents/${docId}/file`, { responseType: "blob" });
-      w.location.href = URL.createObjectURL(new Blob([r.data], { type: "application/pdf" }));
+      const url = URL.createObjectURL(new Blob([r.data], { type: "application/pdf" }));
+      // iPad Safari may block pop-ups after an await; fall back to a direct link
+      const a = document.createElement("a");
+      a.href = url;
+      a.target = "_blank";
+      a.rel = "noopener";
+      if (!window.open(url, "_blank")) a.click();
     } catch {
-      w?.close();
       toast.error("Could not open the PDF");
     }
   };

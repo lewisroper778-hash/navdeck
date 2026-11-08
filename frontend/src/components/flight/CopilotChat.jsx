@@ -16,7 +16,9 @@ export default function CopilotChat({ flightId }) {
   useEffect(() => {
     if (open) api.get(`/ai/${flightId}/chat`).then((r) => setMsgs(r.data)).catch(() => {});
   }, [open, flightId, api]);
-  useEffect(() => end.current?.scrollIntoView({ behavior: "smooth" }), [msgs]);
+  useEffect(() => {
+    end.current?.scrollIntoView({ behavior: "smooth" });
+  }, [msgs]);
 
   const send = async () => {
     const text = input.trim();

@@ -1,7 +1,7 @@
 import { MapContainer, TileLayer, Polyline, CircleMarker, Marker, Tooltip, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useTheme } from "@/lib/utils-app";
 
 export const tiles = (theme) =>
@@ -17,8 +17,11 @@ export const planeIcon = (hdg = 0, color = "#6366f1", size = 26) =>
 
 function Fit({ points }) {
   const map = useMap();
+  const done = useRef(false);
   useEffect(() => {
-    if (points.length > 1) map.fitBounds(points, { padding: [30, 30] });
+    if (done.current || points.length < 2) return;
+    done.current = true;
+    map.fitBounds(points, { padding: [30, 30] });
   }, [map, points]);
   return null;
 }
@@ -53,7 +56,7 @@ export default function RouteMap({ rows }) {
             <Tooltip>{p.ident}{p.ata ? ` · ATA ${p.ata}` : p.eto ? ` · ETO ${p.eto}` : ""}</Tooltip>
           </CircleMarker>
         ))}
-        <Marker position={pos} icon={planeIcon(bearing(pos, next === pos ? line[1] : next), "#d946ef", 30)} />
+        <Marker position={pos} icon={planeIcon(lastIdx >= line.length - 1 ? bearing(line[line.length - 2], pos) : bearing(pos, next), "#d946ef", 30)} />
       </MapContainer>
     </div>
   );

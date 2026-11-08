@@ -1,4 +1,4 @@
-# e-navlog — Product Requirements Document
+# NAVDECK (formerly e-navlog) — Product Requirements Document
 
 ## Original problem statement
 "create me an app, called e-navlog for flight simulator that can have multiple accounts and integrates with simbrief"
@@ -24,7 +24,9 @@ Iteration 3: "make this more rounded edges, and make sure airline logos are visi
 - 2026-11 Iteration 3: 5-step flight process on separate pages (Briefing → Pushback → Enroute → Arrival → Close) with a stepper and Next/Prev; Left gate / Takeoff / Landing / Arrived at gate tiles; landing rate entry with rating; fuel at gate; completion checklist; Close Flight (server-validated) that locks the flight, with Reopen; rounder, colour-coded design; iPad landscape and portrait layouts with 44px+ touch targets; web-app manifest
 - Hardening: closed flights reject edits (409), HH:MM and numeric validation, waypoint edits by index, non-blocking SimBrief fetch
 
+- 2026-11 Iteration 4 (NAVDECK): rebrand + logo; dark-first modern UI; Log in / Create account screen; Home with stats (flight time, avg/best landing rate, Zulu clock); SimBrief planner (pre-filled SimBrief dispatch + import); min take-off fuel; VATSIM page (live map from data feed, CID import + member lookup, prefilled myVATSIM prefile link); users-online counter (presence heartbeat); Logbook (hours, landings, avg landing rate, saved PDFs); route map with aircraft at last ticked fix; finger/Apple Pencil signature; arrival weather (live METAR) / runway / notes in report; PDF generated on close and saved to Emergent Object Storage
+- AI (OpenAI gpt-5.4 via Emergent universal key, streamed): briefing assistant, flight debrief, METAR/ATIS decoder, co-pilot chat with per-flight history
+
 ## Backlog
-- P1: Flight logbook totals (hours, landings, average landing rate)
-- P1: Route map with the aircraft's progress
-- P2: Hand-drawn signature, more checklist items (e.g. METAR/ATIS notes), sharing a read-only report link
+- P1: Direct VATSIM filing (needs VATSIM Connect OAuth app approval); in-app SimBrief generation (needs SimBrief API key)
+- P2: Logbook CSV export, share read-only report link

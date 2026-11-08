@@ -1,0 +1,47 @@
+{
+  "summary": "Iteration 4 (NAVDECK rebrand + new pages + AI). Backend: new pytest suite test_navdeck_iter5.py, 18/18 passing: presence, stats, logbook, documents/PDF, VATSIM pilots/member, METAR, notes, AI SSE chat + history, min_takeoff, lat/lon, close->PDF->soft-delete, cross-user isolation. Regression suites iter3+iter4: 19/19 passing. Frontend (Playwright, 1920 and iPad 1180x820): sign-in branding + tab switching, Clerk ticket sign-in, refresh keeps session, sign-out returns to /sign-in, navbar links/online count/zulu, home stats match /api/stats, theme toggle (dark is default), SimBrief planner link + save + import, Briefing min take-off fuel (68,799) + AI briefing stream, Enroute route map + plane marker moves as MERIT/HFD/TOC are ticked, N806SB shows re-sync hint, Arrival notes save/persist + AI METAR decode, Close signature pad gating, signing, AI debrief, close -> PDF stored (checked the PDF content: min T/O fuel, METAR, runway, notes, commander, landing rate, signature image), logbook totals/row/PDF, VATSIM map (1724 pilots/216 ATC), CID validation/import/member info, prefile href params, co-pilot chat. Found and fixed one crash: CopilotChat threw 'destroy is not a function' on sending a message. Found one 500 on METAR fetch and one data-loading bug on Home/VATSIM.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET /api/metar/{icao}", "issue": "No error handling around requests.get to aviationweather.gov. A ReadTimeout (seen in the UI run, traceback in backend.err.log) returns 500. The upstream status is also not checked: aviationweather returned 502/504 to curl during testing, and in that case the HTML error body would come back as the 'metar' text and be saved into the flight's arrival notes. Fix: wrap in try/except requests.RequestException -> 502 with a clear detail; treat 204 as metar=None; on any other non-200, return 502 and don't use resp.text.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "GET /api/vatsim/member/{cid}", "issue": "Same pattern: no try/except on the requests call and no check before resp.json(). A network error or a non-JSON 5xx/429 from api.vatsim.net becomes an unhandled 500. Return 502 instead."},
+      {"endpoint": "PUT /api/me", "issue": "None values are dropped from the update, so a user can never clear vatsim_cid (or simbrief_pilot_id) once set. Accept an empty string or explicit null as 'clear'."},
+      {"endpoint": "POST /api/ai/{id}/metar", "issue": "Calls the LLM even when no METAR is stored, which spends credits on 'no METAR provided' replies. Return 400 or disable the decode button when the METAR is empty."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "CopilotChat", "issue": "FIXED by testing agent. useEffect(() => end.current?.scrollIntoView(...)) returned the call's result as the effect cleanup. Current Chrome returns a Promise from scrollIntoView, so React threw 'destroy is not a function' and the whole app crashed into the error overlay as soon as a message was sent. The effect body is now wrapped in braces. Retest: the streamed reply renders, history persists after reload, no page errors.", "selector": "[data-testid='copilot-send-button']", "priority": "CRITICAL (fixed)"},
+      {"component": "HomePage 'Flights in progress' + VatsimPage prefile flight select", "issue": "Both read open flights only from the localStorage cache, which only the /flights page fills. In a fresh session (new device, cleared storage, or not visiting /flights first) Home shows 'No open flights' and the VATSIM panel shows 'Import a SimBrief OFP first' even though N806SB is open in the DB. Reproduced twice. Fetch GET /api/flights on mount, as FlightsPage does.", "selector": "[data-testid='vatsim-prefile-panel'], [data-testid^='home-flight-']", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [
+      {"flow": "Logbook PDF open", "issue": "GET /api/documents/{id}/file returns 200 application/pdf (34 KB), but the window.open('') + blob URL tab stayed about:blank in headless Chromium. This is probably a headless limitation. Check manually on iPad Safari: blob URLs set on a pre-opened window can be blocked. A fallback is to download via an <a download> link.", "affected_selectors": ["[data-testid^='logbook-pdf-']"]}
+    ],
+    "design_issues": [
+      {"screen": "Global", "issues": ["Navbar is rendered inside each page, so it remounts on every route change and sends POST /presence each time (8 calls in about 40 s during testing) instead of once a minute. Lift Navbar or the heartbeat into a layout.", "RouteMap <Fit points={line}> gets a new array on every render, so fitBounds runs on every waypoint tick and resets any pan/zoom the user made. Memoise line or fit only once.", "RouteMap plane heading after the final fix is ticked uses bearing(pos, line[1]), which points back toward the second fix.", "VatsimPage saveCid has no try/catch, so a PUT /me failure gives an unhandled promise rejection and no toast.", "Co-pilot panel (380x520) covers the right half of the content at iPad 1180 width. Acceptable, but consider a bottom sheet on tablet."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_navdeck_iter5.py", "/app/backend/tests/test_enavlog_iter4.py", "/app/backend/tests/test_enavlog_iter3.py", "/app/test_reports/pytest/pytest_iter5.xml"],
+  "action_items": [
+    "Harden GET /api/metar/{icao}: catch requests exceptions and non-200 responses -> 502. Never save the upstream error body as the METAR.",
+    "Harden GET /api/vatsim/member/{cid} the same way.",
+    "HomePage and VatsimPage: load open flights from GET /api/flights instead of relying only on cache.getFlights().",
+    "Allow clearing vatsim_cid via PUT /me.",
+    "Optional: send the presence heartbeat once per app (not per page mount); memoise the RouteMap fit; add try/catch to saveCid; skip the AI METAR call when no METAR is stored."
+  ],
+  "critical_code_review_comments": [
+    "extras.py metar/vatsim_member: external HTTP calls without exception handling or status checks (see backend issues).",
+    "CopilotChat: arrow-function useEffect returning a value crashed the app (fixed). AirlineLogo.jsx uses useEffect(() => setIdx(0)), which is harmless because setState returns undefined, but prefer a braced body.",
+    "server.py is 734 lines, just over the 700-line guideline. Consider moving the OFP parsing and _backfill into their own module.",
+    "store_report errors are only logged. If the PDF upload fails, the flight shows 'signed PDF saved to your Logbook' even though no document exists. Surface a document_saved flag so the UI shows the real state."
+  ],
+  "updated_files": ["/app/frontend/src/components/flight/CopilotChat.jsx", "/app/backend/tests/test_navdeck_iter5.py"],
+  "success_rate": {"backend": "100% (37/37 pytest incl. regression); 1 live 500 observed on /api/metar during the UI run (upstream timeout)", "frontend": "~92%: all requested flows verified; 1 crash fixed; Home/VATSIM open-flight list bug outstanding"},
+  "test_credentials": "pilot+clerk_test@example.com / user_3Lq4UfbibPtTeBffoyK96ASOJdT (from /app/memory/test_credentials.md). UI sign-in via tests/make_ticket.py (one ticket per browser session).",
+  "seed_data_creation": "Pytest creates throwaway Clerk users (fixture other_user, deleted afterwards) and imports OFPs for them. Pilot data touched: UA124 (f6604740) was reopened, reset, re-flown and closed again through the UI. It now has a new PDF (doc e33b0373-f925-41b8-b602-f7559a65d405); the old doc 5469fca5 is soft-deleted, as designed. Its arrival_notes now hold runway 'TEST_25R exit B5', notes 'TEST_ gate A12' and METAR 'EDDB 082020Z 25008KT 9999 SCT030 06/02 Q1018'; saved AI texts ai.briefing/metar/debrief were added; TSAT is 10:00. The pilot's vatsim_cid was set to 1000000 during the UI test and restored to null directly in Mongo, because the API can't clear it. The 4 TEST_ co-pilot chat messages created on UA124 were deleted.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Use tests/make_ticket.py > /tmp/t1.txt and read it inside the Playwright script (open('/tmp/t1.txt')). Clerk UserButton menu: click '[data-testid=user-menu] button', then get_by_text('Sign out', exact=True). UA124 is CLOSED again with a PDF. To retest the process: POST /reopen, then /reset, then PATCH times/arrival via the API. AI calls stream in about 5-8 s. aviationweather.gov is flaky (502/504/timeouts), so the METAR fetch can fail intermittently. The CopilotChat fix needs no rebuild (hot reload). Verify the Home/VATSIM open-flight fix in a fresh browser context without visiting /flights first.",
+  "rca of the issue": "Copilot crash: CopilotChat.jsx line 19 used an expression-bodied useEffect, so the return value of end.current.scrollIntoView({behavior:'smooth'}) became the effect cleanup. Current Chrome returns a Promise from scrollIntoView, so on the next msgs change React called promise() and threw 'destroy is not a function'. Repro: open the co-pilot and send any message. Mitigation: braced effect body (applied). METAR 500: extras.metar calls requests.get with timeout=10 and no try/except. aviationweather.gov timed out (urllib3 ReadTimeoutError in backend.err.log), so FastAPI returned 500. Home/VATSIM empty: both components read cache.getFlights() (localStorage key written only by FlightsPage.load), so they are empty until /flights has been visited in that browser."
+}

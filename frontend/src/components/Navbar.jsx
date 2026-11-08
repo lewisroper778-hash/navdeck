@@ -15,13 +15,21 @@ const LINKS = [
   ["/logbook", "Logbook", "nav-logbook-link"],
 ];
 
+let lastBeat = 0;
+let lastCount = null;
+
 function useOnline() {
   const { getToken } = useAuth();
   const api = useMemo(() => makeClient(getToken), [getToken]);
-  const [count, setCount] = useState(null);
+  const [count, setCount] = useState(lastCount);
   const [net, setNet] = useState(navigator.onLine);
   useEffect(() => {
-    const beat = () => api.post("/presence").then((r) => setCount(r.data.online)).catch(() => {});
+    // Navbar remounts per page; keep the heartbeat to once a minute across pages
+    const beat = () => {
+      if (Date.now() - lastBeat < 55000) return;
+      lastBeat = Date.now();
+      api.post("/presence").then((r) => { lastCount = r.data.online; setCount(lastCount); }).catch(() => {});
+    };
     beat();
     const t = setInterval(beat, 60000);
     const on = () => setNet(true);

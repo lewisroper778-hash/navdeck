@@ -51,7 +51,7 @@ export default function ArrivalNotes({ f, saveNotes }) {
           {field("notes", "Arrival notes", "STAR, taxi route, gate, remarks…", 2)}
         </div>
       </Panel>
-      <AiCard title="Weather decoder" mode="metar" flightId={f.id} saved={f.ai?.metar} body={{ message: n.metar }} tone="sky" cta="Decode weather" testId="ai-metar" />
+      <AiCard title="Weather decoder" mode="metar" flightId={f.id} saved={f.ai?.metar} body={{ message: n.metar }} disabled={!n.metar} tone="sky" cta="Decode weather" testId="ai-metar" />
     </div>
   );
 }

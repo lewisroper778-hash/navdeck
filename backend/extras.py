@@ -143,10 +143,17 @@ def build_router(db, owned_flight, editable_flight) -> APIRouter:
     async def vatsim_member(cid: str, user: dict = Depends(require_user)):
         if not cid.isdigit():
             raise HTTPException(status_code=400, detail="CID must be numeric")
-        resp = await run_in_threadpool(requests.get, f"https://api.vatsim.net/v2/members/{cid}", timeout=10)
+        try:
+            resp = await run_in_threadpool(requests.get, f"https://api.vatsim.net/v2/members/{cid}", timeout=10)
+        except requests.RequestException:
+            raise HTTPException(status_code=502, detail="VATSIM member service unavailable")
         if resp.status_code == 404:
             raise HTTPException(status_code=404, detail="VATSIM member not found")
-        m = resp.json()
+        try:
+            resp.raise_for_status()
+            m = resp.json()
+        except (requests.HTTPError, ValueError):
+            raise HTTPException(status_code=502, detail="VATSIM member service unavailable")
         feed = await vatsim_pilots()
         live = next((p for p in feed["pilots"] if str(p["cid"]) == cid), None)
         return {"cid": cid, "rating": m.get("rating"), "pilotrating": m.get("pilotrating"), "region": m.get("region_id"),
@@ -156,7 +163,14 @@ def build_router(db, owned_flight, editable_flight) -> APIRouter:
     async def metar(icao: str, user: dict = Depends(require_user)):
         if not (icao.isalnum() and len(icao) == 4):
             raise HTTPException(status_code=400, detail="ICAO code must be 4 characters")
-        resp = await run_in_threadpool(requests.get, f"https://aviationweather.gov/api/data/metar?ids={icao.upper()}&format=raw", timeout=10)
+        try:
+            resp = await run_in_threadpool(requests.get, f"https://aviationweather.gov/api/data/metar?ids={icao.upper()}&format=raw", timeout=10)
+        except requests.RequestException:
+            raise HTTPException(status_code=502, detail="Weather service unavailable, try again shortly")
+        if resp.status_code == 204:
+            return {"icao": icao.upper(), "metar": None}
+        if resp.status_code != 200:
+            raise HTTPException(status_code=502, detail="Weather service unavailable, try again shortly")
         return {"icao": icao.upper(), "metar": resp.text.strip() or None}
 
     @r.patch("/flights/{flight_id}/notes")
@@ -185,6 +199,8 @@ def build_router(db, owned_flight, editable_flight) -> APIRouter:
             convo = "\n".join(f"{m['role']}: {m['text']}" for m in reversed(history))
             prompt = f"{context}\n\nConversation so far:\n{convo}\n\nPilot: {body.message}"
         elif mode == "metar":
+            if not (body.message or (f.get("arrival_notes") or {}).get("metar")):
+                raise HTTPException(status_code=400, detail="Add or fetch a METAR/ATIS first")
             prompt = f"{PROMPTS['metar']}\nArrival airport {f.get('destination')}. METAR/ATIS: {body.message or (f.get('arrival_notes') or {}).get('metar') or 'not provided'}"
         else:
             prompt = f"{PROMPTS[mode]}\n\n{context}"

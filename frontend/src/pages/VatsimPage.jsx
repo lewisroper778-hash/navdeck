@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@clerk/react";
 import { toast } from "sonner";
-import { MapContainer, TileLayer, CircleMarker, Tooltip, Marker } from "react-leaflet";
+import { MapContainer, TileLayer, Tooltip, Marker } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import { Radio, Send, UserCheck, ExternalLink, RefreshCw } from "lucide-react";
 import { makeClient } from "@/lib/api";
@@ -9,6 +9,9 @@ import { cache, useTheme } from "@/lib/utils-app";
 import Navbar from "@/components/Navbar";
 import { Panel, inputCls, btnPrimary, btnGhost } from "@/components/flight/ui";
 import { tiles, planeIcon } from "@/components/flight/RouteMap";
+
+const iconCache = {};
+const trafficIcon = (hdg) => { const k = Math.round((Number(hdg) || 0) / 5) * 5; return (iconCache[k] ||= planeIcon(k, "#6366f1", 18)); };
 
 const hhmm = (s) => { const n = parseInt(s, 10) || 0; return `${String(Math.floor(n / 3600)).padStart(2, "0")}${String(Math.floor((n % 3600) / 60)).padStart(2, "0")}`; };
 
@@ -30,8 +33,9 @@ export default function VatsimPage() {
   const [cid, setCid] = useState(cache.getProfile()?.vatsim_cid || "");
   const [member, setMember] = useState(null);
   const [feed, setFeed] = useState(null);
-  const flights = cache.getFlights().filter((f) => f.status !== "closed");
-  const [flightId, setFlightId] = useState(flights[0]?.id || "");
+  const [all, setAll] = useState(() => cache.getFlights());
+  const flights = all.filter((f) => f.status !== "closed");
+  const [flightId, setFlightId] = useState("");
 
   const loadFeed = () => api.get("/vatsim/pilots").then((r) => setFeed(r.data)).catch(() => toast.error("VATSIM feed unavailable"));
   const lookup = async (id = cid) => {
@@ -40,6 +44,7 @@ export default function VatsimPage() {
   };
   useEffect(() => {
     loadFeed();
+    api.get("/flights").then((r) => { cache.setFlights(r.data); setAll(r.data); }).catch(() => {});
     api.get("/me").then((r) => { cache.setProfile(r.data); if (r.data.vatsim_cid) { setCid(r.data.vatsim_cid); lookup(r.data.vatsim_cid); } }).catch(() => {});
     const t = setInterval(loadFeed, 30000);
     return () => clearInterval(t);
@@ -48,12 +53,16 @@ export default function VatsimPage() {
 
   const saveCid = async () => {
     if (!/^\d{6,8}$/.test(cid)) return toast.error("A VATSIM CID is 6–8 digits");
-    const r = await api.put("/me", { vatsim_cid: cid });
-    cache.setProfile(r.data);
-    toast.success("CID imported");
-    lookup();
+    try {
+      const r = await api.put("/me", { vatsim_cid: cid });
+      cache.setProfile(r.data);
+      toast.success("CID imported");
+      lookup();
+    } catch {
+      toast.error("Could not save your CID");
+    }
   };
-  const flight = flights.find((f) => f.id === flightId);
+  const flight = flights.find((f) => f.id === flightId) || flights[0];
   const me = member?.online;
 
   return (
@@ -75,9 +84,9 @@ export default function VatsimPage() {
           <MapContainer center={me ? [me.lat, me.lon] : [35, 0]} zoom={me ? 6 : 2} preferCanvas style={{ height: "100%", width: "100%" }}>
             <TileLayer url={tiles(theme)} attribution="Tiles &copy; Esri · VATSIM data" />
             {(feed?.pilots || []).map((p) => (
-              <CircleMarker key={p.cid} center={[p.lat, p.lon]} radius={3} pathOptions={{ color: "#6366f1", weight: 1, fillOpacity: 0.8 }}>
+              <Marker key={p.cid} position={[p.lat, p.lon]} icon={trafficIcon(p.hdg)}>
                 <Tooltip>{p.callsign} · {p.aircraft || "?"} · {p.dep || "?"}→{p.arr || "?"} · FL{Math.round(p.alt / 100)} · {p.gs}kt</Tooltip>
-              </CircleMarker>
+              </Marker>
             ))}
             {me && <Marker position={[me.lat, me.lon]} icon={planeIcon(me.hdg, "#d946ef", 34)} />}
           </MapContainer>
@@ -103,7 +112,7 @@ export default function VatsimPage() {
               <p className="text-sm text-slate-500">Import a SimBrief OFP first.</p>
             ) : (
               <>
-                <select data-testid="vatsim-flight-select" value={flightId} onChange={(e) => setFlightId(e.target.value)} className={inputCls}>
+                <select data-testid="vatsim-flight-select" value={flight?.id || ""} onChange={(e) => setFlightId(e.target.value)} className={inputCls}>
                   {flights.map((f) => <option key={f.id} value={f.id}>{f.callsign} · {f.origin} → {f.destination}</option>)}
                 </select>
                 {flight && (

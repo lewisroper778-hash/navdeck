@@ -336,7 +336,8 @@ async def get_me(user: dict = Depends(require_user)):
 
 @api_router.put("/me", response_model=PilotProfile)
 async def update_me(body: PilotProfileUpdate, user: dict = Depends(require_user)):
-    update = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
+    # Empty string or null clears a field (e.g. removing a VATSIM CID)
+    update = {k: (v.strip() or None) if isinstance(v, str) else v for k, v in body.model_dump(exclude_unset=True).items()}
     update["updated_at"] = datetime.now(timezone.utc).isoformat()
     update["user_id"] = user["user_id"]
     await db.pilots.update_one(

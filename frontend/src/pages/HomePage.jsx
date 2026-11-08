@@ -29,10 +29,12 @@ export default function HomePage() {
   const navigate = useNavigate();
   const api = useMemo(() => makeClient(getToken), [getToken]);
   const [stats, setStats] = useState(() => cache.getProfile()?.stats || null);
-  const recent = cache.getFlights().filter((f) => f.status !== "closed").slice(0, 3);
+  const [all, setAll] = useState(() => cache.getFlights());
+  const recent = all.filter((f) => f.status !== "closed").slice(0, 3);
 
   useEffect(() => {
     api.get("/stats").then((r) => setStats(r.data)).catch(() => {});
+    api.get("/flights").then((r) => { cache.setFlights(r.data); setAll(r.data); }).catch(() => {});
   }, [api]);
 
   const cards = [
