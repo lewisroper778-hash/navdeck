@@ -1,7 +1,9 @@
-const CACHE = "enavlog-v1";
+const CACHE = "navdeck-v2";
 
 self.addEventListener("install", () => self.skipWaiting());
-self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
+self.addEventListener("activate", (e) =>
+  e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim()))
+);
 
 // Network-first for the app shell, fonts and airline logos; API data is cached per pilot in localStorage.
 self.addEventListener("fetch", (event) => {

@@ -1,21 +1,25 @@
 import "@/App.css";
+import { lazy, Suspense, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { Show, useUser } from "@clerk/react";
+import { Show, useAuth, useUser } from "@clerk/react";
 import { Toaster } from "sonner";
 import ClerkAuthProvider from "@/components/auth/ClerkAuthProvider";
 import SignInPage from "@/pages/SignInPage";
 import SignUpPage from "@/pages/SignUpPage";
 import FlightsPage from "@/pages/FlightsPage";
 import HomePage from "@/pages/HomePage";
-import VatsimPage from "@/pages/VatsimPage";
-import LogbookPage from "@/pages/LogbookPage";
-import FlightProcessPage from "@/pages/FlightProcessPage";
-import SimbriefPage from "@/pages/SimbriefPage";
 import { ThemeProvider, cache, useTheme } from "@/lib/utils-app";
+import ErrorBoundary, { reportError } from "@/components/ErrorBoundary";
+import Splash from "@/components/Splash";
+
+const VatsimPage = lazy(() => import("@/pages/VatsimPage"));
+const LogbookPage = lazy(() => import("@/pages/LogbookPage"));
+const FlightProcessPage = lazy(() => import("@/pages/FlightProcessPage"));
+const SimbriefPage = lazy(() => import("@/pages/SimbriefPage"));
 
 function CachedUser({ children }) {
   const { user, isLoaded } = useUser();
-  if (!isLoaded || !user) return null;
+  if (!isLoaded || !user) return <Splash />;
   cache.setUser(user.id);
   return children;
 }
@@ -26,6 +30,13 @@ function ThemedToaster() {
 }
 
 function Protected({ children }) {
+  const { isLoaded } = useAuth();
+  useEffect(() => {
+    if (isLoaded) return;
+    const t = setTimeout(() => reportError("Clerk not loaded after 12s"), 12000);
+    return () => clearTimeout(t);
+  }, [isLoaded]);
+  if (!isLoaded) return <Splash />;
   return (
     <>
       <Show when="signed-in"><CachedUser>{children}</CachedUser></Show>
@@ -38,11 +49,13 @@ function Protected({ children }) {
 
 function App() {
   return (
+    <ErrorBoundary>
     <div className="App">
       <ThemeProvider>
         <BrowserRouter>
           <ClerkAuthProvider>
             <ThemedToaster />
+            <Suspense fallback={<Splash />}>
             <Routes>
               <Route path="/sign-in/*" element={<SignInPage />} />
               <Route path="/sign-up/*" element={<SignUpPage />} />
@@ -54,10 +67,12 @@ function App() {
               <Route path="/flights/:id/:phase" element={<Protected><FlightProcessPage /></Protected>} />
               <Route path="/settings" element={<Protected><SimbriefPage /></Protected>} />
             </Routes>
+            </Suspense>
           </ClerkAuthProvider>
         </BrowserRouter>
       </ThemeProvider>
     </div>
+    </ErrorBoundary>
   );
 }
 

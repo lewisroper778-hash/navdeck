@@ -1,3 +1,4 @@
+import asyncio
 import hmac
 import json
 import os
@@ -29,6 +30,34 @@ else:
 AI_MODEL = "gpt-5.4"
 _vatsim_cache = {"at": 0, "data": None, "controllers": []}
 _atc_cache = {"key": None, "data": None}
+_refresh = {"task": None}
+
+
+async def _refresh_vatsim():
+    try:
+        resp = await run_in_threadpool(requests.get, "https://data.vatsim.net/v3/vatsim-data.json", timeout=15)
+        feed = resp.json()
+    except (requests.RequestException, ValueError):
+        return
+    pilots = [{"cid": p["cid"], "callsign": p["callsign"], "lat": p["latitude"], "lon": p["longitude"], "alt": p["altitude"],
+               "gs": p["groundspeed"], "hdg": p["heading"], "name": p.get("name"),
+               "dep": (p.get("flight_plan") or {}).get("departure"), "arr": (p.get("flight_plan") or {}).get("arrival"),
+               "aircraft": (p.get("flight_plan") or {}).get("aircraft_short")} for p in feed.get("pilots", [])]
+    updated = feed.get("general", {}).get("update_timestamp")
+    _vatsim_cache.update(at=time.time(), controllers=feed.get("controllers", []),
+                         data={"updated": updated, "pilots": pilots, "controllers": len(feed.get("controllers", []))})
+    if _atc_cache["key"] != updated:
+        try:
+            _atc_cache.update(key=updated, data=await run_in_threadpool(build_atc, _vatsim_cache["controllers"]))
+        except (requests.RequestException, ValueError, KeyError):
+            pass
+
+
+def kick_vatsim_refresh():
+    # Serve cached VATSIM data instantly; refresh in the background, one fetch at a time
+    if not _refresh["task"] or _refresh["task"].done():
+        _refresh["task"] = asyncio.create_task(_refresh_vatsim())
+    return _refresh["task"]
 
 
 class SeenRequest(BaseModel):
@@ -147,33 +176,22 @@ def build_router(db, owned_flight, editable_flight) -> APIRouter:
 
     @r.get("/vatsim/pilots")
     async def vatsim_pilots():
-        if not _vatsim_cache["data"] or time.time() - _vatsim_cache["at"] > 14:
-            try:
-                resp = await run_in_threadpool(requests.get, "https://data.vatsim.net/v3/vatsim-data.json", timeout=15)
-                feed = resp.json()
-            except (requests.RequestException, ValueError):
-                if _vatsim_cache["data"]:
-                    return _vatsim_cache["data"]
+        if not _vatsim_cache["data"]:
+            await kick_vatsim_refresh()
+            if not _vatsim_cache["data"]:
                 raise HTTPException(status_code=502, detail="VATSIM data feed unavailable")
-            pilots = [{"cid": p["cid"], "callsign": p["callsign"], "lat": p["latitude"], "lon": p["longitude"], "alt": p["altitude"],
-                       "gs": p["groundspeed"], "hdg": p["heading"], "name": p.get("name"),
-                       "dep": (p.get("flight_plan") or {}).get("departure"), "arr": (p.get("flight_plan") or {}).get("arrival"),
-                       "aircraft": (p.get("flight_plan") or {}).get("aircraft_short")} for p in feed.get("pilots", [])]
-            _vatsim_cache.update(at=time.time(), controllers=feed.get("controllers", []), data={"updated": feed.get("general", {}).get("update_timestamp"), "pilots": pilots,
-                                                      "controllers": len(feed.get("controllers", []))})
+        elif time.time() - _vatsim_cache["at"] > 14:
+            kick_vatsim_refresh()
         return _vatsim_cache["data"]
 
     @r.get("/vatsim/atc")
     async def vatsim_atc():
-        feed = await vatsim_pilots()
-        if _atc_cache["key"] != feed.get("updated") or not _atc_cache["data"]:
-            try:
-                data = await run_in_threadpool(build_atc, _vatsim_cache["controllers"])
-            except (requests.RequestException, ValueError, KeyError):
-                if _atc_cache["data"]:
-                    return _atc_cache["data"]
+        if not _atc_cache["data"]:
+            await kick_vatsim_refresh()
+            if not _atc_cache["data"]:
                 raise HTTPException(status_code=502, detail="ATC coverage data unavailable")
-            _atc_cache.update(key=feed.get("updated"), data=data)
+        elif time.time() - _vatsim_cache["at"] > 14:
+            kick_vatsim_refresh()
         return _atc_cache["data"]
 
     @r.get("/vatsim/friends")

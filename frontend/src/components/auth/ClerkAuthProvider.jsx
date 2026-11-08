@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { ClerkProvider } from "@clerk/react";
 import { dark } from "@clerk/ui/themes";
 import { useTheme } from "@/lib/utils-app";
+import Splash from "@/components/Splash";
+import { reportError } from "@/components/ErrorBoundary";
 
 const appearance = {
   variables: {
@@ -30,6 +32,16 @@ export default function ClerkAuthProvider({ children }) {
   const { theme } = useTheme();
   const [config, setConfig] = useState(null);
   const [unavailable, setUnavailable] = useState(false);
+  const [slow, setSlow] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setSlow(true), 6000);
+    return () => clearTimeout(t);
+  }, []);
+
+  useEffect(() => {
+    if (unavailable) reportError("Clerk config unavailable after retries");
+  }, [unavailable]);
 
   useEffect(() => {
     let cancelled = false;
@@ -49,8 +61,8 @@ export default function ClerkAuthProvider({ children }) {
   }, []);
 
   if (unavailable)
-    return <p style={{ padding: 24 }}>Sign-in is unavailable right now. Refresh the page to try again.</p>;
-  if (!config) return null;
+    return <Splash note="Sign-in is unavailable right now. Refresh the page to try again." />;
+  if (!config) return <Splash note={slow ? "Still connecting to sign-in…" : undefined} />;
   return (
     <ClerkProvider
       publishableKey={config.publishable_key}

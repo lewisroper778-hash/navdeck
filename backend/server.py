@@ -18,14 +18,15 @@ from pymongo import ASCENDING, DESCENDING, IndexModel
 from pymongo.errors import DuplicateKeyError
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.cors import CORSMiddleware
+from starlette.middleware.gzip import GZipMiddleware
 
 try:
     from backend.clerk_auth import clerk_router, require_user
-    from backend.extras import build_router, store_report
+    from backend.extras import build_router, kick_vatsim_refresh, store_report
     from backend.bridge import build_bridge_router
 except ModuleNotFoundError:
     from clerk_auth import clerk_router, require_user
-    from extras import build_router, store_report
+    from extras import build_router, kick_vatsim_refresh, store_report
     from bridge import build_bridge_router
 
 
@@ -750,7 +751,37 @@ app.include_router(build_bridge_router(db))
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+class ClientError(BaseModel):
+    message: str = Field(max_length=2000)
+    stack: Optional[str] = Field(default=None, max_length=6000)
+    url: Optional[str] = Field(default=None, max_length=500)
+    ua: Optional[str] = Field(default=None, max_length=400)
+
+
+@app.post("/api/client-errors")
+async def client_error(body: ClientError):
+    logger.error("client error at %s: %s", body.url, body.message)
+    await db.client_errors.insert_one(body.model_dump() | {"at": datetime.now(timezone.utc).isoformat()})
+    return {"ok": True}
+
+
 app.include_router(clerk_router)
+
+
+class SelectiveGZip:
+    # Compress JSON/HTML but never the AI SSE streams, which must flush token by token
+    def __init__(self, app):
+        self.app, self.gzip = app, GZipMiddleware(app, minimum_size=1000)
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and not scope["path"].startswith("/api/ai/"):
+            return await self.gzip(scope, receive, send)
+        return await self.app(scope, receive, send)
+
+
+app.add_middleware(SelectiveGZip)
 
 app.add_middleware(
     CORSMiddleware,
@@ -770,6 +801,7 @@ logger = logging.getLogger(__name__)
 @app.on_event("startup")
 async def start_index_build():
     app.state.index_task = asyncio.create_task(ensure_indexes())
+    kick_vatsim_refresh()
 
 
 @app.on_event("shutdown")
