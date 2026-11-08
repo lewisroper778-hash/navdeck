@@ -18,9 +18,9 @@ try:
 except ModuleNotFoundError:
     from clerk_auth import require_user
     from pdf_report import APP_NAME, build_report_pdf, get_object, put_object
-    from vatsim_atc import build_atc
+    from vatsim_atc import airport_coords, build_atc, nm_between
 else:
-    from backend.vatsim_atc import build_atc
+    from backend.vatsim_atc import airport_coords, build_atc, nm_between
 
 AI_MODEL = "gpt-5.4"
 _vatsim_cache = {"at": 0, "data": None, "controllers": []}
@@ -167,6 +167,24 @@ def build_router(db, owned_flight, editable_flight) -> APIRouter:
                 raise HTTPException(status_code=502, detail="ATC coverage data unavailable")
             _atc_cache.update(key=feed.get("updated"), data=data)
         return _atc_cache["data"]
+
+    @r.get("/vatsim/friends")
+    async def vatsim_friends(user: dict = Depends(require_user)):
+        profile = await db.pilots.find_one({"user_id": user["user_id"]}, {"_id": 0, "vatsim_friends": 1}) or {}
+        friends = profile.get("vatsim_friends") or []
+        feed = await vatsim_pilots() if friends else {"pilots": []}
+        now = datetime.now(timezone.utc)
+        online = []
+        for p in feed["pilots"]:
+            if str(p["cid"]) not in friends and p["callsign"] not in friends:
+                continue
+            pos, dep, arr = (p["lat"], p["lon"]), await run_in_threadpool(airport_coords, p["dep"]), await run_in_threadpool(airport_coords, p["arr"])
+            remaining = round(nm_between(pos, arr)) if arr else None
+            total = nm_between(dep, arr) if dep and arr else None
+            eta = (now + timedelta(hours=remaining / p["gs"])).isoformat() if remaining is not None and p["gs"] > 50 else None
+            progress = round(max(0, min(1, 1 - remaining / total)) * 100) if total else None
+            online.append(p | {"remaining_nm": remaining, "eta": eta, "progress": progress, "on_ground": p["gs"] < 50})
+        return {"friends": len(friends), "online": online, "updated": feed.get("updated")}
 
     @r.get("/vatsim/member/{cid}")
     async def vatsim_member(cid: str, user: dict = Depends(require_user)):

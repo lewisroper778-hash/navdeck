@@ -45,3 +45,7 @@ Iteration 3: "make this more rounded edges, and make sure airline logos are visi
 - Briefing NOTAMs from SimBrief OFP (flight.notams origin/destination/alternate/enroute), search, raw toggle, closure badges; AI NOTAM key points (/api/ai/{id}/notams); browsable on closed flights
 - Backlog: live NOTAMs (needs FAA NOTAM API key, user deferred)
 - Tested: iteration_6 (backend 100%, frontend fixes applied after)
+
+## 2026-06 Friends Board (home)
+- GET /api/vatsim/friends: online friends with remaining_nm, live ETA (dist/GS), progress %, on_ground
+- Home FriendsBoard cards (logo, route progress, ETA, nm to go, FL); tap -> /vatsim?focus=CID opens popup; empty states

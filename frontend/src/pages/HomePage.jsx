@@ -8,6 +8,7 @@ import Navbar from "@/components/Navbar";
 import { useNow } from "@/components/flight/TimeTiles";
 import { currentPhase } from "@/lib/phases";
 import { TONES } from "@/components/flight/ui";
+import FriendsBoard from "@/components/FriendsBoard";
 
 const hm = (m) => (m == null ? "—" : `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`);
 
@@ -91,6 +92,7 @@ export default function HomePage() {
             </div>
           )}
         </section>
+        <FriendsBoard api={api} />
       </main>
     </div>
   );

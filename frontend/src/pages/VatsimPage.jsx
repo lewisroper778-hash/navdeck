@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useAuth } from "@clerk/react";
 import { toast } from "sonner";
 import { MapContainer, TileLayer, Tooltip, Marker } from "react-leaflet";
@@ -54,6 +55,7 @@ export default function VatsimPage() {
   const [friends, setFriends] = useState(cache.getProfile()?.vatsim_friends || []);
   const [filterText, setFilterText] = useState("");
   const [profileLoaded, setProfileLoaded] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
   const pendingFocus = useRef(null);
   const seenFriends = useRef(null);
   const pilots = feed?.pilots || [];
@@ -93,6 +95,15 @@ export default function VatsimPage() {
     map.on("dragstart", stop);
     return () => map.off("dragstart", stop);
   }, [map]);
+
+  useEffect(() => {
+    const focus = Number(searchParams.get("focus"));
+    const p = focus && map && pilots.find((x) => x.cid === focus);
+    if (!p) return;
+    focusPilot(p);
+    setSearchParams({}, { replace: true });
+    // eslint-disable-next-line
+  }, [feed, map]);
 
   useEffect(() => {
     if (!followCid || !feed || !map) return;

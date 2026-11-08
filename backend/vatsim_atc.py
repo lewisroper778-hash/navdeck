@@ -1,3 +1,4 @@
+import math
 import time
 
 import requests
@@ -57,6 +58,22 @@ def _sector(ref, parts):
     if apt and apt["fir"] in ref["firs"]:
         return _sector(ref, [apt["fir"]])
     return None, []
+
+
+def airport_coords(icao):
+    if not icao:
+        return None
+    try:
+        apt = _load_reference()["airports"].get(icao.upper())
+    except (requests.RequestException, ValueError, KeyError):
+        return None
+    return (apt["lat"], apt["lon"]) if apt else None
+
+
+def nm_between(a, b):
+    la1, lo1, la2, lo2 = map(math.radians, (a[0], a[1], b[0], b[1]))
+    h = math.sin((la2 - la1) / 2) ** 2 + math.cos(la1) * math.cos(la2) * math.sin((lo2 - lo1) / 2) ** 2
+    return 3440.065 * 2 * math.asin(math.sqrt(h))
 
 
 def build_atc(controllers):
