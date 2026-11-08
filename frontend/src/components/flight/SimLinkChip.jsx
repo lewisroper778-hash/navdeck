@@ -15,7 +15,9 @@ export default function SimLinkChip({ api, flight, onUpdate }) {
       if (version.current !== null && data.version !== version.current && data.flight_id === flight.id) {
         api.get(`/flights/${flight.id}`).then((r) => onUpdate(r.data)).catch(() => {});
         const e = data.last_event;
-        if (e?.applied?.length) toast.success(`Sim: ${LABELS[e.type]} ${e.time}z filled in`, { description: e.applied.includes("landing_rate") ? "Touchdown rate recorded" : undefined });
+        const jumped = data.version - version.current > 1;
+        if (jumped) toast.success(`Sim: ${data.version - version.current} updates filled in`, { description: `Latest: ${LABELS[e?.type] || ""} ${e?.time || ""}z` });
+        else if (e?.applied?.length) toast.success(`Sim: ${LABELS[e.type]} ${e.time}z filled in`, { description: e.applied.includes("landing_rate") ? "Touchdown rate recorded" : undefined });
       }
       version.current = data.version ?? 0;
     }).catch(() => {});

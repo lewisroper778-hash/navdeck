@@ -1,0 +1,32 @@
+{
+  "summary": "Deploy fix verified: GET http://127.0.0.1:8001/health returns 200 {\"status\":\"ok\"} with no auth, and the backend starts cleanly (err log shows a normal 'Application startup complete'). Regression: /api/vatsim/pilots 200, /api/me 401 without auth and 200 with auth. Bridge API: 16/16 pytest pass when run serially (link, status, flight, heartbeat online/offline, events fill without overwriting, version +1 per event, 422 validation, 401 for bad or revoked tokens, target switch, 404 for closed or other users' flights, 409 when there's no open flight). Frontend: with /flights/bridge-test-flight/arrival open, 4 posted events showed up within about 8s: landing 15:05, gate in 15:14, landing rate 142, FOB 4445 kg, and the toast 'Sim: Gate in 15:14z filled in'. sim-link-chip showed 'Sim linked · TEST_A320 · filling this flight'. On /settings: sim-link-download, sim-link-create, sim-link-unlink and sim-link-status are present. Create, after accepting the confirm dialog, shows sim-link-code ('<BACKEND_URL>#<token>'); the new token works and the old one returns 401. navdeck-bridge.py is served as a file (200), and --simulate ran a full flight against the API.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "tests/test_bridge_iter7.py", "issue": "Fails 3 tests under the default pytest.ini (-n --dist loadscope). TestBridgeAuth and TestBridgeFlow run on different workers and both re-link the same user, so the token is revoked mid-test. Passes 16/16 with -n 0. This is a test isolation problem, not an app bug."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "SimLinkChip toast", "issue": "When several events arrive within one 10s poll, only last_event gets a toast. Here off, takeoff and landing were filled silently and only 'Gate in' was announced. The data itself refreshes correctly.", "affected_selectors": ["[data-sonner-toast]"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_health_iter7.py", "/app/backend/tests/test_bridge_iter7.py", "/app/test_reports/pytest/pytest_iter7.xml"],
+  "action_items": [
+    "Optional: make test_bridge_iter7.py safe under xdist (single class, or a note to run with -n 0)",
+    "Optional: when version jumps by more than 1, toast a summary of all applied events, not just last_event"
+  ],
+  "critical_code_review_comments": [
+    "bridge.py target_flight fallback sorts by imported_at. bridge-test-flight has imported_at 2099, so it always wins the fallback for the pilot test user. This is a test-data artifact; keep it in mind.",
+    "The helper saves navdeck-bridge.json (with the token) to the current working directory. Consider the user home directory.",
+    "/bridge/event is not rate limited. Low risk because the token has 32 bytes of entropy and is stored hashed."
+  ],
+  "updated_files": ["/app/backend/tests/test_health_iter7.py", "/app/backend/tests/.bridge_token"],
+  "success_rate": {"backend": "100% (21/21 serial)", "frontend": "100%"},
+  "seed_data_creation": "None. Temporary Clerk users from the other_user fixture are deleted at teardown. bridge-test-flight was reset to only sched_* times, with landing_rate and arrival_fob null.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run the bridge tests with: cd /app/backend/tests && python -m pytest test_health_iter7.py test_bridge_iter7.py -n 0. .bridge_token was updated to the token created via the UI and is verified to work. When clicking sim-link-create while paired, accept the window.confirm dialog. The code format is URL#token. Reset the flight with: python bridge_flight_tool.py reset."
+}

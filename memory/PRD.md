@@ -54,3 +54,9 @@ Iteration 3: "make this more rounded edges, and make sure airline logos are visi
 - friend_tracking.py: tracks friends airborne->on ground within 15nm of arrival (or disconnect within 40nm) -> friend_landings
 - Runs on GET /api/vatsim/friends (30s while home open) and cron POST /api/cron/friend-landings (.emergent/crons.yml, every 15 min, WEBHOOK_CRON_SECRET)
 - GET /api/vatsim/landings + POST /api/vatsim/landings/seen; home shows pop-up toast per landing with estimated landing time
+
+## 2026-06 MSFS Sim Link + deploy fix
+- bridge.py: /api/bridge/link|status|target (Clerk), /api/bridge/flight|heartbeat|event (X-Bridge-Token, sha256-hashed). Fills off/takeoff/landing/on, landing_rate, arrival_fob only if empty
+- Helper frontend/public/navdeck-bridge.py (Python SimConnect, 20Hz, --simulate); SimLinkPanel on /settings, SimLinkChip on flight page (polls 10s, reloads flight)
+- GET /health added for platform probe (prod deploy failing on 404)
+- Pending user answer: email+password login question (Clerk already supports it)
