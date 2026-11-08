@@ -45,7 +45,8 @@ export default function FuelPanel({ flight, rows, fuelCalc, u, mode = "check" })
               <div data-testid="block-fuel" className="font-mono text-2xl font-bold">{d(f.block)?.toLocaleString() ?? "—"}</div>
             </div>
           </div>
-          <div className="mt-3 grid grid-cols-3 gap-3">
+          <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div className="rounded-2xl bg-indigo-50 dark:bg-indigo-500/10 px-4 py-3"><Stat testId="min-takeoff-fuel" label="Min take-off fuel" value={d(f.min_takeoff)?.toLocaleString()} tone="accent" /></div>
             <div className="rounded-2xl bg-amber-50 dark:bg-amber-500/10 px-4 py-3"><Stat testId="min-fuel" label="Min fuel" value={d(fuelCalc.minFuel)?.toLocaleString()} tone="warn" /></div>
             <div className="rounded-2xl bg-rose-50 dark:bg-rose-500/10 px-4 py-3"><Stat testId="mayday-fuel" label="Mayday fuel" value={d(fuelCalc.mayday)?.toLocaleString()} tone="bad" /></div>
             <div className="rounded-2xl bg-sky-50 dark:bg-sky-500/10 px-4 py-3"><Stat label="Burn / hour" value={d(fuelCalc.burnHr)?.toLocaleString()} tone="accent" /></div>

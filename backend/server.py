@@ -21,8 +21,10 @@ from starlette.middleware.cors import CORSMiddleware
 
 try:
     from backend.clerk_auth import clerk_router, require_user
+    from backend.extras import build_router, store_report
 except ModuleNotFoundError:
     from clerk_auth import clerk_router, require_user
+    from extras import build_router, store_report
 
 
 ROOT_DIR = Path(__file__).parent
@@ -71,12 +73,14 @@ class PilotProfile(BaseModel):
     user_id: str
     simbrief_pilot_id: Optional[str] = None
     display_name: Optional[str] = None
+    vatsim_cid: Optional[str] = None
     updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
 class PilotProfileUpdate(BaseModel):
     simbrief_pilot_id: Optional[str] = None
     display_name: Optional[str] = None
+    vatsim_cid: Optional[str] = None
 
 
 class Waypoint(BaseModel):
@@ -93,6 +97,8 @@ class Waypoint(BaseModel):
     fob: Optional[str] = None  # planned FOB at this waypoint
     min_fob: Optional[str] = None  # minimum required FOB at this waypoint
     fuel_burn: Optional[str] = None
+    lat: Optional[float] = None
+    lon: Optional[float] = None
     passed: bool = False
     # Actuals (pilot-entered)
     ata: Optional[str] = None  # "HH:MM" UTC actual time arrived
@@ -107,6 +113,7 @@ class FuelPlan(BaseModel):
     reserve: Optional[str] = None
     extra: Optional[str] = None
     block: Optional[str] = None
+    min_takeoff: Optional[str] = None
     min_fuel: Optional[str] = None  # alternate + reserve
     mayday_fuel: Optional[str] = None  # reserve only
     avg_burn_per_hour: Optional[str] = None  # trip / ete-hours
@@ -148,6 +155,7 @@ class SignOff(BaseModel):
     signed_by: Optional[str] = None
     signed_at: Optional[str] = None
     remarks: Optional[str] = None
+    signature: Optional[str] = None  # PNG data URL from the finger/pencil pad
 
 
 class Flight(BaseModel):
@@ -180,6 +188,8 @@ class Flight(BaseModel):
     arrival_fob: Optional[str] = None  # fuel on board at gate (OFP units)
     status: str = "open"  # open | closed
     closed_at: Optional[str] = None
+    arrival_notes: dict = Field(default_factory=dict)
+    ai: dict = Field(default_factory=dict)
     raw_simbrief_id: Optional[str] = None
     imported_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
@@ -246,6 +256,7 @@ class ActualsUpdate(BaseModel):
 class SignRequest(BaseModel):
     signed_by: str
     remarks: Optional[str] = None
+    signature: Optional[str] = Field(default=None, max_length=400_000)
 
 
 class ArrivalUpdate(BaseModel):
@@ -337,6 +348,24 @@ async def update_me(body: PilotProfileUpdate, user: dict = Depends(require_user)
     return PilotProfile(**doc)
 
 
+def _float(v):
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+async def _backfill(existing: dict, fresh: Flight) -> dict:
+    # Older imports lack coordinates / min take-off fuel; copy them in without touching actuals
+    wps = existing.get("waypoints") or []
+    if len(wps) == len(fresh.waypoints) and any(w.get("lat") is None for w in wps):
+        for w, n in zip(wps, fresh.waypoints):
+            w["lat"], w["lon"] = n.lat, n.lon
+        existing.setdefault("fuel", {})["min_takeoff"] = fresh.fuel.min_takeoff
+        await db.flights.update_one({"id": existing["id"]}, {"$set": {"waypoints": wps, "fuel.min_takeoff": fresh.fuel.min_takeoff}})
+    return existing
+
+
 def _text(elem, path, default=None):
     found = elem.find(path)
     if found is None or found.text is None:
@@ -378,6 +407,8 @@ def _parse_simbrief_xml(xml_text: str, user_id: str) -> Flight:
                 eta=_text(fix, "time_total"),
                 fob=_text(fix, "fuel_plan_onboard"),
                 min_fob=_text(fix, "fuel_min_onboard"),
+                lat=_float(_text(fix, "pos_lat")),
+                lon=_float(_text(fix, "pos_long")),
                 fuel_burn=_text(fix, "fuel_totalused"),
             ))
 
@@ -389,6 +420,7 @@ def _parse_simbrief_xml(xml_text: str, user_id: str) -> Flight:
         reserve=_text(fuel, "reserve") if fuel is not None else None,
         extra=_text(fuel, "extra") if fuel is not None else None,
         block=_text(fuel, "plan_ramp") if fuel is not None else None,
+        min_takeoff=_text(fuel, "min_takeoff") if fuel is not None else None,
     )
     # Derived fuel states
     try:
@@ -496,7 +528,7 @@ async def import_from_simbrief(body: ImportRequest, user: dict = Depends(require
     if flight.raw_simbrief_id:
         existing = await db.flights.find_one(query, {"_id": 0})
         if existing:
-            return Flight(**existing)
+            return Flight(**await _backfill(existing, flight))
     try:
         await db.flights.insert_one(flight.model_dump())
     except DuplicateKeyError:
@@ -554,6 +586,8 @@ async def reset_tracker(flight_id: str, user: dict = Depends(require_user)):
             "arrival_fob": None,
             "status": "open",
             "closed_at": None,
+            "arrival_notes": {},
+            "ai": {},
             **{f"times.{k}": None for k in ("off", "takeoff", "landing", "on", "tsat", "ctot")},
         }},
     )
@@ -622,6 +656,7 @@ async def sign_report(flight_id: str, body: SignRequest, user: dict = Depends(re
         "signed_by": body.signed_by,
         "signed_at": datetime.now(timezone.utc).isoformat(),
         "remarks": body.remarks,
+        "signature": body.signature if (body.signature or "").startswith("data:image/png;base64,") else None,
     }
     await db.flights.update_one(
         {"id": flight_id, "user_id": user["user_id"]},
@@ -650,6 +685,10 @@ async def close_flight(flight_id: str, user: dict = Depends(require_user)):
     update = {"status": "closed", "closed_at": datetime.now(timezone.utc).isoformat()}
     await db.flights.update_one({"id": flight_id, "user_id": user["user_id"]}, {"$set": update})
     doc.update(update)
+    try:
+        await store_report(db, doc)
+    except Exception as exc:  # flight stays closed; PDF can be regenerated by closing again
+        logger.error("report upload failed for %s: %s", flight_id, exc)
     return Flight(**doc)
 
 
@@ -663,6 +702,7 @@ async def reopen_flight(flight_id: str, user: dict = Depends(require_user)):
 
 
 app.include_router(api_router)
+app.include_router(build_router(db, _owned_flight, _editable_flight))
 app.include_router(clerk_router)
 
 app.add_middleware(

@@ -1,6 +1,6 @@
 {
-  "short_name": "e-navlog",
-  "name": "e-navlog · Flight Sim EFB",
+  "short_name": "NAVDECK",
+  "name": "NAVDECK · Flight Sim EFB",
   "start_url": "/",
   "display": "standalone",
   "orientation": "any",

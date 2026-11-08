@@ -1,9 +1,10 @@
 import { SignUp } from "@clerk/react";
+import { AuthShell } from "@/pages/SignInPage";
 
 export default function SignUpPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
+    <AuthShell mode="up">
       <SignUp routing="path" path="/sign-up" signInUrl="/sign-in" />
-    </div>
+    </AuthShell>
   );
 }

@@ -17,6 +17,7 @@ import DeparturePhase from "@/components/flight/phases/DeparturePhase";
 import EnroutePhase from "@/components/flight/phases/EnroutePhase";
 import ArrivalPhase from "@/components/flight/phases/ArrivalPhase";
 import ClosePhase from "@/components/flight/phases/ClosePhase";
+import CopilotChat from "@/components/flight/CopilotChat";
 
 const VIEWS = { briefing: BriefingPhase, departure: DeparturePhase, enroute: EnroutePhase, arrival: ArrivalPhase, close: ClosePhase };
 
@@ -116,6 +117,7 @@ export default function FlightProcessPage() {
     saveTimes: (b) => call(() => api.patch(`/flights/${id}/times`, b)),
     saveActuals: (b) => call(() => api.patch(`/flights/${id}/actuals`, b)),
     saveArrival: (b) => call(() => api.patch(`/flights/${id}/arrival`, b)),
+    saveNotes: (b) => call(() => api.patch(`/flights/${id}/notes`, b)),
     logWp: (ident, b, index) => call(() => api.patch(`/flights/${id}/waypoint-log`, { ident, index, ...b })),
     toggleWp: (ident, passed, index) => call(() => api.post(`/flights/${id}/waypoint`, { ident, passed, index })),
     sign: (b) => call(() => api.post(`/flights/${id}/signoff`, b)).then((ok) => ok && toast.success("Report signed")),
@@ -132,7 +134,7 @@ export default function FlightProcessPage() {
     <div className="min-h-screen bg-slate-100 dark:bg-slate-950 print:!bg-white">
       <div className="print:hidden">
         <Navbar />
-        <main className="mx-auto max-w-[1400px] space-y-5 px-4 md:px-6 lg:px-8 py-5 pb-16">
+        <main className="mx-auto max-w-[1400px] space-y-5 px-4 md:px-6 lg:px-8 py-5 pb-32">
           <button data-testid="back-button" onClick={() => navigate("/")} className="inline-flex min-h-[40px] items-center gap-1 rounded-full bg-white dark:bg-slate-900 px-4 text-sm font-medium text-slate-600 dark:text-slate-300 shadow-sm hover:text-sky-600">
             <ChevronLeft className="h-4 w-4" /> All flights
           </button>
@@ -174,6 +176,7 @@ export default function FlightProcessPage() {
           </div>
         </main>
       </div>
+      <CopilotChat flightId={id} />
       <FlightReport flight={flight} rows={rows} fuelCalc={ctx.fuelCalc} wc={ctx.wc} u={u} mode={printMode} />
     </div>
   );

@@ -2,6 +2,7 @@ import { CheckCircle2, Circle, Lock, Unlock, ListChecks, FileDown } from "lucide
 import { Panel, btnGhost } from "../ui";
 import SignOffPanel from "../SignOffPanel";
 import { closeBlockers } from "@/lib/phases";
+import AiCard from "../AiCard";
 
 export default function ClosePhase({ ctx }) {
   const { f, goto, sign, exportPdf, close, reopen, pilotName } = ctx;
@@ -33,6 +34,7 @@ export default function ClosePhase({ ctx }) {
         </Panel>
         <SignOffPanel flight={f} pilotName={pilotName} onSign={sign} onExport={exportPdf} />
       </div>
+      <AiCard title="AI flight debrief" mode="debrief" flightId={f.id} saved={f.ai?.debrief} tone="rose" cta="Debrief my flight" testId="ai-debrief" />
 
       <div
         data-testid="close-flight-section"
@@ -44,7 +46,7 @@ export default function ClosePhase({ ctx }) {
           <div className="font-heading text-2xl font-extrabold">{closed ? "Flight closed" : ready ? "Ready to close" : "Not ready to close yet"}</div>
           <div className={closed ? "text-white/85" : "text-slate-500"}>
             {closed
-              ? `Closed ${f.closed_at?.replace("T", " ").slice(0, 16)}z · logbook entry locked`
+              ? `Closed ${f.closed_at?.replace("T", " ").slice(0, 16)}z · signed PDF saved to your Logbook`
               : ready
               ? "Everything is complete. Closing locks this flight in your logbook."
               : `${items.filter((i) => !i.ok).length} item(s) remaining on the checklist.`}

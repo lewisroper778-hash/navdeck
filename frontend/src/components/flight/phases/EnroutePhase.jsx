@@ -1,6 +1,7 @@
 import FuelPanel from "../FuelPanel";
 import NavlogTable from "../NavlogTable";
 import { signedDev } from "../ui";
+import RouteMap from "../RouteMap";
 
 export default function EnroutePhase({ ctx }) {
   const { f, rows, fuelCalc, u, logWp, toggleWp } = ctx;
@@ -27,6 +28,7 @@ export default function EnroutePhase({ ctx }) {
           </div>
         ))}
       </div>
+      <RouteMap rows={rows} />
       <NavlogTable rows={rows} u={u} onLog={logWp} onToggle={toggleWp} />
       <FuelPanel flight={f} rows={rows} fuelCalc={fuelCalc} u={u} mode="check" />
     </div>

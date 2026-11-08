@@ -6,6 +6,7 @@ import { makeClient } from "@/lib/api";
 import { cache } from "@/lib/utils-app";
 import Navbar from "@/components/Navbar";
 import { Panel, inputCls, btnPrimary } from "@/components/flight/ui";
+import SimbriefPlanner from "@/components/SimbriefPlanner";
 
 export default function SimbriefPage() {
   const { getToken } = useAuth();
@@ -27,6 +28,19 @@ export default function SimbriefPage() {
       .finally(() => setLoading(false));
     // eslint-disable-next-line
   }, []);
+
+  const [importing, setImporting] = useState(false);
+  const importOfp = async () => {
+    setImporting(true);
+    try {
+      const r = await api.post("/flights/import", {});
+      toast.success(`OFP ${r.data.origin} → ${r.data.destination} ready in Flights`);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Import failed — check your Pilot ID");
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const save = async () => {
     setSaving(true);
@@ -53,6 +67,7 @@ export default function SimbriefPage() {
           <div className="font-mono text-sm text-slate-500">LOADING…</div>
         ) : (
           <div className="space-y-5">
+            <SimbriefPlanner onImport={importOfp} importing={importing} />
             <Panel title="SimBrief integration" icon={Link2}>
               <label className="block">
                 <span className="font-mono text-[10px] uppercase tracking-widest text-slate-500">SimBrief Pilot ID</span>

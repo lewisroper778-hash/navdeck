@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import SignaturePad from "./SignaturePad";
 import { PenLine, FileDown, BadgeCheck } from "lucide-react";
 import { Panel, inputCls, btnPrimary, btnGhost } from "./ui";
 
@@ -8,6 +9,7 @@ export default function SignOffPanel({ flight, pilotName, onSign, onExport }) {
   const [remarks, setRemarks] = useState(s.remarks || "");
   const [agree, setAgree] = useState(false);
   const [touched, setTouched] = useState(false);
+  const [signature, setSignature] = useState(null);
 
   useEffect(() => {
     if (!touched && !s.signed_by && pilotName) setName(pilotName);
@@ -26,9 +28,12 @@ export default function SignOffPanel({ flight, pilotName, onSign, onExport }) {
               </div>
             </div>
           </div>
-          <div className="font-signature text-3xl text-slate-800 dark:text-slate-100 border-b border-slate-300 dark:border-slate-700 pb-1">
-            {s.signed_by}
-          </div>
+          {s.signature ? (
+            <img data-testid="signed-signature" src={s.signature} alt="Commander signature" className="h-24 rounded-2xl bg-white p-2 ring-1 ring-slate-200" />
+          ) : (
+            <div className="font-signature text-3xl text-slate-800 dark:text-slate-100 border-b border-slate-300 dark:border-slate-700 pb-1">{s.signed_by}</div>
+          )}
+          <div className="text-sm font-semibold text-slate-700 dark:text-slate-200">{s.signed_by}</div>
           {s.remarks && <p className="text-sm text-slate-600 dark:text-slate-400">{s.remarks}</p>}
           <button data-testid="export-report-button" onClick={() => onExport("report")} className={`${btnPrimary} w-full justify-center`}>
             <FileDown className="h-4 w-4" /> Export signed report PDF
@@ -51,7 +56,7 @@ export default function SignOffPanel({ flight, pilotName, onSign, onExport }) {
               className={`${inputCls} mt-1 font-sans resize-none`}
             />
           </label>
-          {name && <div className="font-signature text-3xl text-slate-700 dark:text-slate-200">{name}</div>}
+          <SignaturePad onChange={setSignature} />
           <label className="flex items-start gap-2 text-xs text-slate-600 dark:text-slate-400 cursor-pointer">
             <input data-testid="signoff-agree-checkbox" type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} className="mt-0.5 accent-sky-600" />
             I certify this flight was conducted as recorded in this navlog.
@@ -59,8 +64,8 @@ export default function SignOffPanel({ flight, pilotName, onSign, onExport }) {
           <div className="flex gap-2">
             <button
               data-testid="signoff-submit-button"
-              disabled={!name.trim() || !agree}
-              onClick={() => onSign({ signed_by: name.trim(), remarks: remarks.trim() || null })}
+              disabled={!name.trim() || !agree || !signature}
+              onClick={() => onSign({ signed_by: name.trim(), remarks: remarks.trim() || null, signature })}
               className={`${btnPrimary} flex-1 justify-center`}
             >
               <PenLine className="h-4 w-4" /> Sign report

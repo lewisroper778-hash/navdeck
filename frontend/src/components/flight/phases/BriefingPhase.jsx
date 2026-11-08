@@ -3,6 +3,7 @@ import { Panel } from "../ui";
 import { CountdownTile } from "../TimeTiles";
 import FuelPanel from "../FuelPanel";
 import WeightsPanel from "../WeightsPanel";
+import AiCard from "../AiCard";
 
 export default function BriefingPhase({ ctx }) {
   const { f, rows, fuelCalc, wc, u, saveTimes, saveActuals } = ctx;
@@ -32,6 +33,7 @@ export default function BriefingPhase({ ctx }) {
         <FuelPanel flight={f} rows={rows} fuelCalc={fuelCalc} u={u} mode="plan" />
         <WeightsPanel flight={f} wc={wc} u={u} onSave={saveActuals} />
       </div>
+      <AiCard title="AI briefing assistant" mode="briefing" flightId={f.id} saved={f.ai?.briefing} cta="Write my briefing" testId="ai-briefing" />
     </div>
   );
 }

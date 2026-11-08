@@ -6,6 +6,9 @@ import ClerkAuthProvider from "@/components/auth/ClerkAuthProvider";
 import SignInPage from "@/pages/SignInPage";
 import SignUpPage from "@/pages/SignUpPage";
 import FlightsPage from "@/pages/FlightsPage";
+import HomePage from "@/pages/HomePage";
+import VatsimPage from "@/pages/VatsimPage";
+import LogbookPage from "@/pages/LogbookPage";
 import FlightProcessPage from "@/pages/FlightProcessPage";
 import SimbriefPage from "@/pages/SimbriefPage";
 import { ThemeProvider, cache, useTheme } from "@/lib/utils-app";
@@ -43,7 +46,10 @@ function App() {
             <Routes>
               <Route path="/sign-in/*" element={<SignInPage />} />
               <Route path="/sign-up/*" element={<SignUpPage />} />
-              <Route path="/" element={<Protected><FlightsPage /></Protected>} />
+              <Route path="/" element={<Protected><HomePage /></Protected>} />
+              <Route path="/flights" element={<Protected><FlightsPage /></Protected>} />
+              <Route path="/vatsim" element={<Protected><VatsimPage /></Protected>} />
+              <Route path="/logbook" element={<Protected><LogbookPage /></Protected>} />
               <Route path="/flights/:id" element={<Protected><FlightProcessPage /></Protected>} />
               <Route path="/flights/:id/:phase" element={<Protected><FlightProcessPage /></Protected>} />
               <Route path="/settings" element={<Protected><SimbriefPage /></Protected>} />

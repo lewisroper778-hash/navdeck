@@ -4,6 +4,7 @@ import { Panel, TONES, inputCls } from "../ui";
 import { landingRating } from "@/lib/phases";
 import { diffMin, isNum } from "@/lib/utils-app";
 import { toast } from "sonner";
+import ArrivalNotes from "./ArrivalNotes";
 
 const dur = (a, b) => {
   if (!a || !b) return "—";
@@ -14,7 +15,7 @@ const dur = (a, b) => {
 const PRESETS = [60, 120, 180, 250, 350];
 
 export default function ArrivalPhase({ ctx }) {
-  const { f, u, saveTimes, saveArrival } = ctx;
+  const { f, u, saveTimes, saveArrival, saveNotes } = ctx;
   const t = f.times || {};
   const rating = landingRating(f.landing_rate);
   const used = f.arrival_fob && f.fuel?.block ? Number(f.fuel.block) - Number(f.arrival_fob) : null;
@@ -100,6 +101,7 @@ export default function ArrivalPhase({ ctx }) {
           </div>
         </Panel>
       </div>
+      <ArrivalNotes f={f} saveNotes={saveNotes} />
     </div>
   );
 }
