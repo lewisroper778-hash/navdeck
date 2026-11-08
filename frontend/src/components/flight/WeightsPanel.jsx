@@ -1,5 +1,7 @@
 import { Scale, CheckCircle2, XCircle } from "lucide-react";
 import { Panel, inputCls } from "./ui";
+import { isNum } from "@/lib/utils-app";
+import { toast } from "sonner";
 
 function LimitRow({ label, check, d, testId }) {
   const pct = check.value && check.max ? Math.min(100, (check.value / check.max) * 100) : 0;
@@ -64,7 +66,15 @@ export default function WeightsPanel({ flight, wc, u, onSave }) {
             data-testid="actual-pax-input"
             defaultValue={w.pax_count || ""}
             inputMode="numeric"
-            onBlur={(e) => e.target.value !== (w.pax_count || "") && onSave({ pax_count: e.target.value })}
+            onBlur={(e) => {
+              const v = e.target.value.trim();
+              if (v === (w.pax_count || "")) return;
+              if (v && !/^\d+$/.test(v)) {
+                e.target.value = w.pax_count || "";
+                return toast.error("Passengers must be a whole number");
+              }
+              onSave({ pax_count: v });
+            }}
             className={`${inputCls} mt-1`}
           />
           <span className="font-mono text-[10px] text-slate-400">plan {w.planned_pax ?? "—"}</span>
@@ -77,7 +87,12 @@ export default function WeightsPanel({ flight, wc, u, onSave }) {
             defaultValue={d(w.cargo) ?? ""}
             inputMode="numeric"
             onBlur={(e) => {
-              const v = e.target.value === "" ? "" : String(u.toOfp(e.target.value));
+              const raw = e.target.value.trim().replace(/,/g, "");
+              if (raw && !isNum(raw)) {
+                e.target.value = d(w.cargo) ?? "";
+                return toast.error("Cargo must be a number");
+              }
+              const v = raw === "" ? "" : String(u.toOfp(raw));
               v !== (w.cargo || "") && onSave({ cargo: v });
             }}
             className={`${inputCls} mt-1`}

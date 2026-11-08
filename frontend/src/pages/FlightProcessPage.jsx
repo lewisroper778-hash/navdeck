@@ -76,7 +76,13 @@ export default function FlightProcessPage() {
   const call = (fn) =>
     fn()
       .then((r) => { apply(r.data); return true; })
-      .catch((e) => { toast.error(e.response?.data?.detail || "Update failed — check connection"); return false; });
+      .catch((e) => {
+        const d = e.response?.data?.detail;
+        // FastAPI 422 returns an array of error objects; never pass an object to toast (crashes React)
+        const msg = Array.isArray(d) ? d.map((x) => x.msg?.replace(/^Value error, /, "")).join("; ") : d;
+        toast.error(msg || "Update failed — check connection");
+        return false;
+      });
 
   if (!flight)
     return (
@@ -161,7 +167,7 @@ export default function FlightProcessPage() {
                 </button>
               </div>
             )}
-            <fieldset disabled={locked} className="min-w-0 space-y-5 disabled:[&_input]:opacity-60">
+            <fieldset disabled={locked} className="min-w-0 space-y-5 disabled:[&_input]:opacity-60 disabled:[&_button]:opacity-50 disabled:[&_button]:cursor-not-allowed disabled:[&_button]:shadow-none">
               <View ctx={ctx} />
             </fieldset>
             <PhaseFooter index={index} go={go} />

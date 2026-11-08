@@ -1,6 +1,7 @@
 import { Navigation, Check } from "lucide-react";
 import { Panel, inputCls, signedDev } from "./ui";
-import { nowHHMM } from "@/lib/utils-app";
+import { nowHHMM, isHHMM, isNum } from "@/lib/utils-app";
+import { toast } from "sonner";
 
 const devTone = (v, invert = false) => {
   if (v === null || v === undefined || v === 0) return "text-slate-500";
@@ -53,7 +54,15 @@ function Row({ r, i, u, onLog, onToggle, isNext }) {
             defaultValue={r.ata || ""}
             placeholder="HH:MM"
             maxLength={5}
-            onBlur={(e) => e.target.value !== (r.ata || "") && onLog(r.ident, { ata: e.target.value }, i)}
+            onBlur={(e) => {
+              const v = e.target.value.trim();
+              if (v === (r.ata || "")) return;
+              if (v && !isHHMM(v)) {
+                e.target.value = r.ata || "";
+                return toast.error("ATA must be HH:MM (UTC), e.g. 14:05");
+              }
+              onLog(r.ident, { ata: v }, i);
+            }}
             className={`${inputCls} !px-1.5 !py-2.5 text-center text-xs`}
           />
           {!r.ata && (
@@ -80,7 +89,12 @@ function Row({ r, i, u, onLog, onToggle, isNext }) {
           placeholder={d(r.estFob)?.toString() || ""}
           inputMode="numeric"
           onBlur={(e) => {
-            const v = e.target.value === "" ? "" : String(u.toOfp(e.target.value));
+            const raw = e.target.value.trim().replace(/,/g, "");
+            if (raw && !isNum(raw)) {
+              e.target.value = d(r.actual_fob) ?? "";
+              return toast.error("FOB must be a number");
+            }
+            const v = raw === "" ? "" : String(u.toOfp(raw));
             v !== (r.actual_fob || "") && onLog(r.ident, { actual_fob: v }, i);
           }}
           className={`${inputCls} !px-1.5 !py-2 text-right text-xs`}

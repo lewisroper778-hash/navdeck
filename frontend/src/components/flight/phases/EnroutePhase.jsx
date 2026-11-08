@@ -9,11 +9,12 @@ export default function EnroutePhase({ ctx }) {
   const logged = rows.filter((r) => r.timeDev !== null && r.ata);
   const tDev = logged.length ? logged[logged.length - 1].timeDev : null;
   const dest = rows[rows.length - 1];
+  const fuelGrad = fuelCalc.state === "MAYDAY FUEL" || fuelCalc.dev < -500 ? "from-rose-500 to-red-500" : fuelCalc.state === "MINIMUM FUEL" || fuelCalc.dev < 0 ? "from-amber-500 to-orange-500" : "from-emerald-500 to-teal-500";
   const cards = [
     ["Next fix", next?.ident || "—", next ? `ETO ${next.eto || "—"}` : "All fixes passed", "from-violet-500 to-fuchsia-500"],
     ["Progress", `${passed}/${rows.length}`, `${rows.length ? Math.round((passed / rows.length) * 100) : 0}% of route`, "from-sky-500 to-cyan-500"],
-    ["Time deviation", tDev === null ? "—" : signedDev(tDev, " min"), `ETA ${f.destination} ${dest?.eto || "—"}`, "from-amber-500 to-orange-500"],
-    ["Fuel deviation", signedDev(u.toDisp(fuelCalc.dev)), `${u.units} vs plan`, "from-emerald-500 to-teal-500"],
+    ["Time deviation", tDev === null ? "—" : signedDev(tDev, " min"), `ETA ${f.destination} ${dest?.eto || "—"}`, "from-indigo-500 to-blue-500"],
+    ["Fuel deviation", signedDev(u.toDisp(fuelCalc.dev)), `${u.units} vs plan · ${fuelCalc.state}`, fuelGrad],
   ];
   return (
     <div className="space-y-5">

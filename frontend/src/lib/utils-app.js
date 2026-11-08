@@ -49,6 +49,9 @@ export const fmtNum = (n, u = "") => {
 
 export const nowHHMM = () => new Date().toISOString().slice(11, 16);
 
+export const isHHMM = (v) => /^([01]\d|2[0-3]):[0-5]\d$/.test(v || "");
+export const isNum = (v) => /^\d+(\.\d+)?$/.test(v || "");
+
 export const diffMin = (a, b) => {
   // a, b "HH:MM"
   if (!a || !b) return null;

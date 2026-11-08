@@ -1,0 +1,55 @@
+{
+  "summary": "Iteration 4 retest of the iteration-3 fixes plus a quick regression at iPad size (1180x820). Backend: new test_enavlog_iter4.py, 11/11 pass; regression iter2+iter3, 21/21 pass. Frontend: every listed fix verified. I found and fixed one CRITICAL crash: typing an invalid ATA (or a non-numeric FOB or landing rate) got a 422 from the server, and FlightProcessPage then passed FastAPI's detail array straight to toast.error. React crashed with 'Objects are not valid as a React child' and the page went blank. Fixed in call(); with the fix, a readable error toast appears and the page keeps working.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PATCH /api/flights/{id}/actuals", "issue": "pax_count and cargo are not checked to be numbers (any string is accepted)"},
+      {"endpoint": "PATCH /api/flights/{id}/arrival", "issue": "A negative arrival_fob (e.g. '-5') is accepted; only landing_rate should allow a sign"},
+      {"endpoint": "POST /api/flights/{id}/reset", "issue": "Works on closed flights: it silently reopens the flight and wipes a locked logbook entry (no 409). The Reset button in FlightHero is outside the locked fieldset, so it is still active when the flight is closed"}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "FlightProcessPage call()", "issue": "FIXED BY TESTER: a 422 response crashed the page (React tried to render the detail array). This happened for an invalid navlog ATA, a non-numeric FOB ('abc' becomes 'null' via toOfp) and a landing rate like '1-2'", "selector": "[data-testid^='ata-input-']", "priority": "CRITICAL (fixed)"},
+      {"component": "NavlogTable ATA / FOB inputs", "issue": "No client-side HH:MM or number check (unlike EventTile and CountdownTile); invalid input only fails on the server. After the error, the invalid text stays in the input", "selector": "[data-testid^='ata-input-'], [data-testid^='fob-input-']", "priority": "LOW"},
+      {"component": "CountdownTile / EventTile / ATA", "issue": "After the invalid-time toast, the invalid text (e.g. '25:99') stays in the TSAT input instead of going back to the saved value", "selector": "[data-testid='tsat-input']", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Locked (closed) phases", "issues": ["Disabled buttons (the gradient 'Update to now' / NOW tiles, landing presets) keep full colour and opacity; only inputs fade (disabled:[&_input]:opacity-60). Add disabled opacity and a not-allowed cursor to buttons"]},
+      {"screen": "Enroute summary cards", "issues": ["The 'Fuel deviation' card is always green, even at -67,908 LB with MAYDAY FUEL; it should turn amber or red for a negative deviation"]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_enavlog_iter4.py", "/app/backend/tests/test_enavlog_iter3.py", "/app/backend/tests/test_enavlog_iter2.py", "/app/test_reports/pytest/pytest_iter4.xml"],
+  "action_items": [
+    "Review the tester's fix in FlightProcessPage.jsx call() (normalises a 422 detail array into a message) and use the same pattern for any other toast.error(e.response.data.detail) calls",
+    "Add client-side HH:MM checks to the navlog ATA input and number checks to FOB / arrival FOB (toOfp('abc') currently sends the string 'null')",
+    "Put the invalid text back to the saved value after an invalid-time toast",
+    "Block reset on closed flights (return 409 in the backend and disable the hero Reset button when status is closed)",
+    "Give disabled buttons a visible disabled style in locked phases; colour the Fuel deviation card by its sign",
+    "Optional: check that pax_count and cargo are numbers; reject a negative arrival_fob"
+  ],
+  "critical_code_review_comments": [
+    "FlightProcessPage call(): toast.error(detail) when detail can be an array crashed the whole page (fixed)",
+    "NavlogTable FOB onBlur: String(u.toOfp('abc')) gives 'null' and sends it to the API",
+    "The hero Reset/Delete buttons are outside the locked fieldset; Reset can wipe a closed logbook entry"
+  ],
+  "updated_files": ["/app/frontend/src/pages/FlightProcessPage.jsx", "/app/backend/tests/test_enavlog_iter4.py", "/app/backend/tests/snapshot.py", "/app/backend/tests/restore_ua124.py"],
+  "success_rate": {"backend": "100% (32/32 incl. regression)", "frontend": "~95%: all 9 retest items pass; 1 critical crash found, fixed by the tester and re-verified"},
+  "verified_fixes": [
+    "UTC clock in dark mode: dark text rgb(15,23,42) on a white pill. PASS",
+    "Closed flight: locked-banner shows on briefing, departure, enroute and arrival; every input and button in the fieldset is disabled (6/6, 6/6, 151/151, 11/11); clicking NOW while locked changes nothing; locked-reopen-button reopens the flight. Backend returns 409 for times/arrival/waypoint-log/actuals(pax, cargo, cargo+units)/signoff/waypoint and allows units alone. PASS",
+    "Auto-sync shows no toast for an OFP that already exists; manual Sync shows 'Already up to date with SimBrief'. PASS",
+    "FOB 100 entered on HFD with no ATA: ΔF -67,908, fuel-state MAYDAY FUEL, the enroute fuel card updates, '< MIN' flag shown; clearing it returns to NORMAL. PASS",
+    "Sign-off name pre-fills 'Capt Jane Doe' from the profile. PASS",
+    "Sticky stepper wrapper top=64px vs header bottom=65px: no gap in dark or light mode. PASS",
+    "Navlog toggle and ATA NOW buttons are 44x44px; invalid event tile and TSAT input show a toast. PASS",
+    "Backend 422 for bad HH:MM (25:99, 24:00, 9:5, abc, 12:60, 1200) and for non-numeric landing_rate/arrival_fob/actual_fob; index-based edits change only that row; index/ident mismatch or out-of-range index gives 404; clearing ATA sets passed=false and keeps the FOB. PASS",
+    "Regression on iPad 1180x820: /flights/{id} redirects to the first incomplete phase (briefing, then enroute); OFF/T-O, then ATA NOW, then LDG/ON, then landing preset -120 'Smooth', then sign, then Close flight. PASS"
+  ],
+  "seed_data_creation": "Backend tests use a temporary Clerk user (created and deleted by the conftest other_user fixture). UI tests changed pilot flight UA124 (f6604740); it was restored afterwards with restore_ua124.py (reset, then tsat 10:00) to its original state. N806SB (ee9720b3) was not touched.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Use make_ticket.py for UI sign-in tickets (one per browser session). snapshot.py prints the pilot profile and flight state; restore_ua124.py resets UA124 and restores TSAT 10:00. UA124 waypoint testids: MERIT-0, HFD-1, TOC-2. The preview container restarted once mid-run (Cloudflare 502); just retry with a new ticket. pytest.ini adds xdist (-n), so don't pass -p no:xdist.",
+  "rca of the issue": "Blank-page crash: in FlightProcessPage.call(), the catch block ran toast.error(e.response?.data?.detail). For a Pydantic 422, detail is an array of {type, loc, msg, input, ctx, url}. Sonner rendered it as a React child, which threw and unmounted the tree. Reproduce: open the Enroute step, type 25:99 into ata-input-MERIT-0 and blur; the page goes blank. Fix: if detail is an array, join the msg fields (applied). Re-verified: the toast reads 'Time must be HH:MM (UTC)' and the page keeps working."
+}

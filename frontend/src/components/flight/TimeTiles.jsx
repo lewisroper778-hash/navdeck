@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { TONES, inputCls } from "./ui";
-import { nowHHMM } from "@/lib/utils-app";
+import { nowHHMM, isHHMM } from "@/lib/utils-app";
 
 export function useNow() {
   const [now, setNow] = useState(Date.now());
@@ -13,7 +13,7 @@ export function useNow() {
   return now;
 }
 
-const valid = (v) => /^([01]\d|2[0-3]):[0-5]\d$/.test(v);
+const valid = isHHMM;
 
 // Big touch tile for logging a block event (gate out, takeoff, landing, gate in)
 export function EventTile({ code, label, sched, value, onSet, tone = "sky", testId }) {
@@ -101,9 +101,12 @@ export function CountdownTile({ label, hint, value, onChange, testId }) {
           placeholder="HH:MM"
           maxLength={5}
           onBlur={(e) => {
-            const v = e.target.value;
+            const v = e.target.value.trim();
             if (v === (value || "")) return;
-            if (v && !valid(v)) return toast.error("Use HH:MM in UTC, e.g. 14:05");
+            if (v && !valid(v)) {
+              e.target.value = value || "";
+              return toast.error("Use HH:MM in UTC, e.g. 14:05");
+            }
             onChange(v);
           }}
           className="w-24 rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-center font-mono text-base text-white placeholder:text-slate-500 focus:outline-none focus:ring-4 focus:ring-white/10"

@@ -2,7 +2,8 @@ import { Gauge, Fuel } from "lucide-react";
 import { EventTile } from "../TimeTiles";
 import { Panel, TONES, inputCls } from "../ui";
 import { landingRating } from "@/lib/phases";
-import { diffMin } from "@/lib/utils-app";
+import { diffMin, isNum } from "@/lib/utils-app";
+import { toast } from "sonner";
 
 const dur = (a, b) => {
   if (!a || !b) return "—";
@@ -36,8 +37,13 @@ export default function ArrivalPhase({ ctx }) {
               inputMode="numeric"
               placeholder="e.g. 140"
               onBlur={(e) => {
-                const v = e.target.value.replace(/[^\d-]/g, "");
-                v !== (f.landing_rate || "") && saveArrival({ landing_rate: v });
+                const raw = e.target.value.trim().replace(/^-/, "");
+                if (raw === (f.landing_rate || "")) return;
+                if (raw && !isNum(raw)) {
+                  e.target.value = f.landing_rate || "";
+                  return toast.error("Landing rate must be a number of feet per minute");
+                }
+                saveArrival({ landing_rate: raw });
               }}
               className={`${inputCls} !text-4xl !font-bold !py-4 text-center`}
             />
@@ -68,7 +74,12 @@ export default function ArrivalPhase({ ctx }) {
               inputMode="numeric"
               placeholder="FOB"
               onBlur={(e) => {
-                const v = e.target.value === "" ? "" : String(u.toOfp(e.target.value));
+                const raw = e.target.value.trim().replace(/,/g, "");
+                if (raw && !isNum(raw)) {
+                  e.target.value = u.toDisp(f.arrival_fob) ?? "";
+                  return toast.error("Fuel at gate must be a number");
+                }
+                const v = raw === "" ? "" : String(u.toOfp(raw));
                 v !== (f.arrival_fob || "") && saveArrival({ arrival_fob: v });
               }}
               className={`${inputCls} mt-1 !text-xl !py-3`}

@@ -235,6 +235,13 @@ class ActualsUpdate(BaseModel):
     cargo: Optional[str] = None
     units: Optional[str] = None  # KG or LB
 
+    @field_validator("pax_count", "cargo")
+    @classmethod
+    def _non_negative(cls, v):
+        if v and not v.replace(".", "", 1).isdigit():
+            raise ValueError("Must be a positive number")
+        return v
+
 
 class SignRequest(BaseModel):
     signed_by: str
@@ -245,11 +252,18 @@ class ArrivalUpdate(BaseModel):
     landing_rate: Optional[str] = None
     arrival_fob: Optional[str] = None
 
-    @field_validator("landing_rate", "arrival_fob")
+    @field_validator("landing_rate")
     @classmethod
     def _numeric(cls, v):
         if v and not v.lstrip("-").replace(".", "", 1).isdigit():
-            raise ValueError("Must be a number")
+            raise ValueError("Landing rate must be a number")
+        return v
+
+    @field_validator("arrival_fob")
+    @classmethod
+    def _fob(cls, v):
+        if v and not v.replace(".", "", 1).isdigit():
+            raise ValueError("Fuel at gate must be a positive number")
         return v
 
 
@@ -526,9 +540,7 @@ async def toggle_waypoint(flight_id: str, body: WaypointToggle, user: dict = Dep
 
 @api_router.post("/flights/{flight_id}/reset", response_model=Flight)
 async def reset_tracker(flight_id: str, user: dict = Depends(require_user)):
-    doc = await db.flights.find_one({"id": flight_id, "user_id": user["user_id"]}, {"_id": 0})
-    if not doc:
-        raise HTTPException(status_code=404, detail="Flight not found")
+    doc = await _editable_flight(flight_id, user["user_id"])
     for wp in doc.get("waypoints", []):
         wp["passed"] = False
         wp["ata"] = None
