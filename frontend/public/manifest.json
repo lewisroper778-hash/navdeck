@@ -1,0 +1,9 @@
+{
+  "short_name": "e-navlog",
+  "name": "e-navlog · Flight Sim EFB",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#4f46e5",
+  "background_color": "#f1f5f9"
+}

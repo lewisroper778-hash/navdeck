@@ -36,16 +36,17 @@ export default function WeightsPanel({ flight, wc, u, onSave }) {
   return (
     <Panel
       title="Loadsheet"
+      tone="amber"
       icon={Scale}
       testId="weights-panel"
       right={
-        <div className="flex rounded-md bg-slate-100 dark:bg-slate-800 p-0.5">
+        <div className="flex rounded-full bg-slate-100 dark:bg-slate-800 p-1">
           {["KG", "LB"].map((x) => (
             <button
               key={x}
               data-testid={`units-${x.toLowerCase()}`}
               onClick={() => x !== u.units && onSave({ units: x })}
-              className={`rounded px-2.5 py-0.5 font-mono text-[11px] font-bold transition-colors ${
+              className={`rounded-full px-4 py-1.5 font-mono text-xs font-bold transition-colors ${
                 u.units === x ? "bg-white dark:bg-slate-600 text-slate-900 dark:text-white shadow-sm" : "text-slate-500"
               }`}
             >
@@ -84,7 +85,7 @@ export default function WeightsPanel({ flight, wc, u, onSave }) {
           <span className="font-mono text-[10px] text-slate-400">plan {d(w.planned_cargo)?.toLocaleString() ?? "—"}</span>
         </label>
       </div>
-      <div className="mt-4 rounded-lg bg-slate-50 dark:bg-slate-950 px-3 py-2 flex justify-between font-mono text-xs">
+      <div className="mt-4 rounded-2xl bg-amber-50 dark:bg-amber-500/10 px-4 py-3 flex justify-between font-mono text-sm">
         <span className="text-slate-500">PAYLOAD</span>
         <span data-testid="payload-value" className="font-bold text-slate-900 dark:text-white">{d(wc.payload)?.toLocaleString() ?? "—"} {u.units}</span>
       </div>

@@ -9,7 +9,7 @@ const STATE_STYLE = {
   "MAYDAY FUEL": "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-900 animate-pulse",
 };
 
-export default function FuelPanel({ flight, rows, fuelCalc, u }) {
+export default function FuelPanel({ flight, rows, fuelCalc, u, mode = "check" }) {
   const { theme } = useTheme();
   const f = flight.fuel || {};
   const d = u.toDisp;
@@ -23,27 +23,37 @@ export default function FuelPanel({ flight, rows, fuelCalc, u }) {
 
   return (
     <Panel
-      title="Fuel Check"
+      title={mode === "plan" ? "Fuel plan" : "Fuel check"}
       icon={Fuel}
-      testId="fuel-plan-card"
+      tone={mode === "plan" ? "emerald" : "violet"}
+      testId={mode === "plan" ? "fuel-plan-card" : "fuel-check-card"}
       right={
-        <span data-testid="fuel-state" className={`flex items-center gap-1 rounded-full border px-2.5 py-0.5 font-mono text-[10px] font-bold tracking-widest ${STATE_STYLE[fuelCalc.state]}`}>
+        <span data-testid="fuel-state" className={`flex items-center gap-1 rounded-full border px-3 py-1 font-mono text-[10px] font-bold tracking-widest ${STATE_STYLE[fuelCalc.state]}`}>
           {fuelCalc.state !== "NORMAL" && <AlertTriangle className="h-3 w-3" />}
           {fuelCalc.state}
         </span>
       }
     >
-      <div className="grid grid-cols-4 md:grid-cols-7 gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
-        <Stat label="Taxi" value={d(f.taxi)?.toLocaleString()} />
-        <Stat label="Trip" value={d(f.trip)?.toLocaleString()} />
-        <Stat label="Cont" value={d(f.contingency)?.toLocaleString()} />
-        <Stat label="Altn" value={d(f.alternate)?.toLocaleString()} />
-        <Stat label="Final Res" value={d(f.reserve)?.toLocaleString()} />
-        <Stat label="Extra" value={d(f.extra)?.toLocaleString()} />
-        <Stat label={`Block ${u.units}`} value={d(f.block)?.toLocaleString()} tone="accent" />
-      </div>
-
-      <div className="h-48 mt-4" data-testid="fuel-chart">
+      {mode === "plan" ? (
+        <>
+          <div className="grid grid-cols-3 gap-3 md:grid-cols-4">
+            {[["Taxi", f.taxi], ["Trip", f.trip], ["Contingency", f.contingency], ["Alternate", f.alternate], ["Final reserve", f.reserve], ["Extra", f.extra]].map(([l, v]) => (
+              <div key={l} className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 px-4 py-3"><Stat label={l} value={d(v)?.toLocaleString()} /></div>
+            ))}
+            <div className="col-span-3 md:col-span-2 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 px-4 py-3 text-white">
+              <div className="font-mono text-[10px] uppercase tracking-widest text-white/80">Block fuel {u.units}</div>
+              <div data-testid="block-fuel" className="font-mono text-2xl font-bold">{d(f.block)?.toLocaleString() ?? "—"}</div>
+            </div>
+          </div>
+          <div className="mt-3 grid grid-cols-3 gap-3">
+            <div className="rounded-2xl bg-amber-50 dark:bg-amber-500/10 px-4 py-3"><Stat testId="min-fuel" label="Min fuel" value={d(fuelCalc.minFuel)?.toLocaleString()} tone="warn" /></div>
+            <div className="rounded-2xl bg-rose-50 dark:bg-rose-500/10 px-4 py-3"><Stat testId="mayday-fuel" label="Mayday fuel" value={d(fuelCalc.mayday)?.toLocaleString()} tone="bad" /></div>
+            <div className="rounded-2xl bg-sky-50 dark:bg-sky-500/10 px-4 py-3"><Stat label="Burn / hour" value={d(fuelCalc.burnHr)?.toLocaleString()} tone="accent" /></div>
+          </div>
+        </>
+      ) : (
+        <>
+      <div className="h-56 rounded-2xl bg-slate-50 dark:bg-slate-800/40 p-3" data-testid="fuel-chart">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
             <CartesianGrid stroke={grid} strokeDasharray="3 3" />
@@ -58,19 +68,25 @@ export default function FuelPanel({ flight, rows, fuelCalc, u }) {
         </ResponsiveContainer>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 md:grid-cols-5 gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
-        <Stat testId="fuel-deviation" label="Deviation" value={signedDev(d(fuelCalc.dev))} tone={fuelCalc.dev < 0 ? "bad" : fuelCalc.dev > 0 ? "good" : "default"} />
-        <Stat testId="landing-fuel" label="Est. Landing" value={d(fuelCalc.landing)?.toLocaleString()} />
-        <Stat testId="min-fuel" label="Min Fuel" value={d(fuelCalc.minFuel)?.toLocaleString()} tone="warn" sub="altn + final res" />
-        <Stat testId="mayday-fuel" label="Mayday Fuel" value={d(fuelCalc.mayday)?.toLocaleString()} tone="bad" sub="final reserve" />
-        <Stat
-          testId="holding-time"
-          label="Hold before divert"
-          value={fuelCalc.holdMin === null ? "—" : `${fuelCalc.holdMin} min`}
-          tone={fuelCalc.holdMin !== null && fuelCalc.holdMin < 10 ? "bad" : "accent"}
-          sub={fuelCalc.burnHr ? `@ ${d(fuelCalc.burnHr)?.toLocaleString()}/h` : null}
-        />
+      <div className="mt-4 grid grid-cols-2 md:grid-cols-5 gap-3">
+        {[
+          <Stat testId="fuel-deviation" label="Deviation" value={signedDev(d(fuelCalc.dev))} tone={fuelCalc.dev < 0 ? "bad" : fuelCalc.dev > 0 ? "good" : "default"} />,
+          <Stat testId="landing-fuel" label="Est. landing" value={d(fuelCalc.landing)?.toLocaleString()} />,
+          <Stat testId="min-fuel" label="Min fuel" value={d(fuelCalc.minFuel)?.toLocaleString()} tone="warn" sub="altn + final res" />,
+          <Stat testId="mayday-fuel" label="Mayday fuel" value={d(fuelCalc.mayday)?.toLocaleString()} tone="bad" sub="final reserve" />,
+          <Stat
+            testId="holding-time"
+            label="Hold before divert"
+            value={fuelCalc.holdMin === null ? "—" : `${fuelCalc.holdMin} min`}
+            tone={fuelCalc.holdMin !== null && fuelCalc.holdMin < 10 ? "bad" : "accent"}
+            sub={fuelCalc.burnHr ? `@ ${d(fuelCalc.burnHr)?.toLocaleString()}/h` : null}
+          />,
+        ].map((s, i) => (
+          <div key={i} className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 px-4 py-3">{s}</div>
+        ))}
       </div>
+        </>
+      )}
     </Panel>
   );
 }

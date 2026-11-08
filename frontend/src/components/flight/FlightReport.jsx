@@ -16,7 +16,7 @@ export default function FlightReport({ flight, rows, fuelCalc, wc, u, mode }) {
     <div className="hidden print:block font-mono text-black bg-white text-[10px]" data-testid="print-report">
       <div className="flex items-center justify-between border-b-2 border-black pb-2">
         <div className="flex items-center gap-3">
-          <AirlineLogo icao={flight.airline_icao} size="lg" />
+          <AirlineLogo flight={flight} size="lg" />
           <div>
             <div className="font-heading text-lg font-bold">
               {mode === "report" ? "End-of-Flight Report" : "Operational Navlog"}
@@ -30,20 +30,22 @@ export default function FlightReport({ flight, rows, fuelCalc, wc, u, mode }) {
         </div>
       </div>
 
-      <div className="mt-2 grid grid-cols-8 gap-0">
+      <div className="mt-2 grid grid-cols-9 gap-0">
         <Cell l="Sched OFF" v={t.sched_off} />
-        <Cell l="OFF" v={t.off} />
+        <Cell l="Gate out" v={t.off} />
         <Cell l="T-O" v={t.takeoff} />
         <Cell l="LDG" v={t.landing} />
-        <Cell l="ON" v={t.on} />
+        <Cell l="Gate in" v={t.on} />
         <Cell l="TSAT" v={t.tsat} />
         <Cell l="CTOT" v={t.ctot} />
+        <Cell l="Landing rate" v={flight.landing_rate ? `-${Math.abs(flight.landing_rate)} fpm` : null} />
         <Cell l="Fuel state" v={fuelCalc.state} />
         <Cell l="Block fuel" v={d(flight.fuel?.block)} />
         <Cell l="Trip" v={d(flight.fuel?.trip)} />
         <Cell l="Min fuel" v={d(fuelCalc.minFuel)} />
         <Cell l="Mayday" v={d(fuelCalc.mayday)} />
         <Cell l="Est landing" v={d(fuelCalc.landing)} />
+        <Cell l="Fuel at gate" v={flight.arrival_fob ? d(flight.arrival_fob) : null} />
         <Cell l="ZFW" v={d(wc.zfw.value)} />
         <Cell l="TOW" v={d(wc.tow.value)} />
         <Cell l="LAW" v={d(wc.law.value)} />

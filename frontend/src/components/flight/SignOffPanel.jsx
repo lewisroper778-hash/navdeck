@@ -9,10 +9,10 @@ export default function SignOffPanel({ flight, pilotName, onSign, onExport }) {
   const [agree, setAgree] = useState(false);
 
   return (
-    <Panel title="End-of-Flight Report" icon={PenLine} testId="signoff-panel">
+    <Panel title="End-of-flight report" icon={PenLine} tone="rose" testId="signoff-panel">
       {s.signed ? (
         <div className="space-y-3">
-          <div className="flex items-center gap-2 rounded-lg border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 px-3 py-2.5">
+          <div className="flex items-center gap-2 rounded-2xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 px-4 py-3">
             <BadgeCheck className="h-5 w-5 text-emerald-600" />
             <div>
               <div data-testid="signed-status" className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">Report signed</div>

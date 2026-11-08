@@ -168,6 +168,10 @@ class Flight(BaseModel):
     weights: Weights = Field(default_factory=Weights)
     times: BlockTimes = Field(default_factory=BlockTimes)
     signoff: SignOff = Field(default_factory=SignOff)
+    landing_rate: Optional[str] = None  # fpm, entered after landing
+    arrival_fob: Optional[str] = None  # fuel on board at gate (OFP units)
+    status: str = "open"  # open | closed
+    closed_at: Optional[str] = None
     raw_simbrief_id: Optional[str] = None
     imported_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
@@ -205,6 +209,31 @@ class ActualsUpdate(BaseModel):
 class SignRequest(BaseModel):
     signed_by: str
     remarks: Optional[str] = None
+
+
+class ArrivalUpdate(BaseModel):
+    landing_rate: Optional[str] = None
+    arrival_fob: Optional[str] = None
+
+
+async def _owned_flight(flight_id: str, user_id: str) -> dict:
+    doc = await db.flights.find_one({"id": flight_id, "user_id": user_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Flight not found")
+    return doc
+
+
+def _close_blockers(doc: dict) -> List[str]:
+    t = doc.get("times") or {}
+    missing = [label for key, label in (
+        ("off", "Left gate time"), ("takeoff", "Takeoff time"),
+        ("landing", "Landing time"), ("on", "Arrived at gate time"),
+    ) if not t.get(key)]
+    if not doc.get("landing_rate"):
+        missing.append("Landing rate")
+    if not (doc.get("signoff") or {}).get("signed"):
+        missing.append("Signed report")
+    return missing
 
 
 # ---------- Routes ----------
@@ -456,6 +485,10 @@ async def reset_tracker(flight_id: str, user: dict = Depends(require_user)):
         {"$set": {
             "waypoints": doc["waypoints"],
             "signoff": {"signed": False},
+            "landing_rate": None,
+            "arrival_fob": None,
+            "status": "open",
+            "closed_at": None,
             **{f"times.{k}": None for k in ("off", "takeoff", "landing", "on", "tsat", "ctot")},
         }},
     )
@@ -543,6 +576,37 @@ async def sign_report(flight_id: str, body: SignRequest, user: dict = Depends(re
         {"$set": {"signoff": signoff}},
     )
     doc["signoff"] = signoff
+    return Flight(**doc)
+
+
+@api_router.patch("/flights/{flight_id}/arrival", response_model=Flight)
+async def update_arrival(flight_id: str, body: ArrivalUpdate, user: dict = Depends(require_user)):
+    doc = await _owned_flight(flight_id, user["user_id"])
+    update = {k: (v or None) for k, v in body.model_dump(exclude_unset=True).items()}
+    if update:
+        await db.flights.update_one({"id": flight_id, "user_id": user["user_id"]}, {"$set": update})
+        doc.update(update)
+    return Flight(**doc)
+
+
+@api_router.post("/flights/{flight_id}/close", response_model=Flight)
+async def close_flight(flight_id: str, user: dict = Depends(require_user)):
+    doc = await _owned_flight(flight_id, user["user_id"])
+    missing = _close_blockers(doc)
+    if missing:
+        raise HTTPException(status_code=400, detail="Cannot close flight, missing: " + ", ".join(missing))
+    update = {"status": "closed", "closed_at": datetime.now(timezone.utc).isoformat()}
+    await db.flights.update_one({"id": flight_id, "user_id": user["user_id"]}, {"$set": update})
+    doc.update(update)
+    return Flight(**doc)
+
+
+@api_router.post("/flights/{flight_id}/reopen", response_model=Flight)
+async def reopen_flight(flight_id: str, user: dict = Depends(require_user)):
+    doc = await _owned_flight(flight_id, user["user_id"])
+    update = {"status": "open", "closed_at": None}
+    await db.flights.update_one({"id": flight_id, "user_id": user["user_id"]}, {"$set": update})
+    doc.update(update)
     return Flight(**doc)
 
 
