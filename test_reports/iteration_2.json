@@ -1,0 +1,50 @@
+{
+  "summary": "Iteration 3 feature test (backend + frontend). Backend: 8/8 new pytest tests (times keeping sched_*, waypoint-log, actuals unit switch, arrival, close blockers/close/reopen, signoff/reset keeping sched_*, import idempotency, isolation, 401s) plus 13/13 iter2 regression tests all PASS. Frontend (iPad 1180x820 and 820x1180): dashboard gradient header, United logo (pics.avs.io/UA) on UA124 and B738 badge fallback on N806SB, phase status chip + 5-segment bar, silent auto-sync on load; /flights/{id} redirects to the first incomplete phase (briefing → enroute → close verified); stepper tabs + Next/Prev; TSAT countdown ticks every second; KG/LB toggle converts (74,419 LB ↔ 33,756 KG); pax input recalculates payload/ZFW/TOW/LAW bars; Pushback OFF/T-O tiles (now + manual edit), gate delay +5 min & taxi time; Enroute ATA now / FOB entry shifts later ETOs and ΔT/ΔF, fuel state goes MINIMUM FUEL / MAYDAY FUEL correctly, hold-before-divert shown; Arrival landing/on tiles, preset 120 → 'Smooth', -450 → 'Hard', block/air time, fuel used; Close checklist, sign button enabled only with name + checkbox, close button disabled until ready, 'Flight closed' + Reopen, closed badge, dashboard 'Closed'; export calls window.print with print-report present; night mode persists after reload; no horizontal overflow on any page in either orientation; navlog hides Wind/GS/Dist in portrait; settings save/reload works. Bugs found: UTC clock can't be seen in night mode, closed flights can still be edited, false 'New OFP imported' toast, FOB without ATA is ignored for fuel deviation, sign-off name ignores the profile display name, small touch targets in the navlog.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PATCH /api/flights/{id}/times|arrival|actuals|waypoint-log, POST /signoff", "issue": "Nothing stops edits when status=closed. The UI says 'logbook entry locked' but every endpoint still changes a closed flight."},
+      {"endpoint": "PATCH /api/flights/{id}/times, /arrival", "issue": "No server-side check of HH:MM format or a numeric landing_rate (only the frontend checks)."},
+      {"endpoint": "POST /api/flights/import", "issue": "Uses synchronous requests.get (20s timeout) inside an async route, which blocks the event loop. Use httpx.AsyncClient or run_in_threadpool. Dedupe is find-then-insert with no unique index on (user_id, raw_simbrief_id), so two parallel auto-syncs can create duplicates."},
+      {"endpoint": "PATCH /api/flights/{id}/waypoint-log", "issue": "Matches by ident, so it updates every waypoint with the same ident, while the UI addresses rows by ident+index. Clearing ATA does not reset passed=false."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "FlightHero UTC clock pill", "issue": "In night mode the pill is bg-white and UtcClock uses dark:text-white, so the clock is white on white: it shows as an empty white pill.", "selector": "[data-testid='utc-clock']", "priority": "MEDIUM"},
+      {"component": "Closed flight", "issue": "After closing, every phase input (landing-rate-input, event tiles, navlog, loadsheet) can still be edited, which contradicts 'logbook entry locked'.", "selector": "[data-testid='landing-rate-input']", "priority": "MEDIUM"},
+      {"component": "FlightsPage auto-sync toast", "issue": "Stale closure: sync(true) runs inside the mount effect, where `flights` is still the initial state. With an empty cache, 'New OFP imported: KEWR → EDDB' shows every time even though the import returned the existing flight. Compare against the list returned by refreshList instead.", "selector": "sonner toast", "priority": "LOW"}
+    ],
+    "integration_issues": [
+      {"flow": "Enroute FOB without ATA", "issue": "computeNavlog only computes fuelDev for rows that have an ATA. If the pilot enters an actual FOB without an ATA, ΔF stays '—' and the fuel state stays NORMAL even for FOB far below MIN (2000 LB showed NORMAL; the below-min icon did show). Either auto-set the ATA when FOB is entered or compute fuelDev from FOB alone.", "affected_selectors": ["fob-input-<IDENT>-<i>", "fuel-dev-<IDENT>-<i>", "fuel-state"]},
+      {"flow": "Sign-off name", "issue": "SignOffPanel prefills the Clerk user.fullName ('Jane Doe') instead of the profile display_name ('Capt Jane Doe'), but Settings says the display name is 'used to sign reports'.", "affected_selectors": ["signoff-name-input", "display-name-input"]}
+    ],
+    "design_issues": [
+      {"screen": "Flight process (sticky stepper)", "issues": ["The stepper sticks at top-[72px] but the navbar is about 64px tall, so scrolled content (for example the phase h1) shows through the gap between navbar and stepper."]},
+      {"screen": "Navlog on iPad", "issues": ["The ATA 'NOW' button (38x34) and waypoint toggle (36x36) are below the 44pt touch-target guideline. Other tiles and buttons are 52-56px."]},
+      {"screen": "EventTile manual edit", "issues": ["An invalid HH:MM entry is dropped silently with no error or feedback."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_enavlog_iter3.py", "/app/backend/tests/test_enavlog_iter2.py", "/app/test_reports/pytest/pytest_iter3.xml"],
+  "action_items": [
+    "Fix the night-mode UTC clock pill in FlightHero.jsx (use text-slate-900 always, or give the pill a dark background)",
+    "Lock closed flights: disable edit controls in the UI when status=closed, and return 409/400 from mutation endpoints for closed flights (except reopen)",
+    "Use the FOB entry for fuel deviation and fuel state even without an ATA, or auto-stamp the ATA",
+    "Prefill the sign-off name from profile display_name, falling back to the Clerk fullName",
+    "Fix the false 'New OFP imported' toast caused by the stale closure in FlightsPage.sync",
+    "Make the SimBrief fetch async (httpx) and add a unique index on (user_id, raw_simbrief_id)",
+    "Make the navlog NOW button and toggle at least 44px; close the sticky-stepper gap"
+  ],
+  "critical_code_review_comments": [
+    "server.py: blocking requests.get in an async handler",
+    "server.py: no server-side validation of HH:MM times or a numeric landing_rate; edits allowed on closed flights",
+    "server.py: waypoint-log/toggle match by ident, so duplicate idents are all changed",
+    "FlightsPage.jsx: stale `flights` closure in sync() on mount"
+  ],
+  "updated_files": ["/app/backend/tests/test_enavlog_iter3.py"],
+  "success_rate": {"backend": "100% (21/21 incl. regression)", "frontend": "~90% (all requested flows work; 3 UI bugs + 2 integration issues listed)"},
+  "seed_data_creation": "No seed data. The iter3 tests import a temporary Clerk user's SimBrief 500000 flight (that user is deleted by the conftest fixture). Pilot test user's UA124 flight f6604740-... was exercised through the full process, then RESET (now status=open, no actual times; pax 176 / cargo 11431 / LB restored). It was CLOSED before testing. Display name was changed and restored to 'Capt Jane Doe'.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Use /app/backend/tests/make_ticket.py to get single-use sign-in ticket URLs (one per browser session). conftest.py provides pilot_client and other_user fixtures (Clerk session tokens). UA124 waypoints start MERIT(0), HFD(1), TOC(2). Note: page.evaluate('...; window.print=()=>{}') returns a function, which Playwright then calls; that artifact caused a double print count, not an app bug. Retest: closed-flight locking, night-mode clock, FOB-without-ATA fuel state, sign-off name prefill."
+}

@@ -21,31 +21,24 @@ export function unitTools(f) {
 export function computeNavlog(f) {
   const t = f.times || {};
   const base = t.takeoff || t.sched_takeoff || null;
-  let last = null;
+  let last = null; // last fix with an ATA (drives ETOs)
+  let lastFuelDev = 0; // latest known fuel deviation (from any fix with an actual FOB)
   return f.waypoints.map((w) => {
     const planned = base && w.eta ? addSecondsToHHMM(base, w.eta) : null;
     const fob = num(w.fob);
     const act = num(w.actual_fob);
+    const fuelDev = act !== null && fob !== null ? act - fob : null;
     let row;
     if (w.ata) {
-      row = {
-        planned,
-        eto: w.ata,
-        timeDev: planned ? diffMin(w.ata, planned) : null,
-        fuelDev: act !== null && fob !== null ? act - fob : null,
-        estFob: act ?? fob,
-      };
-      last = { ata: w.ata, eta: num(w.eta) || 0, fuelDev: row.fuelDev ?? last?.fuelDev ?? 0 };
+      row = { planned, eto: w.ata, timeDev: planned ? diffMin(w.ata, planned) : null };
+      last = { ata: w.ata, eta: num(w.eta) || 0 };
     } else {
       const eto = last ? addSecondsToHHMM(last.ata, (num(w.eta) || 0) - last.eta) : planned;
-      row = {
-        planned,
-        eto,
-        timeDev: last && planned ? diffMin(eto, planned) : null,
-        fuelDev: null,
-        estFob: fob !== null ? fob + (last?.fuelDev || 0) : null,
-      };
+      row = { planned, eto, timeDev: last && planned ? diffMin(eto, planned) : null };
     }
+    row.fuelDev = fuelDev;
+    row.estFob = act ?? (fob !== null ? fob + lastFuelDev : null);
+    if (fuelDev !== null) lastFuelDev = fuelDev;
     return { ...w, ...row };
   });
 }

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { useAuth, useUser } from "@clerk/react";
 import { toast } from "sonner";
-import { ArrowLeft, ArrowRight, ChevronLeft } from "lucide-react";
+import { ArrowLeft, ArrowRight, ChevronLeft, Lock, Unlock } from "lucide-react";
 import { makeClient } from "@/lib/api";
 import { cache } from "@/lib/utils-app";
 import { computeNavlog, computeFuel, computeWeights, unitTools } from "@/lib/flightCalc";
@@ -50,12 +50,18 @@ export default function FlightProcessPage() {
   const navigate = useNavigate();
   const [flight, setFlight] = useState(() => cache.getFlight(id));
   const [printMode, setPrintMode] = useState("navlog");
+  const [profileName, setProfileName] = useState(() => cache.getProfile()?.display_name);
   const api = useMemo(() => makeClient(getToken), [getToken]);
 
   const apply = (f) => {
     setFlight(f);
     cache.setFlight(id, f);
   };
+
+  useEffect(() => {
+    api.get("/me").then((r) => { cache.setProfile(r.data); setProfileName(r.data.display_name); }).catch(() => {});
+    // eslint-disable-next-line
+  }, []);
 
   useEffect(() => {
     api.get(`/flights/${id}`).then((r) => apply(r.data)).catch((e) => {
@@ -98,14 +104,14 @@ export default function FlightProcessPage() {
     u,
     fuelCalc: computeFuel(flight, rows),
     wc: computeWeights(flight),
-    pilotName: user?.fullName,
+    pilotName: profileName || user?.fullName,
     goto: go,
     exportPdf,
     saveTimes: (b) => call(() => api.patch(`/flights/${id}/times`, b)),
     saveActuals: (b) => call(() => api.patch(`/flights/${id}/actuals`, b)),
     saveArrival: (b) => call(() => api.patch(`/flights/${id}/arrival`, b)),
-    logWp: (ident, b) => call(() => api.patch(`/flights/${id}/waypoint-log`, { ident, ...b })),
-    toggleWp: (ident, passed) => call(() => api.post(`/flights/${id}/waypoint`, { ident, passed })),
+    logWp: (ident, b, index) => call(() => api.patch(`/flights/${id}/waypoint-log`, { ident, index, ...b })),
+    toggleWp: (ident, passed, index) => call(() => api.post(`/flights/${id}/waypoint`, { ident, passed, index })),
     sign: (b) => call(() => api.post(`/flights/${id}/signoff`, b)).then((ok) => ok && toast.success("Report signed")),
     close: () => call(() => api.post(`/flights/${id}/close`, {})).then((ok) => ok && toast.success("Flight closed — nice work, Captain")),
     reopen: () => call(() => api.post(`/flights/${id}/reopen`, {})),
@@ -113,6 +119,8 @@ export default function FlightProcessPage() {
   const index = PHASES.findIndex((p) => p.key === phase);
   const View = VIEWS[phase];
   const P = PHASES[index];
+  // Close step keeps its own reopen/export controls; every other step is read-only once closed
+  const locked = flight.status === "closed" && phase !== "close";
 
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-950 print:!bg-white">
@@ -131,7 +139,9 @@ export default function FlightProcessPage() {
               api.delete(`/flights/${id}`).then(() => { toast.success("Flight deleted"); navigate("/"); }).catch(() => toast.error("Delete failed"))
             }
           />
-          <div className="sticky top-[72px] z-30"><PhaseStepper flight={flight} active={phase} onSelect={go} /></div>
+          <div className="sticky top-16 z-30 -mx-4 md:-mx-6 lg:-mx-8 px-4 md:px-6 lg:px-8 py-2 bg-slate-100/90 dark:bg-slate-950/90 backdrop-blur-md">
+            <PhaseStepper flight={flight} active={phase} onSelect={go} />
+          </div>
           <div key={phase} className="animate-rise space-y-5" data-testid={`phase-view-${phase}`}>
             <div className="flex items-end justify-between px-1">
               <div>
@@ -140,7 +150,20 @@ export default function FlightProcessPage() {
                 <p className="text-sm text-slate-500">{P.sub}</p>
               </div>
             </div>
-            <View ctx={ctx} />
+            {locked && (
+              <div data-testid="locked-banner" className="flex flex-col gap-3 rounded-3xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-900 px-5 py-4 md:flex-row md:items-center md:justify-between">
+                <div className="flex items-center gap-3 text-emerald-800 dark:text-emerald-300">
+                  <Lock className="h-5 w-5" />
+                  <span className="font-medium">This flight is closed and locked in your logbook. Reopen it to make changes.</span>
+                </div>
+                <button data-testid="locked-reopen-button" onClick={ctx.reopen} className="inline-flex min-h-[44px] items-center gap-2 rounded-2xl bg-white dark:bg-slate-900 px-4 text-sm font-semibold text-emerald-700 dark:text-emerald-300 shadow-sm">
+                  <Unlock className="h-4 w-4" /> Reopen flight
+                </button>
+              </div>
+            )}
+            <fieldset disabled={locked} className="min-w-0 space-y-5 disabled:[&_input]:opacity-60">
+              <View ctx={ctx} />
+            </fieldset>
             <PhaseFooter index={index} go={go} />
           </div>
         </main>

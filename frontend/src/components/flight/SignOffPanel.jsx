@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PenLine, FileDown, BadgeCheck } from "lucide-react";
 import { Panel, inputCls, btnPrimary, btnGhost } from "./ui";
 
@@ -7,6 +7,11 @@ export default function SignOffPanel({ flight, pilotName, onSign, onExport }) {
   const [name, setName] = useState(s.signed_by || pilotName || "");
   const [remarks, setRemarks] = useState(s.remarks || "");
   const [agree, setAgree] = useState(false);
+  const [touched, setTouched] = useState(false);
+
+  useEffect(() => {
+    if (!touched && !s.signed_by && pilotName) setName(pilotName);
+  }, [pilotName, touched, s.signed_by]);
 
   return (
     <Panel title="End-of-flight report" icon={PenLine} tone="rose" testId="signoff-panel">
@@ -33,7 +38,7 @@ export default function SignOffPanel({ flight, pilotName, onSign, onExport }) {
         <div className="space-y-3">
           <label className="block">
             <span className="font-mono text-[10px] uppercase tracking-widest text-slate-500">Commander</span>
-            <input data-testid="signoff-name-input" value={name} onChange={(e) => setName(e.target.value)} className={`${inputCls} mt-1 font-sans`} />
+            <input data-testid="signoff-name-input" value={name} onChange={(e) => { setTouched(true); setName(e.target.value); }} className={`${inputCls} mt-1 font-sans`} />
           </label>
           <label className="block">
             <span className="font-mono text-[10px] uppercase tracking-widest text-slate-500">Remarks</span>

@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import re
 import uuid
 import xml.etree.ElementTree as ET
 from contextlib import suppress
@@ -12,8 +13,10 @@ import requests
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from motor.motor_asyncio import AsyncIOMotorClient
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from pymongo import ASCENDING, DESCENDING, IndexModel
+from pymongo.errors import DuplicateKeyError
+from starlette.concurrency import run_in_threadpool
 from starlette.middleware.cors import CORSMiddleware
 
 try:
@@ -36,7 +39,12 @@ INDEXES: dict[str, list[IndexModel]] = {
     "flights": [
         IndexModel([("id", ASCENDING)], name="id", unique=True),
         IndexModel([("user_id", ASCENDING), ("imported_at", DESCENDING)], name="user_imported"),
-        IndexModel([("user_id", ASCENDING), ("raw_simbrief_id", ASCENDING)], name="user_ofp"),
+        IndexModel(
+            [("user_id", ASCENDING), ("raw_simbrief_id", ASCENDING)],
+            name="user_ofp_unique",
+            unique=True,
+            partialFilterExpression={"raw_simbrief_id": {"$type": "string"}},
+        ),
     ],
 }
 
@@ -180,15 +188,35 @@ class ImportRequest(BaseModel):
     pilot_id: Optional[str] = None
 
 
+HHMM_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
+
+
+def _check_hhmm(v):
+    if v and not HHMM_RE.match(v):
+        raise ValueError("Time must be HH:MM (UTC)")
+    return v
+
+
 class WaypointToggle(BaseModel):
     ident: str
     passed: bool
+    index: Optional[int] = None
 
 
 class WaypointLog(BaseModel):
     ident: str
+    index: Optional[int] = None
     ata: Optional[str] = None
     actual_fob: Optional[str] = None
+
+    _ata = field_validator("ata")(_check_hhmm)
+
+    @field_validator("actual_fob")
+    @classmethod
+    def _fob(cls, v):
+        if v and not v.replace(".", "", 1).isdigit():
+            raise ValueError("FOB must be a number")
+        return v
 
 
 class TimesUpdate(BaseModel):
@@ -198,6 +226,8 @@ class TimesUpdate(BaseModel):
     on: Optional[str] = None
     tsat: Optional[str] = None
     ctot: Optional[str] = None
+
+    _times = field_validator("off", "takeoff", "landing", "on", "tsat", "ctot")(_check_hhmm)
 
 
 class ActualsUpdate(BaseModel):
@@ -215,12 +245,38 @@ class ArrivalUpdate(BaseModel):
     landing_rate: Optional[str] = None
     arrival_fob: Optional[str] = None
 
+    @field_validator("landing_rate", "arrival_fob")
+    @classmethod
+    def _numeric(cls, v):
+        if v and not v.lstrip("-").replace(".", "", 1).isdigit():
+            raise ValueError("Must be a number")
+        return v
+
 
 async def _owned_flight(flight_id: str, user_id: str) -> dict:
     doc = await db.flights.find_one({"id": flight_id, "user_id": user_id}, {"_id": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Flight not found")
     return doc
+
+
+async def _editable_flight(flight_id: str, user_id: str) -> dict:
+    doc = await _owned_flight(flight_id, user_id)
+    if doc.get("status") == "closed":
+        raise HTTPException(status_code=409, detail="Flight is closed. Reopen it to make changes.")
+    return doc
+
+
+def _target_waypoints(doc: dict, ident: str, index: Optional[int]) -> list:
+    wps = doc.get("waypoints", [])
+    if index is not None:
+        if 0 <= index < len(wps) and wps[index].get("ident") == ident:
+            return [wps[index]]
+        raise HTTPException(status_code=404, detail="Waypoint not found")
+    found = [wp for wp in wps if wp.get("ident") == ident]
+    if not found:
+        raise HTTPException(status_code=404, detail="Waypoint not found")
+    return found
 
 
 def _close_blockers(doc: dict) -> List[str]:
@@ -409,7 +465,9 @@ async def import_from_simbrief(body: ImportRequest, user: dict = Depends(require
 
     url = f"https://www.simbrief.com/api/xml.fetcher.php?userid={pilot_id}"
     try:
-        resp = requests.get(url, timeout=20, headers={"User-Agent": "e-navlog/1.0"})
+        resp = await run_in_threadpool(
+            requests.get, url, timeout=20, headers={"User-Agent": "e-navlog/1.0"}
+        )
     except requests.RequestException as e:
         raise HTTPException(status_code=502, detail=f"SimBrief unreachable: {e}")
     if resp.status_code != 200:
@@ -420,13 +478,15 @@ async def import_from_simbrief(body: ImportRequest, user: dict = Depends(require
     except ET.ParseError as e:
         raise HTTPException(status_code=502, detail=f"Could not parse SimBrief XML: {e}")
 
+    query = {"user_id": user["user_id"], "raw_simbrief_id": flight.raw_simbrief_id}
     if flight.raw_simbrief_id:
-        existing = await db.flights.find_one(
-            {"user_id": user["user_id"], "raw_simbrief_id": flight.raw_simbrief_id}, {"_id": 0}
-        )
+        existing = await db.flights.find_one(query, {"_id": 0})
         if existing:
             return Flight(**existing)
-    await db.flights.insert_one(flight.model_dump())
+    try:
+        await db.flights.insert_one(flight.model_dump())
+    except DuplicateKeyError:
+        return Flight(**await db.flights.find_one(query, {"_id": 0}))
     return flight
 
 
@@ -454,16 +514,9 @@ async def delete_flight(flight_id: str, user: dict = Depends(require_user)):
 
 @api_router.post("/flights/{flight_id}/waypoint", response_model=Flight)
 async def toggle_waypoint(flight_id: str, body: WaypointToggle, user: dict = Depends(require_user)):
-    doc = await db.flights.find_one({"id": flight_id, "user_id": user["user_id"]}, {"_id": 0})
-    if not doc:
-        raise HTTPException(status_code=404, detail="Flight not found")
-    updated = False
-    for wp in doc.get("waypoints", []):
-        if wp.get("ident") == body.ident:
-            wp["passed"] = body.passed
-            updated = True
-    if not updated:
-        raise HTTPException(status_code=404, detail="Waypoint not found")
+    doc = await _editable_flight(flight_id, user["user_id"])
+    for wp in _target_waypoints(doc, body.ident, body.index):
+        wp["passed"] = body.passed
     await db.flights.update_one(
         {"id": flight_id, "user_id": user["user_id"]},
         {"$set": {"waypoints": doc["waypoints"]}},
@@ -498,22 +551,13 @@ async def reset_tracker(flight_id: str, user: dict = Depends(require_user)):
 
 @api_router.patch("/flights/{flight_id}/waypoint-log", response_model=Flight)
 async def log_waypoint(flight_id: str, body: WaypointLog, user: dict = Depends(require_user)):
-    doc = await db.flights.find_one({"id": flight_id, "user_id": user["user_id"]}, {"_id": 0})
-    if not doc:
-        raise HTTPException(status_code=404, detail="Flight not found")
-    updated = False
-    for wp in doc.get("waypoints", []):
-        if wp.get("ident") == body.ident:
-            if body.ata is not None:
-                wp["ata"] = body.ata or None
-            if body.actual_fob is not None:
-                wp["actual_fob"] = body.actual_fob or None
-            # Auto-mark passed when ATA is entered
-            if wp.get("ata"):
-                wp["passed"] = True
-            updated = True
-    if not updated:
-        raise HTTPException(status_code=404, detail="Waypoint not found")
+    doc = await _editable_flight(flight_id, user["user_id"])
+    for wp in _target_waypoints(doc, body.ident, body.index):
+        if body.ata is not None:
+            wp["ata"] = body.ata or None
+            wp["passed"] = bool(wp["ata"])
+        if body.actual_fob is not None:
+            wp["actual_fob"] = body.actual_fob or None
     await db.flights.update_one(
         {"id": flight_id, "user_id": user["user_id"]},
         {"$set": {"waypoints": doc["waypoints"]}},
@@ -523,9 +567,7 @@ async def log_waypoint(flight_id: str, body: WaypointLog, user: dict = Depends(r
 
 @api_router.patch("/flights/{flight_id}/times", response_model=Flight)
 async def update_times(flight_id: str, body: TimesUpdate, user: dict = Depends(require_user)):
-    doc = await db.flights.find_one({"id": flight_id, "user_id": user["user_id"]}, {"_id": 0})
-    if not doc:
-        raise HTTPException(status_code=404, detail="Flight not found")
+    doc = await _editable_flight(flight_id, user["user_id"])
     times = doc.get("times") or {}
     for k, v in body.model_dump(exclude_unset=True).items():
         times[k] = v or None
@@ -539,11 +581,11 @@ async def update_times(flight_id: str, body: TimesUpdate, user: dict = Depends(r
 
 @api_router.patch("/flights/{flight_id}/actuals", response_model=Flight)
 async def update_actuals(flight_id: str, body: ActualsUpdate, user: dict = Depends(require_user)):
-    doc = await db.flights.find_one({"id": flight_id, "user_id": user["user_id"]}, {"_id": 0})
-    if not doc:
-        raise HTTPException(status_code=404, detail="Flight not found")
-    weights = doc.get("weights") or {"units": "KG"}
     data = body.model_dump(exclude_unset=True)
+    # Display-unit switching stays allowed on closed flights; loadsheet edits do not
+    only_units = set(data) <= {"units"}
+    doc = await (_owned_flight if only_units else _editable_flight)(flight_id, user["user_id"])
+    weights = doc.get("weights") or {"units": "KG"}
     if "pax_count" in data:
         weights["pax_count"] = data["pax_count"]
     if "cargo" in data:
@@ -562,9 +604,7 @@ async def update_actuals(flight_id: str, body: ActualsUpdate, user: dict = Depen
 
 @api_router.post("/flights/{flight_id}/signoff", response_model=Flight)
 async def sign_report(flight_id: str, body: SignRequest, user: dict = Depends(require_user)):
-    doc = await db.flights.find_one({"id": flight_id, "user_id": user["user_id"]}, {"_id": 0})
-    if not doc:
-        raise HTTPException(status_code=404, detail="Flight not found")
+    doc = await _editable_flight(flight_id, user["user_id"])
     signoff = {
         "signed": True,
         "signed_by": body.signed_by,
@@ -581,7 +621,7 @@ async def sign_report(flight_id: str, body: SignRequest, user: dict = Depends(re
 
 @api_router.patch("/flights/{flight_id}/arrival", response_model=Flight)
 async def update_arrival(flight_id: str, body: ArrivalUpdate, user: dict = Depends(require_user)):
-    doc = await _owned_flight(flight_id, user["user_id"])
+    doc = await _editable_flight(flight_id, user["user_id"])
     update = {k: (v or None) for k, v in body.model_dump(exclude_unset=True).items()}
     if update:
         await db.flights.update_one({"id": flight_id, "user_id": user["user_id"]}, {"$set": update})

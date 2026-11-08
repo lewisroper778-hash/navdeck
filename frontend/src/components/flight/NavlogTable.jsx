@@ -24,8 +24,8 @@ function Row({ r, i, u, onLog, onToggle, isNext }) {
       <td className="px-3 py-2">
         <button
           data-testid={`waypoint-toggle-${r.ident}-${i}`}
-          onClick={() => onToggle(r.ident, !r.passed)}
-          className={`flex h-9 w-9 items-center justify-center rounded-xl border-2 transition-colors ${
+          onClick={() => onToggle(r.ident, !r.passed, i)}
+          className={`flex h-11 w-11 items-center justify-center rounded-xl border-2 transition-colors ${
             r.passed ? "bg-violet-500 border-violet-500 text-white" : "border-slate-300 dark:border-slate-600 hover:border-violet-500"
           }`}
           aria-label={`toggle ${r.ident}`}
@@ -45,7 +45,7 @@ function Row({ r, i, u, onLog, onToggle, isNext }) {
       <td data-testid={`eto-${r.ident}-${i}`} className={`px-3 py-2 text-right font-semibold ${r.ata ? "text-slate-400" : "text-fuchsia-600 dark:text-fuchsia-400"}`}>
         {r.eto || "—"}
       </td>
-      <td className="px-2 py-1.5 w-[132px]">
+      <td className="px-2 py-1.5 w-[150px]">
         <div className="flex gap-1">
           <input
             key={`ata-${r.ata}`}
@@ -53,14 +53,14 @@ function Row({ r, i, u, onLog, onToggle, isNext }) {
             defaultValue={r.ata || ""}
             placeholder="HH:MM"
             maxLength={5}
-            onBlur={(e) => e.target.value !== (r.ata || "") && onLog(r.ident, { ata: e.target.value })}
-            className={`${inputCls} !px-1.5 !py-2 text-center text-xs`}
+            onBlur={(e) => e.target.value !== (r.ata || "") && onLog(r.ident, { ata: e.target.value }, i)}
+            className={`${inputCls} !px-1.5 !py-2.5 text-center text-xs`}
           />
           {!r.ata && (
             <button
               data-testid={`ata-now-${r.ident}-${i}`}
-              onClick={() => onLog(r.ident, { ata: nowHHMM() })}
-              className="rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 px-2.5 text-[10px] font-bold text-white active:scale-95 transition-transform"
+              onClick={() => onLog(r.ident, { ata: nowHHMM() }, i)}
+              className="min-h-[44px] min-w-[44px] rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 px-2.5 text-[11px] font-bold text-white active:scale-95 transition-transform"
               title="Log current UTC"
             >
               NOW
@@ -81,7 +81,7 @@ function Row({ r, i, u, onLog, onToggle, isNext }) {
           inputMode="numeric"
           onBlur={(e) => {
             const v = e.target.value === "" ? "" : String(u.toOfp(e.target.value));
-            v !== (r.actual_fob || "") && onLog(r.ident, { actual_fob: v });
+            v !== (r.actual_fob || "") && onLog(r.ident, { actual_fob: v }, i);
           }}
           className={`${inputCls} !px-1.5 !py-2 text-right text-xs`}
         />

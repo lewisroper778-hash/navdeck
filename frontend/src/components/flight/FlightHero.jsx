@@ -45,7 +45,7 @@ export default function FlightHero({ f, onPrint, onReset, onDelete }) {
           </div>
         </div>
         <div className="flex flex-col items-start gap-4 lg:items-end">
-          <div className="flex items-center gap-2 rounded-full bg-white px-4 py-1.5"><UtcClock /></div>
+          <div className="flex items-center gap-2 rounded-full bg-white px-4 py-1.5"><UtcClock className="text-slate-900" /></div>
           <div className="flex gap-2">
             <button data-testid="print-pdf-button" onClick={onPrint} className="inline-flex min-h-[44px] items-center gap-2 rounded-2xl bg-white/15 px-4 text-sm font-semibold hover:bg-white/25 transition-colors"><Printer className="h-4 w-4" /> Navlog PDF</button>
             <button data-testid="reset-tracker-button" onClick={onReset} title="Reset actuals" className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-2xl bg-white/15 hover:bg-white/25 transition-colors"><RotateCcw className="h-4 w-4" /></button>

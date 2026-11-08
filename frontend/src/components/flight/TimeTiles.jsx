@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Pencil } from "lucide-react";
+import { toast } from "sonner";
 import { TONES, inputCls } from "./ui";
 import { nowHHMM } from "@/lib/utils-app";
 
@@ -21,7 +22,7 @@ export function EventTile({ code, label, sched, value, onSet, tone = "sky", test
   const save = (v) => {
     setEditing(false);
     if (v === (value || "")) return;
-    if (v && !valid(v)) return;
+    if (v && !valid(v)) return toast.error("Use HH:MM in UTC, e.g. 14:05");
     onSet(v);
   };
   return (
@@ -99,7 +100,12 @@ export function CountdownTile({ label, hint, value, onChange, testId }) {
           defaultValue={value || ""}
           placeholder="HH:MM"
           maxLength={5}
-          onBlur={(e) => e.target.value !== (value || "") && (e.target.value === "" || valid(e.target.value)) && onChange(e.target.value)}
+          onBlur={(e) => {
+            const v = e.target.value;
+            if (v === (value || "")) return;
+            if (v && !valid(v)) return toast.error("Use HH:MM in UTC, e.g. 14:05");
+            onChange(v);
+          }}
           className="w-24 rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-center font-mono text-base text-white placeholder:text-slate-500 focus:outline-none focus:ring-4 focus:ring-white/10"
         />
       </div>
@@ -111,10 +117,10 @@ export function CountdownTile({ label, hint, value, onChange, testId }) {
   );
 }
 
-export function UtcClock() {
+export function UtcClock({ className = "text-slate-900 dark:text-white" }) {
   const now = useNow();
   return (
-    <span data-testid="utc-clock" className="font-mono text-sm font-bold tabular-nums text-slate-900 dark:text-white">
+    <span data-testid="utc-clock" className={`font-mono text-sm font-bold tabular-nums ${className}`}>
       {new Date(now).toISOString().slice(11, 19)}z
     </span>
   );

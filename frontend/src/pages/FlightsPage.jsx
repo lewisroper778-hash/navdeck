@@ -80,9 +80,11 @@ export default function FlightsPage() {
   const [syncing, setSyncing] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const autoRan = useRef(false);
+  const knownIds = useRef(new Set());
 
   const refreshList = async () => {
     const r = await api.get("/flights");
+    knownIds.current = new Set(r.data.map((f) => f.id));
     setFlights(r.data);
     cache.setFlights(r.data);
   };
@@ -90,11 +92,11 @@ export default function FlightsPage() {
   const sync = async (silent) => {
     setSyncing(true);
     try {
-      const before = flights.length;
       const r = await api.post("/flights/import", {});
+      const isNew = !knownIds.current.has(r.data.id);
       await refreshList();
-      if (!silent) toast.success(`OFP ${r.data.origin} → ${r.data.destination} synced`);
-      else if (before === 0 || !flights.some((f) => f.id === r.data.id)) toast.success(`New OFP imported: ${r.data.origin} → ${r.data.destination}`);
+      if (!silent) toast.success(isNew ? `New OFP imported: ${r.data.origin} → ${r.data.destination}` : "Already up to date with SimBrief");
+      else if (isNew) toast.success(`New OFP imported: ${r.data.origin} → ${r.data.destination}`);
     } catch (e) {
       if (!silent) toast.error(e.response?.data?.detail || "SimBrief sync failed");
     } finally {
