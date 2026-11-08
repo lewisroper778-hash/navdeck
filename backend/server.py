@@ -36,6 +36,7 @@ INDEXES: dict[str, list[IndexModel]] = {
     "flights": [
         IndexModel([("id", ASCENDING)], name="id", unique=True),
         IndexModel([("user_id", ASCENDING), ("imported_at", DESCENDING)], name="user_imported"),
+        IndexModel([("user_id", ASCENDING), ("raw_simbrief_id", ASCENDING)], name="user_ofp"),
     ],
 }
 
@@ -79,11 +80,15 @@ class Waypoint(BaseModel):
     tas: Optional[str] = None
     gs: Optional[str] = None
     distance: Optional[str] = None
-    ete: Optional[str] = None
-    eta: Optional[str] = None
-    fob: Optional[str] = None
+    ete: Optional[str] = None  # seconds, leg time
+    eta: Optional[str] = None  # seconds, total
+    fob: Optional[str] = None  # planned FOB at this waypoint
+    min_fob: Optional[str] = None  # minimum required FOB at this waypoint
     fuel_burn: Optional[str] = None
     passed: bool = False
+    # Actuals (pilot-entered)
+    ata: Optional[str] = None  # "HH:MM" UTC actual time arrived
+    actual_fob: Optional[str] = None  # entered FOB number
 
 
 class FuelPlan(BaseModel):
@@ -94,18 +99,63 @@ class FuelPlan(BaseModel):
     reserve: Optional[str] = None
     extra: Optional[str] = None
     block: Optional[str] = None
+    min_fuel: Optional[str] = None  # alternate + reserve
+    mayday_fuel: Optional[str] = None  # reserve only
+    avg_burn_per_hour: Optional[str] = None  # trip / ete-hours
+
+
+class Weights(BaseModel):
+    units: str = "KG"  # display units, KG or LB
+    ofp_units: str = "KG"  # units all stored numbers are in
+    oew: Optional[str] = None
+    payload: Optional[str] = None
+    zfw: Optional[str] = None
+    tow: Optional[str] = None
+    law: Optional[str] = None
+    max_zfw: Optional[str] = None
+    max_tow: Optional[str] = None
+    max_law: Optional[str] = None
+    pax_count: Optional[str] = None
+    cargo: Optional[str] = None
+    pax_weight: Optional[str] = None  # per pax incl. bags
+    planned_pax: Optional[str] = None
+    planned_cargo: Optional[str] = None
+
+
+class BlockTimes(BaseModel):
+    sched_off: Optional[str] = None
+    sched_takeoff: Optional[str] = None
+    sched_landing: Optional[str] = None
+    sched_on: Optional[str] = None
+    off: Optional[str] = None  # "HH:MM" UTC — block off (push)
+    takeoff: Optional[str] = None
+    landing: Optional[str] = None
+    on: Optional[str] = None  # block on (parked)
+    tsat: Optional[str] = None  # Target Start-up Approval Time
+    ctot: Optional[str] = None  # Calculated Take-Off Time
+
+
+class SignOff(BaseModel):
+    signed: bool = False
+    signed_by: Optional[str] = None
+    signed_at: Optional[str] = None
+    remarks: Optional[str] = None
 
 
 class Flight(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     user_id: str
     callsign: Optional[str] = None
+    airline_icao: Optional[str] = None
+    airline_name: Optional[str] = None
     aircraft: Optional[str] = None
+    aircraft_name: Optional[str] = None
     origin: Optional[str] = None
     origin_name: Optional[str] = None
     destination: Optional[str] = None
     destination_name: Optional[str] = None
     alternate: Optional[str] = None
+    alternate_name: Optional[str] = None
     route: Optional[str] = None
     cruise_level: Optional[str] = None
     distance: Optional[str] = None
@@ -115,6 +165,9 @@ class Flight(BaseModel):
     pax: Optional[str] = None
     waypoints: List[Waypoint] = Field(default_factory=list)
     fuel: FuelPlan = Field(default_factory=FuelPlan)
+    weights: Weights = Field(default_factory=Weights)
+    times: BlockTimes = Field(default_factory=BlockTimes)
+    signoff: SignOff = Field(default_factory=SignOff)
     raw_simbrief_id: Optional[str] = None
     imported_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
@@ -126,6 +179,32 @@ class ImportRequest(BaseModel):
 class WaypointToggle(BaseModel):
     ident: str
     passed: bool
+
+
+class WaypointLog(BaseModel):
+    ident: str
+    ata: Optional[str] = None
+    actual_fob: Optional[str] = None
+
+
+class TimesUpdate(BaseModel):
+    off: Optional[str] = None
+    takeoff: Optional[str] = None
+    landing: Optional[str] = None
+    on: Optional[str] = None
+    tsat: Optional[str] = None
+    ctot: Optional[str] = None
+
+
+class ActualsUpdate(BaseModel):
+    pax_count: Optional[str] = None
+    cargo: Optional[str] = None
+    units: Optional[str] = None  # KG or LB
+
+
+class SignRequest(BaseModel):
+    signed_by: str
+    remarks: Optional[str] = None
 
 
 # ---------- Routes ----------
@@ -198,7 +277,8 @@ def _parse_simbrief_xml(xml_text: str, user_id: str) -> Flight:
                 distance=_text(fix, "distance"),
                 ete=_text(fix, "time_leg"),
                 eta=_text(fix, "time_total"),
-                fob=_text(fix, "fuel_onboard"),
+                fob=_text(fix, "fuel_plan_onboard"),
+                min_fob=_text(fix, "fuel_min_onboard"),
                 fuel_burn=_text(fix, "fuel_totalused"),
             ))
 
@@ -211,16 +291,69 @@ def _parse_simbrief_xml(xml_text: str, user_id: str) -> Flight:
         extra=_text(fuel, "extra") if fuel is not None else None,
         block=_text(fuel, "plan_ramp") if fuel is not None else None,
     )
+    # Derived fuel states
+    try:
+        alt_v = float(fuel_plan.alternate or 0)
+        res_v = float(fuel_plan.reserve or 0)
+        fuel_plan.min_fuel = str(int(alt_v + res_v))
+        fuel_plan.mayday_fuel = str(int(res_v))
+        trip_v = float(fuel_plan.trip or 0)
+        ete_s = float(_text(times, "est_time_enroute") or 0) if times is not None else 0
+        if ete_s > 0 and trip_v > 0:
+            fuel_plan.avg_burn_per_hour = str(int(trip_v / (ete_s / 3600)))
+    except (TypeError, ValueError):
+        pass
+
+    units_raw = (_text(root, "params/units") or "kgs").upper()
+    units = "LB" if units_raw.startswith("LB") else "KG"
+
+    weights_block = Weights(
+        units=units,
+        ofp_units=units,
+        oew=_text(weights, "oew") if weights is not None else None,
+        payload=_text(weights, "payload") if weights is not None else None,
+        zfw=_text(weights, "est_zfw") if weights is not None else None,
+        tow=_text(weights, "est_tow") if weights is not None else None,
+        law=_text(weights, "est_ldw") if weights is not None else None,
+        max_zfw=_text(weights, "max_zfw") if weights is not None else None,
+        max_tow=_text(weights, "max_tow") if weights is not None else None,
+        max_law=_text(weights, "max_ldw") if weights is not None else None,
+        pax_count=_text(weights, "pax_count") if weights is not None else None,
+        cargo=_text(weights, "cargo") if weights is not None else None,
+        pax_weight=_text(weights, "pax_weight") if weights is not None else None,
+        planned_pax=_text(weights, "pax_count") if weights is not None else None,
+        planned_cargo=_text(weights, "cargo") if weights is not None else None,
+    )
+
+    def _hhmm_from_ts(ts):
+        if not ts:
+            return None
+        try:
+            return datetime.fromtimestamp(int(ts), tz=timezone.utc).strftime("%H:%M")
+        except (TypeError, ValueError):
+            return None
+
+    t = (lambda k: _text(times, k)) if times is not None else (lambda k: None)
+    block_times = BlockTimes(
+        sched_off=_hhmm_from_ts(t("sched_out")),
+        sched_takeoff=_hhmm_from_ts(t("sched_off")),
+        sched_landing=_hhmm_from_ts(t("sched_on")),
+        sched_on=_hhmm_from_ts(t("sched_in")),
+    )
 
     return Flight(
         user_id=user_id,
-        callsign=_text(general, "icao_airline", "") + _text(general, "flight_number", "") if general is not None else None,
+        callsign=(_text(general, "icao_airline", "") or "") + (_text(general, "flight_number", "") or "") if general is not None else None,
+        airline_icao=_text(general, "icao_airline") if general is not None else None,
+        airline_name=_text(root, "api_params/airline"),
         aircraft=_text(aircraft, "icaocode") if aircraft is not None else None,
+        aircraft_name=_text(aircraft, "name") if aircraft is not None else None,
         origin=_text(origin, "icao_code") if origin is not None else None,
         origin_name=_text(origin, "name") if origin is not None else None,
         destination=_text(destination, "icao_code") if destination is not None else None,
         destination_name=_text(destination, "name") if destination is not None else None,
         alternate=_text(alternate, "icao_code") if alternate is not None else None,
+        alternate_name=_text(alternate, "name") if alternate is not None else None,
         route=_text(general, "route") if general is not None else None,
         cruise_level=_text(general, "initial_altitude") if general is not None else None,
         distance=_text(general, "route_distance") if general is not None else None,
@@ -230,6 +363,8 @@ def _parse_simbrief_xml(xml_text: str, user_id: str) -> Flight:
         pax=_text(weights, "pax_count") if weights is not None else None,
         waypoints=waypoints,
         fuel=fuel_plan,
+        weights=weights_block,
+        times=block_times,
         raw_simbrief_id=_text(params, "request_id") if params is not None else None,
     )
 
@@ -256,6 +391,12 @@ async def import_from_simbrief(body: ImportRequest, user: dict = Depends(require
     except ET.ParseError as e:
         raise HTTPException(status_code=502, detail=f"Could not parse SimBrief XML: {e}")
 
+    if flight.raw_simbrief_id:
+        existing = await db.flights.find_one(
+            {"user_id": user["user_id"], "raw_simbrief_id": flight.raw_simbrief_id}, {"_id": 0}
+        )
+        if existing:
+            return Flight(**existing)
     await db.flights.insert_one(flight.model_dump())
     return flight
 
@@ -308,10 +449,100 @@ async def reset_tracker(flight_id: str, user: dict = Depends(require_user)):
         raise HTTPException(status_code=404, detail="Flight not found")
     for wp in doc.get("waypoints", []):
         wp["passed"] = False
+        wp["ata"] = None
+        wp["actual_fob"] = None
+    await db.flights.update_one(
+        {"id": flight_id, "user_id": user["user_id"]},
+        {"$set": {
+            "waypoints": doc["waypoints"],
+            "signoff": {"signed": False},
+            **{f"times.{k}": None for k in ("off", "takeoff", "landing", "on", "tsat", "ctot")},
+        }},
+    )
+    doc = await db.flights.find_one({"id": flight_id, "user_id": user["user_id"]}, {"_id": 0})
+    return Flight(**doc)
+
+
+@api_router.patch("/flights/{flight_id}/waypoint-log", response_model=Flight)
+async def log_waypoint(flight_id: str, body: WaypointLog, user: dict = Depends(require_user)):
+    doc = await db.flights.find_one({"id": flight_id, "user_id": user["user_id"]}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Flight not found")
+    updated = False
+    for wp in doc.get("waypoints", []):
+        if wp.get("ident") == body.ident:
+            if body.ata is not None:
+                wp["ata"] = body.ata or None
+            if body.actual_fob is not None:
+                wp["actual_fob"] = body.actual_fob or None
+            # Auto-mark passed when ATA is entered
+            if wp.get("ata"):
+                wp["passed"] = True
+            updated = True
+    if not updated:
+        raise HTTPException(status_code=404, detail="Waypoint not found")
     await db.flights.update_one(
         {"id": flight_id, "user_id": user["user_id"]},
         {"$set": {"waypoints": doc["waypoints"]}},
     )
+    return Flight(**doc)
+
+
+@api_router.patch("/flights/{flight_id}/times", response_model=Flight)
+async def update_times(flight_id: str, body: TimesUpdate, user: dict = Depends(require_user)):
+    doc = await db.flights.find_one({"id": flight_id, "user_id": user["user_id"]}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Flight not found")
+    times = doc.get("times") or {}
+    for k, v in body.model_dump(exclude_unset=True).items():
+        times[k] = v or None
+    doc["times"] = times
+    await db.flights.update_one(
+        {"id": flight_id, "user_id": user["user_id"]},
+        {"$set": {"times": times}},
+    )
+    return Flight(**doc)
+
+
+@api_router.patch("/flights/{flight_id}/actuals", response_model=Flight)
+async def update_actuals(flight_id: str, body: ActualsUpdate, user: dict = Depends(require_user)):
+    doc = await db.flights.find_one({"id": flight_id, "user_id": user["user_id"]}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Flight not found")
+    weights = doc.get("weights") or {"units": "KG"}
+    data = body.model_dump(exclude_unset=True)
+    if "pax_count" in data:
+        weights["pax_count"] = data["pax_count"]
+    if "cargo" in data:
+        weights["cargo"] = data["cargo"]
+    if data.get("units") in ("KG", "LB"):
+        # Stored values stay in OFP units; this only changes the display unit
+        weights.setdefault("ofp_units", weights.get("units", "KG"))
+        weights["units"] = data["units"]
+    doc["weights"] = weights
+    await db.flights.update_one(
+        {"id": flight_id, "user_id": user["user_id"]},
+        {"$set": {"weights": weights}},
+    )
+    return Flight(**doc)
+
+
+@api_router.post("/flights/{flight_id}/signoff", response_model=Flight)
+async def sign_report(flight_id: str, body: SignRequest, user: dict = Depends(require_user)):
+    doc = await db.flights.find_one({"id": flight_id, "user_id": user["user_id"]}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Flight not found")
+    signoff = {
+        "signed": True,
+        "signed_by": body.signed_by,
+        "signed_at": datetime.now(timezone.utc).isoformat(),
+        "remarks": body.remarks,
+    }
+    await db.flights.update_one(
+        {"id": flight_id, "user_id": user["user_id"]},
+        {"$set": {"signoff": signoff}},
+    )
+    doc["signoff"] = signoff
     return Flight(**doc)
 
 

@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ClerkProvider } from "@clerk/react";
+import { dark } from "@clerk/ui/themes";
+import { useTheme } from "@/lib/utils-app";
 
 const appearance = {
   variables: {
@@ -15,10 +17,17 @@ const appearance = {
   },
 };
 
+const darkAppearance = {
+  theme: dark,
+  variables: { colorPrimary: "#0284C7", fontFamily: appearance.variables.fontFamily, borderRadius: "0.375rem" },
+  captcha: { theme: "dark" },
+};
+
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 
 export default function ClerkAuthProvider({ children }) {
   const navigate = useNavigate();
+  const { theme } = useTheme();
   const [config, setConfig] = useState(null);
   const [unavailable, setUnavailable] = useState(false);
 
@@ -46,7 +55,7 @@ export default function ClerkAuthProvider({ children }) {
     <ClerkProvider
       publishableKey={config.publishable_key}
       proxyUrl={config.proxy_url || undefined}
-      appearance={appearance}
+      appearance={theme === "dark" ? darkAppearance : appearance}
       routerPush={(to) => navigate(to)}
       routerReplace={(to) => navigate(to, { replace: true })}
       signInUrl="/sign-in"

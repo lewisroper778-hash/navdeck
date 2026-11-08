@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url("https://fonts.googleapis.com/css2?family=Work+Sans:wght@500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Work+Sans:wght@500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&family=Mrs+Saint+Delafield&display=swap");
 
 :root {
     --font-heading: "Work Sans", system-ui, sans-serif;
@@ -25,6 +25,33 @@ body {
 
 .font-mono {
     font-family: var(--font-mono);
+}
+
+.font-signature {
+    font-family: "Mrs Saint Delafield", cursive;
+    line-height: 1.1;
+}
+
+html.dark body {
+    background-color: #020617;
+    color: #e2e8f0;
+}
+
+html.dark {
+    color-scheme: dark;
+}
+
+@keyframes rise {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-rise {
+    animation: rise 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+.tabular-nums {
+    font-variant-numeric: tabular-nums;
 }
 
 @layer base {
@@ -72,8 +99,13 @@ body {
 
 /* Print styles for navlog export */
 @media print {
-    body {
+    html, html.dark body, body {
         background: #fff !important;
+        color: #000 !important;
+    }
+    * {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
     }
     .print\:hidden {
         display: none !important;
