@@ -3,12 +3,15 @@ import { useAuth } from "@clerk/react";
 import { toast } from "sonner";
 import { MapContainer, TileLayer, Tooltip, Marker } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
-import { Radio, Send, UserCheck, ExternalLink, RefreshCw } from "lucide-react";
+import { Radio, RadioTower, Send, UserCheck, ExternalLink, RefreshCw } from "lucide-react";
 import { makeClient } from "@/lib/api";
 import { cache, useTheme } from "@/lib/utils-app";
 import Navbar from "@/components/Navbar";
 import { Panel, inputCls, btnPrimary, btnGhost } from "@/components/flight/ui";
 import { tiles, planeIcon } from "@/components/flight/RouteMap";
+import AtcLayer from "@/components/vatsim/AtcLayer";
+import TrafficPopup from "@/components/vatsim/TrafficPopup";
+import TrafficSearch from "@/components/vatsim/TrafficSearch";
 
 const iconCache = {};
 const trafficIcon = (hdg) => { const k = Math.round((Number(hdg) || 0) / 5) * 5; return (iconCache[k] ||= planeIcon(k, "#6366f1", 18)); };
@@ -37,7 +40,21 @@ export default function VatsimPage() {
   const flights = all.filter((f) => f.status !== "closed");
   const [flightId, setFlightId] = useState("");
 
-  const loadFeed = () => api.get("/vatsim/pilots").then((r) => setFeed(r.data)).catch(() => toast.error("VATSIM feed unavailable"));
+  const loadFeed = () => {
+    api.get("/vatsim/pilots").then((r) => setFeed(r.data)).catch(() => toast.error("VATSIM feed unavailable"));
+    api.get("/vatsim/atc").then((r) => setAtc(r.data)).catch(() => {});
+  };
+  const [atc, setAtc] = useState(null);
+  const [showAtc, setShowAtc] = useState(true);
+  const [map, setMap] = useState(null);
+  const [selectedCid, setSelectedCid] = useState(null);
+  const selected = feed?.pilots.find((p) => p.cid === selectedCid);
+  const focusPilot = (p) => {
+    if (!map) return setSelectedCid(p.cid);
+    setSelectedCid(null);
+    map.once("moveend", () => setSelectedCid(p.cid));
+    map.flyTo([p.lat, p.lon], Math.max(map.getZoom(), 7), { duration: 1.2 });
+  };
   const lookup = async (id = cid) => {
     if (!id) return;
     try { setMember((await api.get(`/vatsim/member/${id}`)).data); } catch (e) { toast.error(e.response?.data?.detail || "CID lookup failed"); }
@@ -74,20 +91,27 @@ export default function VatsimPage() {
             <div className="font-mono text-[11px] font-bold uppercase tracking-[0.25em] text-emerald-600 dark:text-emerald-400">Network</div>
             <h1 className="font-heading text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white">VATSIM</h1>
           </div>
-          <div className="flex gap-2 font-mono text-sm">
+          <div className="flex flex-wrap items-center gap-2 font-mono text-sm">
+            <TrafficSearch pilots={feed?.pilots || []} onPick={focusPilot} />
             <span data-testid="vatsim-pilot-count" className="rounded-full bg-white dark:bg-slate-900 px-4 py-2 font-bold text-slate-800 dark:text-slate-100">{feed?.pilots.length ?? "–"} pilots</span>
-            <span className="rounded-full bg-white dark:bg-slate-900 px-4 py-2 font-bold text-slate-800 dark:text-slate-100">{feed?.controllers ?? "–"} ATC</span>
+            <span data-testid="vatsim-atc-count" className="rounded-full bg-white dark:bg-slate-900 px-4 py-2 font-bold text-slate-800 dark:text-slate-100">{feed?.controllers ?? "–"} ATC</span>
+            <button data-testid="vatsim-atc-toggle" onClick={() => setShowAtc((v) => !v)} aria-pressed={showAtc}
+              className={`inline-flex items-center gap-2 rounded-full px-4 py-2 font-bold transition-colors ${showAtc ? "bg-emerald-500 text-white" : "bg-white text-slate-500 dark:bg-slate-900"}`}>
+              <RadioTower className="h-4 w-4" /> ATC {showAtc ? "on" : "off"}
+            </button>
             <button data-testid="vatsim-refresh" onClick={loadFeed} className={btnGhost}><RefreshCw className="h-4 w-4" /></button>
           </div>
         </div>
         <div data-testid="vatsim-map" className="h-[460px] overflow-hidden rounded-[28px] border border-slate-200/80 dark:border-slate-800">
-          <MapContainer center={me ? [me.lat, me.lon] : [35, 0]} zoom={me ? 6 : 2} preferCanvas style={{ height: "100%", width: "100%" }}>
-            <TileLayer url={tiles(theme)} attribution="Tiles &copy; Esri · VATSIM data" />
+          <MapContainer ref={setMap} center={me ? [me.lat, me.lon] : [35, 0]} zoom={me ? 6 : 2} preferCanvas style={{ height: "100%", width: "100%" }}>
+            <TileLayer url={tiles(theme)} attribution="Tiles &copy; Esri · VATSIM data · VATSpy" />
+            {showAtc && <AtcLayer atc={atc} />}
             {(feed?.pilots || []).map((p) => (
-              <Marker key={p.cid} position={[p.lat, p.lon]} icon={trafficIcon(p.hdg)}>
+              <Marker key={p.cid} position={[p.lat, p.lon]} icon={p.cid === selectedCid ? planeIcon(p.hdg, "#f59e0b", 26) : trafficIcon(p.hdg)} eventHandlers={{ click: () => setSelectedCid(p.cid) }}>
                 <Tooltip>{p.callsign} · {p.aircraft || "?"} · {p.dep || "?"}→{p.arr || "?"} · FL{Math.round(p.alt / 100)} · {p.gs}kt</Tooltip>
               </Marker>
             ))}
+            {selected && <TrafficPopup key={selected.cid} pilot={selected} onClose={() => setSelectedCid((c) => (c === selected.cid ? null : c))} />}
             {me && <Marker position={[me.lat, me.lon]} icon={planeIcon(me.hdg, "#d946ef", 34)} />}
           </MapContainer>
         </div>

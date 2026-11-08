@@ -18,9 +18,13 @@ try:
 except ModuleNotFoundError:
     from clerk_auth import require_user
     from pdf_report import APP_NAME, build_report_pdf, get_object, put_object
+    from vatsim_atc import build_atc
+else:
+    from backend.vatsim_atc import build_atc
 
 AI_MODEL = "gpt-5.4"
-_vatsim_cache = {"at": 0, "data": None}
+_vatsim_cache = {"at": 0, "data": None, "controllers": []}
+_atc_cache = {"key": None, "data": None}
 
 
 class NotesUpdate(BaseModel):
@@ -135,9 +139,22 @@ def build_router(db, owned_flight, editable_flight) -> APIRouter:
                        "gs": p["groundspeed"], "hdg": p["heading"], "name": p.get("name"),
                        "dep": (p.get("flight_plan") or {}).get("departure"), "arr": (p.get("flight_plan") or {}).get("arrival"),
                        "aircraft": (p.get("flight_plan") or {}).get("aircraft_short")} for p in feed.get("pilots", [])]
-            _vatsim_cache.update(at=time.time(), data={"updated": feed.get("general", {}).get("update_timestamp"), "pilots": pilots,
+            _vatsim_cache.update(at=time.time(), controllers=feed.get("controllers", []), data={"updated": feed.get("general", {}).get("update_timestamp"), "pilots": pilots,
                                                       "controllers": len(feed.get("controllers", []))})
         return _vatsim_cache["data"]
+
+    @r.get("/vatsim/atc")
+    async def vatsim_atc():
+        feed = await vatsim_pilots()
+        if _atc_cache["key"] != feed.get("updated") or not _atc_cache["data"]:
+            try:
+                data = await run_in_threadpool(build_atc, _vatsim_cache["controllers"])
+            except (requests.RequestException, ValueError, KeyError):
+                if _atc_cache["data"]:
+                    return _atc_cache["data"]
+                raise HTTPException(status_code=502, detail="ATC coverage data unavailable")
+            _atc_cache.update(key=feed.get("updated"), data=data)
+        return _atc_cache["data"]
 
     @r.get("/vatsim/member/{cid}")
     async def vatsim_member(cid: str, user: dict = Depends(require_user)):
