@@ -66,3 +66,9 @@ Iteration 3: "make this more rounded edges, and make sure airline logos are visi
 - ErrorBoundary + /api/client-errors (TTL 7d), Splash + sign-in-unreachable screen (ClerkFailed / 12-15s timeout), cache shape validation, SW v2 cleanup, theme clamp, flight load-failed state
 - Speed: route code-splitting (main 158kB gz), GZip except /api/ai/*, VATSIM/ATC stale-while-revalidate + warm at startup
 - Password reset: built into Clerk SignIn (Forgot password? on password step)
+
+## 2026-06 ATC direct (waypoint delete)
+- Waypoint.skipped; POST /api/flights/{id}/waypoint-skip (400 final/passed, 409 closed); log/pass on skipped -> 400; reset clears
+- flightCalc.applyDirects: great-circle leg to next kept fix, ETA/FOB shifted by distance ratio; needs waypoint lat/lon (old imports: notice, re-import backfills)
+- NavlogTable bin per row, greyed SkippedRow with undo; map/cards ignore skipped; PDF shows DCT (skipped)
+- Tested iteration_10 + fixes (colSpan, labels, API guards)

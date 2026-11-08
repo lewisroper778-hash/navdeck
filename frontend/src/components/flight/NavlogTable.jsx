@@ -17,7 +17,10 @@ function SkippedRow({ r, i, onSkip }) {
         <div className="font-bold line-through">{r.ident}</div>
         <div className="text-[10px]">removed · direct</div>
       </td>
-      <td colSpan={11} className="px-3 py-2 text-xs">Skipped by ATC direct — not flown</td>
+      <td colSpan={8} className="px-3 py-2 text-xs">Skipped by ATC direct — not flown</td>
+      <td className="hidden lg:table-cell" />
+      <td className="hidden lg:table-cell" />
+      <td className="hidden lg:table-cell" />
       <td className="px-2 py-1.5">
         <button data-testid={`waypoint-restore-${r.ident}-${i}`} onClick={() => onSkip(r.ident, false, i)} aria-label={`Restore ${r.ident}`} title="Undo"
           className="grid h-11 w-11 place-items-center rounded-xl text-sky-600 transition-colors hover:bg-sky-50 dark:text-sky-400 dark:hover:bg-sky-500/10">
@@ -56,7 +59,7 @@ function Row({ r, i, u, onLog, onToggle, onSkip, isNext, canDelete }) {
       <td className="px-3 py-2">
         <div className="font-bold text-slate-900 dark:text-white">{r.ident}</div>
         <div className={`text-[10px] truncate max-w-[120px] ${r.direct ? "font-bold text-sky-600 dark:text-sky-400" : "text-slate-400"}`}>
-          {r.direct ? `DCT · −${r.saved_nm} nm` : r.airway || "DCT"}
+          {r.direct ? (r.saved_nm > 0 ? `DCT · −${r.saved_nm} nm` : "DCT") : r.airway || "DCT"}
         </div>
       </td>
       <td className="px-3 py-2 text-right text-slate-600 dark:text-slate-300">{r.altitude ? Math.round(r.altitude / 100) : "—"}</td>
@@ -141,6 +144,7 @@ function Row({ r, i, u, onLog, onToggle, onSkip, isNext, canDelete }) {
 
 export default function NavlogTable({ rows, u, onLog, onToggle, onSkip }) {
   const nextIdx = rows.findIndex((r) => !r.passed && !r.skipped);
+  const noCoords = rows.some((r) => r.skipped) && !rows.some((r) => r.lat != null);
   const H = ({ children, left, wide }) => (
     <th className={`px-3 py-3 border-b border-slate-200 dark:border-slate-800 ${left ? "text-left" : "text-right"} ${wide ? "hidden lg:table-cell" : ""}`}>{children}</th>
   );
@@ -158,6 +162,11 @@ export default function NavlogTable({ rows, u, onLog, onToggle, onSkip }) {
       className="overflow-hidden"
     >
       <div className="-mx-6 -mb-6 overflow-x-auto">
+        {noCoords && (
+          <p data-testid="navlog-no-coords" className="mx-6 mb-3 rounded-2xl bg-amber-50 px-4 py-2 text-xs text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+            This plan has no waypoint positions, so times and fuel can't be recalculated after a direct. Re-import the OFP from SimBrief to enable it.
+          </p>
+        )}
         <table data-testid="navlog-table" className="w-full text-sm border-collapse font-mono">
           <thead className="bg-slate-50 dark:bg-slate-950 text-slate-500">
             <tr className="text-[10px] uppercase tracking-widest">

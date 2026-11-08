@@ -613,7 +613,10 @@ async def delete_flight(flight_id: str, user: dict = Depends(require_user)):
 @api_router.post("/flights/{flight_id}/waypoint", response_model=Flight)
 async def toggle_waypoint(flight_id: str, body: WaypointToggle, user: dict = Depends(require_user)):
     doc = await _editable_flight(flight_id, user["user_id"])
-    for wp in _target_waypoints(doc, body.ident, body.index):
+    targets = _target_waypoints(doc, body.ident, body.index)
+    if body.passed and any(wp.get("skipped") for wp in targets):
+        raise HTTPException(status_code=400, detail="This fix was removed by a direct; restore it first")
+    for wp in targets:
         wp["passed"] = body.passed
     await db.flights.update_one(
         {"id": flight_id, "user_id": user["user_id"]},
@@ -667,7 +670,10 @@ async def reset_tracker(flight_id: str, user: dict = Depends(require_user)):
 @api_router.patch("/flights/{flight_id}/waypoint-log", response_model=Flight)
 async def log_waypoint(flight_id: str, body: WaypointLog, user: dict = Depends(require_user)):
     doc = await _editable_flight(flight_id, user["user_id"])
-    for wp in _target_waypoints(doc, body.ident, body.index):
+    targets = _target_waypoints(doc, body.ident, body.index)
+    if any(wp.get("skipped") for wp in targets):
+        raise HTTPException(status_code=400, detail="This fix was removed by a direct; restore it first")
+    for wp in targets:
         if body.ata is not None:
             wp["ata"] = body.ata or None
             wp["passed"] = bool(wp["ata"])
