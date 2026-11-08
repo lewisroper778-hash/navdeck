@@ -4,6 +4,7 @@ import { CountdownTile } from "../TimeTiles";
 import FuelPanel from "../FuelPanel";
 import WeightsPanel from "../WeightsPanel";
 import AiCard from "../AiCard";
+import NotamsPanel from "./NotamsPanel";
 
 export default function BriefingPhase({ ctx }) {
   const { f, rows, fuelCalc, wc, u, saveTimes, saveActuals } = ctx;
@@ -34,6 +35,13 @@ export default function BriefingPhase({ ctx }) {
         <WeightsPanel flight={f} wc={wc} u={u} onSave={saveActuals} />
       </div>
       <AiCard title="AI briefing assistant" mode="briefing" flightId={f.id} saved={f.ai?.briefing} cta="Write my briefing" testId="ai-briefing" />
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
+        <div className="lg:col-span-3"><NotamsPanel notams={f.notams} /></div>
+        <div className="lg:col-span-2">
+          <AiCard title="NOTAM key points" mode="notams" flightId={f.id} saved={f.ai?.notams} cta="Summarise NOTAMs" tone="amber" testId="ai-notams"
+            disabled={!Object.values(f.notams || {}).some((l) => l?.length)} />
+        </div>
+      </div>
     </div>
   );
 }

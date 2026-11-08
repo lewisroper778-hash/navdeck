@@ -74,6 +74,7 @@ class PilotProfile(BaseModel):
     simbrief_pilot_id: Optional[str] = None
     display_name: Optional[str] = None
     vatsim_cid: Optional[str] = None
+    vatsim_friends: list[str] = []
     updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
@@ -81,6 +82,17 @@ class PilotProfileUpdate(BaseModel):
     simbrief_pilot_id: Optional[str] = None
     display_name: Optional[str] = None
     vatsim_cid: Optional[str] = None
+    vatsim_friends: Optional[list[str]] = None
+
+    @field_validator("vatsim_friends")
+    @classmethod
+    def _friends(cls, v):
+        if v is None:
+            return v
+        out = list(dict.fromkeys(x.strip().upper() for x in v if x.strip()))
+        if len(out) > 50 or any(not re.fullmatch(r"[A-Z0-9_-]{2,12}", x) for x in out):
+            raise ValueError("Friends must be up to 50 callsigns or CIDs (2–12 letters/digits)")
+        return out
 
 
 class Waypoint(BaseModel):
@@ -190,6 +202,7 @@ class Flight(BaseModel):
     closed_at: Optional[str] = None
     arrival_notes: dict = Field(default_factory=dict)
     ai: dict = Field(default_factory=dict)
+    notams: dict = Field(default_factory=dict)
     raw_simbrief_id: Optional[str] = None
     imported_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
@@ -364,7 +377,31 @@ async def _backfill(existing: dict, fresh: Flight) -> dict:
             w["lat"], w["lon"] = n.lat, n.lon
         existing.setdefault("fuel", {})["min_takeoff"] = fresh.fuel.min_takeoff
         await db.flights.update_one({"id": existing["id"]}, {"$set": {"waypoints": wps, "fuel.min_takeoff": fresh.fuel.min_takeoff}})
+    if not existing.get("notams") and fresh.notams:
+        existing["notams"] = fresh.notams
+        await db.flights.update_one({"id": existing["id"]}, {"$set": {"notams": fresh.notams}})
     return existing
+
+
+def _dtg_iso(v):
+    # SimBrief enroute NOTAMs use YYYYMMDDhhmm
+    if v and len(v) == 12 and v.isdigit():
+        return f"{v[:4]}-{v[4:6]}-{v[6:8]}T{v[8:10]}:{v[10:]}:00Z"
+    return v
+
+
+def _parse_notams(root, groups: dict) -> dict:
+    out = {}
+    for key, icao in groups.items():
+        out[key] = [{"id": _text(n, "notam_id"), "location": _text(n, "location_icao") or icao, "text": _text(n, "notam_text") or "",
+                     "raw": _text(n, "notam_raw"), "effective": _text(n, "date_effective"), "expires": _text(n, "date_expire"),
+                     "category": _text(n, "notam_qcode_category")} for n in root.findall(f"{key}/notam")]
+    known = {i for i in groups.values() if i}
+    out["enroute"] = [{"id": _text(n, "notam_id"), "location": _text(n, "icao_id"), "text": _text(n, "notam_report") or "",
+                       "raw": _text(n, "notam_text"), "effective": _dtg_iso(_text(n, "notam_effective_dtg")),
+                       "expires": _dtg_iso(_text(n, "notam_expire_dtg")), "category": None}
+                      for n in root.findall("notams/notamdrec") if _text(n, "icao_id") not in known]
+    return out
 
 
 def _text(elem, path, default=None):
@@ -498,6 +535,7 @@ def _parse_simbrief_xml(xml_text: str, user_id: str) -> Flight:
         weights=weights_block,
         times=block_times,
         raw_simbrief_id=_text(params, "request_id") if params is not None else None,
+        notams=_parse_notams(root, {k: _text(e, "icao_code") if e is not None else None for k, e in (("origin", origin), ("destination", destination), ("alternate", alternate))}),
     )
 
 

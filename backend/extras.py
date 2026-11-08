@@ -71,7 +71,19 @@ PROMPTS = {
     "briefing": "Write a concise pre-flight crew briefing (max 220 words) with short headed sections: Route, Fuel, Weights, Slot/Timing, Threats. Use the figures given.",
     "debrief": "Write a short post-flight debrief (max 200 words): punctuality vs schedule, landing rate quality, fuel used vs plan, and 2-3 concrete tips to improve.",
     "metar": "Decode this METAR/ATIS for a pilot in plain English (max 120 words): wind and likely runway in use with crosswind remarks, visibility, cloud, temperature, QNH, and any hazards.",
+    "notams": "From these NOTAMs, write the key points for this flight (max 200 words) under headings DEPARTURE, ARRIVAL, ALTERNATE, EN ROUTE. Only list items that matter operationally: runway or taxiway closures, ILS/navaid outages, SID/STAR changes, airspace restrictions, obstacles near the field. Quote the NOTAM id for each point. Skip sections with nothing relevant.",
 }
+
+
+def _notam_prompt(f: dict) -> str:
+    groups = f.get("notams") or {}
+    lines = []
+    for key in ("origin", "destination", "alternate", "enroute"):
+        for n in (groups.get(key) or [])[:60]:
+            lines.append(f"[{key.upper()}] {n.get('id')} {n.get('location')}: {(n.get('text') or '')[:400]}")
+    if not lines:
+        raise HTTPException(status_code=400, detail="This flight plan has no NOTAMs to summarise")
+    return f"{PROMPTS['notams']}\nFlight {f.get('callsign')} {f.get('origin')} to {f.get('destination')}, alternate {f.get('alternate')}.\n\n" + "\n".join(lines)
 
 
 def build_router(db, owned_flight, editable_flight) -> APIRouter:
@@ -127,7 +139,7 @@ def build_router(db, owned_flight, editable_flight) -> APIRouter:
 
     @r.get("/vatsim/pilots")
     async def vatsim_pilots():
-        if not _vatsim_cache["data"] or time.time() - _vatsim_cache["at"] > 20:
+        if not _vatsim_cache["data"] or time.time() - _vatsim_cache["at"] > 14:
             try:
                 resp = await run_in_threadpool(requests.get, "https://data.vatsim.net/v3/vatsim-data.json", timeout=15)
                 feed = resp.json()
@@ -219,6 +231,8 @@ def build_router(db, owned_flight, editable_flight) -> APIRouter:
             if not (body.message or (f.get("arrival_notes") or {}).get("metar")):
                 raise HTTPException(status_code=400, detail="Add or fetch a METAR/ATIS first")
             prompt = f"{PROMPTS['metar']}\nArrival airport {f.get('destination')}. METAR/ATIS: {body.message or (f.get('arrival_notes') or {}).get('metar') or 'not provided'}"
+        elif mode == "notams":
+            prompt = _notam_prompt(f)
         else:
             prompt = f"{PROMPTS[mode]}\n\n{context}"
         llm = LlmChat(api_key=os.environ["EMERGENT_LLM_KEY"], session_id=f"{flight_id}-{mode}-{uuid.uuid4()}", system_message=system).with_model("openai", AI_MODEL)

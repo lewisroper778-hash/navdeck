@@ -1,4 +1,5 @@
 import { Popup } from "react-leaflet";
+import { Crosshair, Star } from "lucide-react";
 import { LogoPill } from "@/components/AirlineLogo";
 
 const Cell = ({ label, value, testId }) => (
@@ -8,9 +9,10 @@ const Cell = ({ label, value, testId }) => (
   </div>
 );
 
-export default function TrafficPopup({ pilot, onClose }) {
+export default function TrafficPopup({ pilot, onClose, following, onFollow, isFriend, onFriend }) {
+  const action = "inline-flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-full px-3 text-xs font-bold transition-colors";
   return (
-    <Popup position={[pilot.lat, pilot.lon]} eventHandlers={{ remove: onClose }} minWidth={260} offset={[0, -6]}>
+    <Popup position={[pilot.lat, pilot.lon]} eventHandlers={{ remove: onClose }} minWidth={270} offset={[0, -6]} autoPan={!following}>
       <div data-testid="traffic-popup" className="space-y-3 font-mono text-xs">
         <div className="flex items-center justify-between gap-3">
           <LogoPill flight={{ callsign: pilot.callsign }} size="sm" />
@@ -27,6 +29,16 @@ export default function TrafficPopup({ pilot, onClose }) {
           <Cell label="Altitude" value={`${Number(pilot.alt).toLocaleString()} ft`} testId="traffic-popup-alt" />
           <Cell label="Ground speed" value={`${pilot.gs} kt`} testId="traffic-popup-gs" />
           <Cell label="Heading" value={`${String(pilot.hdg).padStart(3, "0")}°`} testId="traffic-popup-hdg" />
+        </div>
+        <div className="flex gap-2">
+          <button data-testid="traffic-popup-follow" onClick={onFollow} aria-pressed={following}
+            className={`${action} ${following ? "bg-amber-500 text-white" : "bg-slate-900 text-white hover:bg-slate-700"}`}>
+            <Crosshair className="h-4 w-4" /> {following ? "Following" : "Follow"}
+          </button>
+          <button data-testid="traffic-popup-friend" onClick={onFriend} aria-pressed={isFriend}
+            className={`${action} ${isFriend ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}>
+            <Star className="h-4 w-4" /> {isFriend ? "Friend" : "Add friend"}
+          </button>
         </div>
         <div className="text-[10px] text-slate-400">CID {pilot.cid}</div>
       </div>
