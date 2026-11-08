@@ -1,0 +1,29 @@
+{
+  "summary": "Backend-only smoke test for e-navlog. Verified Clerk config, auth-gated /api/me (create + update), SimBrief import error handling, per-user flight isolation, waypoint toggle, reset, and delete. Pilot 392350 returned no OFP (SimBrief 400), which is acceptable per the spec; flight-dependent endpoints were therefore exercised against a synthetic flight inserted directly into Mongo for a Clerk test user.",
+  "tested_scope": ["backend", "auth", "integration"],
+  "passed": [
+    "GET /api/clerk/config -> enabled=true, pk_test_... publishable_key",
+    "GET /api/me without token -> 401",
+    "GET /api/me with valid Clerk JWT -> creates+returns PilotProfile",
+    "PUT /api/me with {simbrief_pilot_id:'392350', display_name:'Capt Test'} persists",
+    "POST /api/flights/import without any configured pilot_id -> 400 'No SimBrief Pilot ID configured'",
+    "POST /api/flights/import with pilot_id='392350' -> 400 'SimBrief returned 400' (no OFP; acceptable per spec)",
+    "GET /api/flights returns only caller's flights (cross-user isolation verified)",
+    "GET /api/flights/{id} as other user -> 404",
+    "POST /api/flights/{id}/waypoint {ident,passed:true} marks waypoint passed",
+    "POST /api/flights/{id}/reset clears all passed flags",
+    "DELETE /api/flights/{id} removes flight; subsequent GET -> 404"
+  ],
+  "failed": [],
+  "notes": [
+    "SimBrief pilot_id 392350 does not currently have a published OFP, so the happy-path parse of real SimBrief XML could not be executed end-to-end. The import endpoint correctly propagates SimBrief's 400 as HTTP 400. Recommend retesting with a pilot_id that has an active OFP to validate _parse_simbrief_xml against live XML.",
+    "Toggle/reset/delete were validated against a synthetic Mongo-inserted flight owned by a Clerk test user; all four endpoints returned expected shapes and status codes.",
+    "Clerk test users were created via Clerk Backend API with User-Agent header and deleted at end of run; their pilots/flights docs were also cleaned up."
+  ],
+  "action_items": [
+    "Optional: provide a SimBrief pilot_id with an active OFP to fully exercise _parse_simbrief_xml on real XML."
+  ],
+  "success_rate": {"backend": "100% (11/11)", "frontend": "not tested"},
+  "retest_needed": false,
+  "full_testing_deferred": true
+}
