@@ -49,3 +49,8 @@ Iteration 3: "make this more rounded edges, and make sure airline logos are visi
 ## 2026-06 Friends Board (home)
 - GET /api/vatsim/friends: online friends with remaining_nm, live ETA (dist/GS), progress %, on_ground
 - Home FriendsBoard cards (logo, route progress, ETA, nm to go, FL); tap -> /vatsim?focus=CID opens popup; empty states
+
+## 2026-06 Friend landing alerts
+- friend_tracking.py: tracks friends airborne->on ground within 15nm of arrival (or disconnect within 40nm) -> friend_landings
+- Runs on GET /api/vatsim/friends (30s while home open) and cron POST /api/cron/friend-landings (.emergent/crons.yml, every 15 min, WEBHOOK_CRON_SECRET)
+- GET /api/vatsim/landings + POST /api/vatsim/landings/seen; home shows pop-up toast per landing with estimated landing time

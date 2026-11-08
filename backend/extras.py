@@ -1,15 +1,17 @@
+import hmac
 import json
 import os
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import List, Optional
 
 import requests
 from emergentintegrations.llm.chat import LlmChat, StreamDone, TextDelta, UserMessage
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from pymongo.errors import DuplicateKeyError
 from starlette.concurrency import run_in_threadpool
 
 try:
@@ -18,13 +20,19 @@ try:
 except ModuleNotFoundError:
     from clerk_auth import require_user
     from pdf_report import APP_NAME, build_report_pdf, get_object, put_object
-    from vatsim_atc import airport_coords, build_atc, nm_between
+    from vatsim_atc import build_atc
+    from friend_tracking import track as track_friends
 else:
-    from backend.vatsim_atc import airport_coords, build_atc, nm_between
+    from backend.vatsim_atc import build_atc
+    from backend.friend_tracking import track as track_friends
 
 AI_MODEL = "gpt-5.4"
 _vatsim_cache = {"at": 0, "data": None, "controllers": []}
 _atc_cache = {"key": None, "data": None}
+
+
+class SeenRequest(BaseModel):
+    ids: List[str]
 
 
 class NotesUpdate(BaseModel):
@@ -173,18 +181,40 @@ def build_router(db, owned_flight, editable_flight) -> APIRouter:
         profile = await db.pilots.find_one({"user_id": user["user_id"]}, {"_id": 0, "vatsim_friends": 1}) or {}
         friends = profile.get("vatsim_friends") or []
         feed = await vatsim_pilots() if friends else {"pilots": []}
-        now = datetime.now(timezone.utc)
-        online = []
-        for p in feed["pilots"]:
-            if str(p["cid"]) not in friends and p["callsign"] not in friends:
-                continue
-            pos, dep, arr = (p["lat"], p["lon"]), await run_in_threadpool(airport_coords, p["dep"]), await run_in_threadpool(airport_coords, p["arr"])
-            remaining = round(nm_between(pos, arr)) if arr else None
-            total = nm_between(dep, arr) if dep and arr else None
-            eta = (now + timedelta(hours=remaining / p["gs"])).isoformat() if remaining is not None and p["gs"] > 50 else None
-            progress = round(max(0, min(1, 1 - remaining / total)) * 100) if total else None
-            online.append(p | {"remaining_nm": remaining, "eta": eta, "progress": progress, "on_ground": p["gs"] < 50})
+        online = await track_friends(db, user["user_id"], friends, feed["pilots"])
         return {"friends": len(friends), "online": online, "updated": feed.get("updated")}
+
+    @r.get("/vatsim/landings")
+    async def friend_landings(user: dict = Depends(require_user)):
+        return await db.friend_landings.find({"user_id": user["user_id"], "seen": False}, {"_id": 0}).sort("landed_at", 1).to_list(20)
+
+    @r.post("/vatsim/landings/seen")
+    async def friend_landings_seen(body: SeenRequest, user: dict = Depends(require_user)):
+        res = await db.friend_landings.update_many({"user_id": user["user_id"], "id": {"$in": body.ids}}, {"$set": {"seen": True}})
+        return {"updated": res.modified_count}
+
+    async def _track_all():
+        feed = await vatsim_pilots()
+        async for p in db.pilots.find({"vatsim_friends.0": {"$exists": True}}, {"_id": 0, "user_id": 1, "vatsim_friends": 1}):
+            await track_friends(db, p["user_id"], p["vatsim_friends"], feed["pilots"])
+
+    @r.post("/cron/friend-landings")
+    async def cron_friend_landings(request: Request, background: BackgroundTasks):
+        # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+        auth = request.headers.get("authorization", "")
+        if not auth.startswith("Bearer ") or not hmac.compare_digest(auth[7:], os.environ["WEBHOOK_CRON_SECRET"]):
+            raise HTTPException(status_code=401, detail="Unauthorized")
+        try:
+            env = await request.json()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid body")
+        run_id = request.headers.get("x-webhook-id") or (env or {}).get("run_id") or str(uuid.uuid4())
+        try:
+            await db.cron_runs.insert_one({"_id": run_id, "job": "friend-landings", "at": datetime.now(timezone.utc).isoformat()})
+        except DuplicateKeyError:
+            return {"accepted": True, "duplicate": True}
+        background.add_task(_track_all)
+        return {"accepted": True}
 
     @r.get("/vatsim/member/{cid}")
     async def vatsim_member(cid: str, user: dict = Depends(require_user)):

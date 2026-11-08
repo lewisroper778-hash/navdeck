@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import { Users, ArrowRight } from "lucide-react";
 import { LogoPill } from "@/components/AirlineLogo";
 
@@ -37,7 +38,16 @@ export default function FriendsBoard({ api }) {
   const [data, setData] = useState(null);
 
   useEffect(() => {
-    const load = () => api.get("/vatsim/friends").then((r) => setData(r.data)).catch(() => {});
+    const load = () => {
+      api.get("/vatsim/friends").then((r) => setData(r.data)).catch(() => {});
+      api.get("/vatsim/landings").then((r) => {
+        if (!r.data.length) return;
+        r.data.forEach((l) => toast.success(`${l.callsign} landed at ${l.arr || "destination"}`, {
+          description: `${l.dep || "?"} → ${l.arr || "?"} · touched down about ${zulu(l.landed_at)}`, duration: 8000, id: l.id,
+        }));
+        api.post("/vatsim/landings/seen", { ids: r.data.map((l) => l.id) }).catch(() => {});
+      }).catch(() => {});
+    };
     load();
     const t = setInterval(load, 30000);
     return () => clearInterval(t);
