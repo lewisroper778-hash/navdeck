@@ -12,7 +12,7 @@ import { TONES, btnGhost } from "@/components/flight/ui";
 import FlightHero from "@/components/flight/FlightHero";
 import PhaseStepper from "@/components/flight/PhaseStepper";
 import FlightReport from "@/components/flight/FlightReport";
-import BriefingPhase from "@/components/flight/phases/BriefingPhase";
+import BriefingPhase, { NotamsSection } from "@/components/flight/phases/BriefingPhase";
 import DeparturePhase from "@/components/flight/phases/DeparturePhase";
 import EnroutePhase from "@/components/flight/phases/EnroutePhase";
 import ArrivalPhase from "@/components/flight/phases/ArrivalPhase";
@@ -25,7 +25,7 @@ function PhaseFooter({ index, go }) {
   const prev = PHASES[index - 1];
   const next = PHASES[index + 1];
   return (
-    <div className="flex items-center justify-between gap-3 pt-2">
+    <div className="flex items-center justify-between gap-3 pt-2 pr-20">
       {prev ? (
         <button data-testid="phase-prev-button" onClick={() => go(prev.key)} className={`${btnGhost} !min-h-[56px] !px-6`}>
           <ArrowLeft className="h-4 w-4" /> {prev.label}
@@ -172,6 +172,7 @@ export default function FlightProcessPage() {
             <fieldset disabled={locked} className="min-w-0 space-y-5 disabled:[&_input]:opacity-60 disabled:[&_button]:opacity-50 disabled:[&_button]:cursor-not-allowed disabled:[&_button]:shadow-none">
               <View ctx={ctx} />
             </fieldset>
+            {phase === "briefing" && <NotamsSection f={flight} locked={locked} />}
             <PhaseFooter index={index} go={go} />
           </div>
         </main>

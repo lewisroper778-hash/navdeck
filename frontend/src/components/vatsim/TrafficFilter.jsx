@@ -11,8 +11,8 @@ export default function TrafficFilter({ value, onChange, shown }) {
         data-testid="traffic-filter-input"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="Only airports e.g. EGLL KJFK"
-        className={`h-11 w-full rounded-full border bg-white pl-10 pr-24 font-mono text-sm uppercase text-slate-900 outline-none transition-colors focus:border-sky-400 dark:bg-slate-900 dark:text-white ${active ? "border-sky-400" : "border-slate-200 dark:border-slate-800"}`}
+        placeholder="Airports e.g. EGLL KJFK"
+        className={`h-11 w-full rounded-full border bg-white pl-10 ${active ? "pr-24" : "pr-4"} font-mono text-sm uppercase text-slate-900 outline-none transition-colors focus:border-sky-400 dark:bg-slate-900 dark:text-white ${active ? "border-sky-400" : "border-slate-200 dark:border-slate-800"}`}
       />
       {active && (
         <div className="absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-1">

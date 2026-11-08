@@ -53,6 +53,7 @@ export default function VatsimPage() {
   const [followCid, setFollowCid] = useState(null);
   const [friends, setFriends] = useState(cache.getProfile()?.vatsim_friends || []);
   const [filterText, setFilterText] = useState("");
+  const [profileLoaded, setProfileLoaded] = useState(false);
   const pendingFocus = useRef(null);
   const seenFriends = useRef(null);
   const pilots = feed?.pilots || [];
@@ -76,7 +77,7 @@ export default function VatsimPage() {
   useEffect(() => {
     loadFeed();
     api.get("/flights").then((r) => { cache.setFlights(r.data); setAll(r.data); }).catch(() => {});
-    api.get("/me").then((r) => { cache.setProfile(r.data); setFriends(r.data.vatsim_friends || []); if (r.data.vatsim_cid) { setCid(r.data.vatsim_cid); lookup(r.data.vatsim_cid); } }).catch(() => {});
+    api.get("/me").then((r) => { cache.setProfile(r.data); setFriends(r.data.vatsim_friends || []); setProfileLoaded(true); if (r.data.vatsim_cid) { setCid(r.data.vatsim_cid); lookup(r.data.vatsim_cid); } }).catch(() => {});
     // eslint-disable-next-line
   }, []);
 
@@ -102,7 +103,12 @@ export default function VatsimPage() {
   }, [feed, followCid]);
 
   useEffect(() => {
-    if (!feed) return;
+    if (seenFriends.current !== null) seenFriends.current = new Set(pilots.filter(isFriend).map((p) => p.cid));
+    // eslint-disable-next-line
+  }, [friends]);
+
+  useEffect(() => {
+    if (!feed || !profileLoaded) return;
     const now = pilots.filter(isFriend);
     if (seenFriends.current === null) {
       if (now.length) toast.success(`${now.length} friend${now.length > 1 ? "s" : ""} online: ${now.map((p) => p.callsign).join(", ")}`);
@@ -112,7 +118,7 @@ export default function VatsimPage() {
     }
     seenFriends.current = new Set(now.map((p) => p.cid));
     // eslint-disable-next-line
-  }, [feed, friends]);
+  }, [feed, profileLoaded]);
 
   const saveFriends = async (list) => {
     const prev = friends;
@@ -151,7 +157,7 @@ export default function VatsimPage() {
     <div className="min-h-screen bg-slate-100 dark:bg-slate-950">
       <Navbar />
       <main className="mx-auto max-w-[1400px] space-y-5 px-4 md:px-6 lg:px-8 py-8">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <div className="font-mono text-[11px] font-bold uppercase tracking-[0.25em] text-emerald-600 dark:text-emerald-400">Network</div>
             <h1 className="font-heading text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white">VATSIM</h1>
@@ -171,7 +177,7 @@ export default function VatsimPage() {
         <div data-testid="vatsim-map" className="relative h-[55vh] min-h-[420px] overflow-hidden rounded-[28px] border border-slate-200/80 dark:border-slate-800 md:h-[62vh]">
           {followCid && (
             <button data-testid="vatsim-follow-banner" onClick={() => setFollowCid(null)}
-              className="absolute left-1/2 top-3 z-[500] inline-flex min-h-[44px] -translate-x-1/2 items-center gap-2 rounded-full bg-amber-500 px-5 font-mono text-sm font-bold text-white shadow-lg">
+              className="absolute bottom-4 left-1/2 z-[500] inline-flex min-h-[44px] -translate-x-1/2 items-center gap-2 rounded-full bg-amber-500 px-5 font-mono text-sm font-bold text-white shadow-lg">
               Following {pilots.find((p) => p.cid === followCid)?.callsign} · tap to stop
             </button>
           )}

@@ -1,0 +1,46 @@
+{
+  "summary": "Iteration 6: tested VATSIM Friends (API + UI), Traffic filter, Follow aircraft, iPad layouts (1024x1366, 1366x1024), Briefing NOTAMs panel and AI NOTAM key points (API SSE + UI). Backend: 18/18 new pytest pass + 8/8 iter5 VATSIM regression. Frontend: all requested flows work. Main finding: on a CLOSED flight (UA124, the only flight with NOTAMs) the read-only fieldset disables the NOTAM tabs, search and Show raw buttons, so the pilot can't browse NOTAMs after closing the flight. A few minor UX/design items are listed below.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/ai/{flight_id}/notams (and other AI modes)", "issue": "There is no closed-flight check, so the API overwrites flight.ai.<mode> on a closed/locked flight. The UI blocks this but the API allows it. Decide if that is intended."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "BriefingPhase / NotamsPanel on closed flight", "issue": "FlightProcessPage wraps the phase in <fieldset disabled={locked}>. This disables notams-tab-*, notams-search and notam-raw-* on closed flights, so only the Departure tab can be read. Tabs, search and raw toggle only change the view, so they should stay enabled (e.g. render NotamsPanel outside the fieldset, or keep the fieldset only around editable controls). Same applies to scrolling/reading other view-only controls.", "selector": "[data-testid=notams-tab-destination]", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [
+      {"flow": "Adding an already-online friend", "issue": "From code review (not checked in the UI): the [feed, friends] effect treats a newly added friend who is already online as new. seenFriends doesn't contain them, so a misleading 'XXX just came online' toast fires right after adding. If cache.getProfile() is empty and /me resolves after the first feed, online friends get individual 'just came online' toasts instead of the 'N friends online' summary. Fix: update seenFriends when the friends list changes, without toasting.", "affected_selectors": ["[data-sonner-toast]"]}
+    ],
+    "design_issues": [
+      {"screen": "VATSIM map follow mode", "issues": ["vatsim-follow-banner (top-3, z-500) sits on top of the open traffic popup's header, hiding the logo and callsign. The popup opens just above the centred plane. Move the banner to the bottom of the map or offset it."]},
+      {"screen": "VATSIM header - iPad portrait 1024x1366", "issues": ["At exactly lg=1024px the header is a row. Controls wrap so search/filter/counts end up above the NETWORK/VATSIM title and the ATC toggle and refresh sit next to the title, which looks unbalanced. Use xl:flex-row, or put the controls on a full-width row below the title on tablets."]},
+      {"screen": "VATSIM traffic filter", "issues": ["The placeholder is cut off to 'ONLY AIRPORTS E' at desktop and iPad landscape because pr-24 is always applied. Only use the large right padding when the filter is active."]},
+      {"screen": "Flight Deck bottom-right", "issues": ["The copilot-open-button FAB (fixed bottom-6 right-6) covers the 'Next: Pushback' button at 1366x1024."]},
+      {"screen": "Leaflet zoom controls", "issues": ["The 44px size only applies under .leaflet-touch (index.css:129). A real iPad gets the class, but the headless desktop/iPad-sized viewport measured 30x30. This was checked in code only; please confirm on a touch device."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_friends_notams_iter6.py", "/app/backend/tests/test_vatsim_atc_iter5.py", "/app/test_reports/pytest/pytest_iter6.xml"],
+  "action_items": [
+    "Keep NOTAM tabs, search and raw toggle usable on closed flights (they are view-only controls inside the locked fieldset)",
+    "Stop the 'just came online' toast firing when a user adds an already-online friend (update seenFriends without toasting when friends change)",
+    "Move or offset vatsim-follow-banner so it doesn't cover the traffic popup header",
+    "Improve the VATSIM header layout on iPad portrait (1024px) and fix the cut-off traffic filter placeholder (conditional pr-24)",
+    "Optional: stop the copilot FAB overlapping the 'Next' phase button; optional backend closed-flight guard on AI endpoints"
+  ],
+  "critical_code_review_comments": [
+    "server.py is 772 lines (>700): consider splitting the SimBrief parsing (_parse_notams, OFP parsing) into its own module",
+    "PilotProfileUpdate._friends validator is correct: uppercases, dedupes keeping order, drops blanks, max 50, regex [A-Z0-9_-]{2,12}; invalid input returns 422 and doesn't overwrite saved data",
+    "_notam_prompt raises 400 before the StreamingResponse starts, which is correct. It skips groups with no data and truncates each NOTAM to 400 chars",
+    "VatsimPage: visible keeps followed/selected aircraft during filtering, which is good. The follow-mode feed interval is 15s and the backend cache is 14s, which is consistent",
+    "VatsimPage trafficIcon cache is fine. selected/follow markers call planeIcon on every render (minor)"
+  ],
+  "updated_files": ["/app/backend/tests/test_friends_notams_iter6.py"],
+  "success_rate": {"backend": "100% (18/18 new + 8/8 regression)", "frontend": "~92% (all requested flows work; NOTAM browsing blocked on closed flights)"},
+  "seed_data_creation": "None. Friends added during UI tests (ZZZ999, QFA7) and API tests (BAW123, 1234567, DLH4A) were removed. Final /api/me: vatsim_friends=[], simbrief_pilot_id='1', vatsim_cid=None (unchanged). UA124 flight.ai.notams was regenerated by the AI test (this is the feature under test). The NOTAM UI checks on the closed flight removed the fieldset's disabled attribute in the browser only; no data was changed.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run with: cd /app/backend/tests && python -m pytest test_friends_notams_iter6.py -p no:xdist -o addopts=''. UA124 f6604740 is CLOSED, so on its briefing page NOTAM controls are disabled by the fieldset (the bug above). To exercise the UI, run document.querySelectorAll('fieldset[disabled]').forEach(f=>f.disabled=false). N806SB ee9720b3 is open with no NOTAMs (use it for notams-empty and the 400 check). Pick an online friend from /api/vatsim/pilots (for example a long-haul flight with gs>200). Leaflet markers are DOM .leaflet-marker-icon, so you can count them for the filter test. Leave vatsim_friends empty at the end.",
+  "rca of the issue": "NOTAM controls disabled on closed flights: FlightProcessPage.jsx line ~172 wraps every non-close phase in <fieldset disabled={locked}>. A native disabled fieldset disables every descendant button and input, including NotamsPanel's view-only tabs, search and raw toggle. Repro: open /flights/f6604740.../briefing and click 'Arrival', which is disabled. Fix: render NotamsPanel outside the fieldset, or pass a locked prop to only the editable components."
+}

@@ -37,3 +37,11 @@ Iteration 3: "make this more rounded edges, and make sure airline logos are visi
 - Click traffic -> popup with airline logo, route, aircraft, alt, GS, heading
 - ATC coverage layer (VATSpy data, /api/vatsim/atc): CTR/FSS sectors shaded, APP rings (70km), TWR rings (16km), on/off toggle; US TRACON alias table
 - Tested: iteration_5 (100% backend/frontend)
+
+## 2026-06 Friends, filter, follow, NOTAMs, iPad
+- VATSIM friends list (profile.vatsim_friends, PUT /api/me), online toasts on VATSIM page only, friend planes green
+- Traffic filter by typed ICAO codes; Follow aircraft (15s refresh, drag/banner stops)
+- iPad: 44px touch targets, responsive map height, larger Leaflet controls
+- Briefing NOTAMs from SimBrief OFP (flight.notams origin/destination/alternate/enroute), search, raw toggle, closure badges; AI NOTAM key points (/api/ai/{id}/notams); browsable on closed flights
+- Backlog: live NOTAMs (needs FAA NOTAM API key, user deferred)
+- Tested: iteration_6 (backend 100%, frontend fixes applied after)
