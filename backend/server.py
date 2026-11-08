@@ -22,9 +22,11 @@ from starlette.middleware.cors import CORSMiddleware
 try:
     from backend.clerk_auth import clerk_router, require_user
     from backend.extras import build_router, store_report
+    from backend.bridge import build_bridge_router
 except ModuleNotFoundError:
     from clerk_auth import clerk_router, require_user
     from extras import build_router, store_report
+    from bridge import build_bridge_router
 
 
 ROOT_DIR = Path(__file__).parent
@@ -742,6 +744,7 @@ async def reopen_flight(flight_id: str, user: dict = Depends(require_user)):
 
 app.include_router(api_router)
 app.include_router(build_router(db, _owned_flight, _editable_flight))
+app.include_router(build_bridge_router(db))
 app.include_router(clerk_router)
 
 app.add_middleware(

@@ -10,6 +10,7 @@ import { PHASES, currentPhase } from "@/lib/phases";
 import Navbar from "@/components/Navbar";
 import { TONES, btnGhost } from "@/components/flight/ui";
 import FlightHero from "@/components/flight/FlightHero";
+import SimLinkChip from "@/components/flight/SimLinkChip";
 import PhaseStepper from "@/components/flight/PhaseStepper";
 import FlightReport from "@/components/flight/FlightReport";
 import BriefingPhase, { NotamsSection } from "@/components/flight/phases/BriefingPhase";
@@ -138,6 +139,7 @@ export default function FlightProcessPage() {
           <button data-testid="back-button" onClick={() => navigate("/")} className="inline-flex min-h-[40px] items-center gap-1 rounded-full bg-white dark:bg-slate-900 px-4 text-sm font-medium text-slate-600 dark:text-slate-300 shadow-sm hover:text-sky-600">
             <ChevronLeft className="h-4 w-4" /> All flights
           </button>
+          <SimLinkChip api={api} flight={flight} onUpdate={apply} />
           <FlightHero
             f={flight}
             onPrint={() => exportPdf("navlog")}

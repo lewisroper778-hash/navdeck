@@ -7,6 +7,7 @@ import { cache } from "@/lib/utils-app";
 import Navbar from "@/components/Navbar";
 import { Panel, inputCls, btnPrimary } from "@/components/flight/ui";
 import SimbriefPlanner from "@/components/SimbriefPlanner";
+import SimLinkPanel from "@/components/SimLinkPanel";
 
 export default function SimbriefPage() {
   const { getToken } = useAuth();
@@ -102,6 +103,7 @@ export default function SimbriefPage() {
               </label>
               <div className="mt-4 font-mono text-xs text-slate-500">{user?.primaryEmailAddress?.emailAddress}</div>
             </Panel>
+            <SimLinkPanel api={api} />
             <div className="flex justify-end">
               <button data-testid="save-settings-button" onClick={save} disabled={saving} className={`${btnPrimary} px-5 py-2.5`}>
                 <Save className="h-4 w-4" /> {saving ? "Saving…" : "Save settings"}
