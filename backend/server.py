@@ -745,6 +745,11 @@ async def reopen_flight(flight_id: str, user: dict = Depends(require_user)):
 app.include_router(api_router)
 app.include_router(build_router(db, _owned_flight, _editable_flight))
 app.include_router(build_bridge_router(db))
+
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
 app.include_router(clerk_router)
 
 app.add_middleware(
