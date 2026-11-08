@@ -36,7 +36,7 @@ const bearing = ([a1, o1], [a2, o2]) => {
 // Route on a map; the aircraft sits at the last fix ticked off and points to the next one
 export default function RouteMap({ rows }) {
   const { theme } = useTheme();
-  const pts = rows.filter((r) => r.lat != null && r.lon != null);
+  const pts = rows.filter((r) => r.lat != null && r.lon != null && !r.skipped);
   if (pts.length < 2)
     return <div data-testid="route-map-empty" className="rounded-3xl bg-slate-50 dark:bg-slate-800/60 p-6 text-sm text-slate-500">Re-sync this OFP from the Flights page to load the route map coordinates.</div>;
   const line = pts.map((p) => [p.lat, p.lon]);

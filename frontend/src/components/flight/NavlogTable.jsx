@@ -1,4 +1,4 @@
-import { Navigation, Check } from "lucide-react";
+import { Navigation, Check, Trash2, Undo2 } from "lucide-react";
 import { Panel, inputCls, signedDev } from "./ui";
 import { nowHHMM, isHHMM, isNum } from "@/lib/utils-app";
 import { toast } from "sonner";
@@ -9,7 +9,26 @@ const devTone = (v, invert = false) => {
   return bad ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400";
 };
 
-function Row({ r, i, u, onLog, onToggle, isNext }) {
+function SkippedRow({ r, i, onSkip }) {
+  return (
+    <tr data-testid={`waypoint-row-${r.ident}-${i}`} className="border-b border-slate-100 bg-slate-50/70 text-slate-400 dark:border-slate-800 dark:bg-slate-900/40">
+      <td className="px-3 py-2" />
+      <td className="px-3 py-2">
+        <div className="font-bold line-through">{r.ident}</div>
+        <div className="text-[10px]">removed · direct</div>
+      </td>
+      <td colSpan={11} className="px-3 py-2 text-xs">Skipped by ATC direct — not flown</td>
+      <td className="px-2 py-1.5">
+        <button data-testid={`waypoint-restore-${r.ident}-${i}`} onClick={() => onSkip(r.ident, false, i)} aria-label={`Restore ${r.ident}`} title="Undo"
+          className="grid h-11 w-11 place-items-center rounded-xl text-sky-600 transition-colors hover:bg-sky-50 dark:text-sky-400 dark:hover:bg-sky-500/10">
+          <Undo2 className="h-4 w-4" />
+        </button>
+      </td>
+    </tr>
+  );
+}
+
+function Row({ r, i, u, onLog, onToggle, onSkip, isNext, canDelete }) {
   const d = u.toDisp;
   return (
     <tr
@@ -36,7 +55,9 @@ function Row({ r, i, u, onLog, onToggle, isNext }) {
       </td>
       <td className="px-3 py-2">
         <div className="font-bold text-slate-900 dark:text-white">{r.ident}</div>
-        <div className="text-[10px] text-slate-400 truncate max-w-[120px]">{r.airway || "DCT"}</div>
+        <div className={`text-[10px] truncate max-w-[120px] ${r.direct ? "font-bold text-sky-600 dark:text-sky-400" : "text-slate-400"}`}>
+          {r.direct ? `DCT · −${r.saved_nm} nm` : r.airway || "DCT"}
+        </div>
       </td>
       <td className="px-3 py-2 text-right text-slate-600 dark:text-slate-300">{r.altitude ? Math.round(r.altitude / 100) : "—"}</td>
       <td className="hidden lg:table-cell px-3 py-2 text-right text-[11px] text-slate-600 dark:text-slate-300">{r.wind}</td>
@@ -106,12 +127,20 @@ function Row({ r, i, u, onLog, onToggle, isNext }) {
           <div data-testid={`below-min-${r.ident}-${i}`} className="text-[9px] font-bold text-red-600">&lt; MIN</div>
         )}
       </td>
+      <td className="px-2 py-1.5">
+        {canDelete && (
+          <button data-testid={`waypoint-delete-${r.ident}-${i}`} onClick={() => onSkip(r.ident, true, i)} aria-label={`Remove ${r.ident}`} title="Remove (ATC direct)"
+            className="grid h-11 w-11 place-items-center rounded-xl text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10">
+            <Trash2 className="h-4 w-4" />
+          </button>
+        )}
+      </td>
     </tr>
   );
 }
 
-export default function NavlogTable({ rows, u, onLog, onToggle }) {
-  const nextIdx = rows.findIndex((r) => !r.passed);
+export default function NavlogTable({ rows, u, onLog, onToggle, onSkip }) {
+  const nextIdx = rows.findIndex((r) => !r.passed && !r.skipped);
   const H = ({ children, left, wide }) => (
     <th className={`px-3 py-3 border-b border-slate-200 dark:border-slate-800 ${left ? "text-left" : "text-right"} ${wide ? "hidden lg:table-cell" : ""}`}>{children}</th>
   );
@@ -123,7 +152,7 @@ export default function NavlogTable({ rows, u, onLog, onToggle }) {
       testId="navlog-table-panel"
       right={
         <span className="hidden md:inline rounded-full bg-violet-50 dark:bg-violet-500/10 px-3 py-1 text-xs font-medium text-violet-600 dark:text-violet-300">
-          Log ATA + FOB · ETOs update instantly
+          Log ATA + FOB · bin removes fixes for a direct
         </span>
       }
       className="overflow-hidden"
@@ -145,17 +174,23 @@ export default function NavlogTable({ rows, u, onLog, onToggle }) {
               <H>Plan FOB</H>
               <H left>Act FOB {u.units}</H>
               <H>ΔF</H>
+              <H><span className="sr-only">Remove</span></H>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={13} className="px-3 py-10 text-center text-slate-500">No waypoints in this OFP.</td>
+                <td colSpan={14} className="px-3 py-10 text-center text-slate-500">No waypoints in this OFP.</td>
               </tr>
             )}
-            {rows.map((r, i) => (
-              <Row key={`${r.ident}-${i}`} r={r} i={i} u={u} onLog={onLog} onToggle={onToggle} isNext={i === nextIdx} />
-            ))}
+            {rows.map((r, i) =>
+              r.skipped ? (
+                <SkippedRow key={`${r.ident}-${i}`} r={r} i={i} onSkip={onSkip} />
+              ) : (
+                <Row key={`${r.ident}-${i}`} r={r} i={i} u={u} onLog={onLog} onToggle={onToggle} onSkip={onSkip} isNext={i === nextIdx}
+                  canDelete={!!onSkip && !r.passed && !r.ata && i < rows.length - 1} />
+              )
+            )}
           </tbody>
         </table>
       </div>

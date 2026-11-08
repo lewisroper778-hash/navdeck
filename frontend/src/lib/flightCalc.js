@@ -18,12 +18,45 @@ export function unitTools(f) {
   };
 }
 
+const R_NM = 3440.065;
+const gcNm = (a, b) => {
+  const r = Math.PI / 180;
+  const h = Math.sin(((b.lat - a.lat) * r) / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(((b.lon - a.lon) * r) / 2) ** 2;
+  return 2 * R_NM * Math.asin(Math.sqrt(h));
+};
+
+// Re-plan around fixes removed by an ATC direct: straight-line leg to the next kept fix, time and fuel scaled by the shorter distance
+function applyDirects(wps) {
+  let tShift = 0, fShift = 0, prev = null;
+  return wps.map((w, i) => {
+    if (w.skipped) return { ...w };
+    const out = { ...w, plan_eta: w.eta, plan_fob: w.fob };
+    if (prev !== null && i - prev > 1) {
+      const a = wps[prev];
+      const orig = wps.slice(prev + 1, i + 1).reduce((s, l) => s + (num(l.distance) || 0), 0);
+      const hasPos = [a.lat, a.lon, w.lat, w.lon].every((v) => v != null);
+      const direct = hasPos ? gcNm(a, w) : orig;
+      const ratio = orig > 0 ? Math.min(1, direct / orig) : 1;
+      const origT = (num(w.eta) ?? 0) - (num(a.eta) ?? 0);
+      const origF = num(a.fob) !== null && num(w.fob) !== null ? num(a.fob) - num(w.fob) : 0;
+      tShift += origT * (1 - ratio);
+      fShift += origF * (1 - ratio);
+      Object.assign(out, { distance: String(Math.round(direct)), ete: String(Math.round(origT * ratio)), airway: "DCT", direct: true, saved_nm: Math.round(orig - direct) });
+    }
+    if (tShift && num(w.eta) !== null) out.eta = String(Math.round(num(w.eta) - tShift));
+    if (fShift && num(w.fob) !== null) out.fob = String(Math.round(num(w.fob) + fShift));
+    prev = i;
+    return out;
+  });
+}
+
 export function computeNavlog(f) {
   const t = f.times || {};
   const base = t.takeoff || t.sched_takeoff || null;
   let last = null; // last fix with an ATA (drives ETOs)
   let lastFuelDev = 0; // latest known fuel deviation (from any fix with an actual FOB)
-  return f.waypoints.map((w) => {
+  return applyDirects(f.waypoints).map((w) => {
+    if (w.skipped) return { ...w, planned: null, eto: null, timeDev: null, fuelDev: null, estFob: null };
     const planned = base && w.eta ? addSecondsToHHMM(base, w.eta) : null;
     const fob = num(w.fob);
     const act = num(w.actual_fob);

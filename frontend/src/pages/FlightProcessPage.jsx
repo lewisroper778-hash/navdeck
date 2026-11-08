@@ -127,6 +127,7 @@ export default function FlightProcessPage() {
     saveNotes: (b) => call(() => api.patch(`/flights/${id}/notes`, b)),
     logWp: (ident, b, index) => call(() => api.patch(`/flights/${id}/waypoint-log`, { ident, index, ...b })),
     toggleWp: (ident, passed, index) => call(() => api.post(`/flights/${id}/waypoint`, { ident, passed, index })),
+    skipWp: (ident, skipped, index) => call(() => api.post(`/flights/${id}/waypoint-skip`, { ident, skipped, index })),
     sign: (b) => call(() => api.post(`/flights/${id}/signoff`, b)).then((ok) => ok && toast.success("Report signed")),
     close: () => call(() => api.post(`/flights/${id}/close`, {})).then((ok) => ok && toast.success("Flight closed — nice work, Captain")),
     reopen: () => call(() => api.post(`/flights/${id}/reopen`, {})),

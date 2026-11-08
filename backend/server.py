@@ -118,6 +118,7 @@ class Waypoint(BaseModel):
     lat: Optional[float] = None
     lon: Optional[float] = None
     passed: bool = False
+    skipped: bool = False  # removed from the route by an ATC direct; kept for undo and the record
     # Actuals (pilot-entered)
     ata: Optional[str] = None  # "HH:MM" UTC actual time arrived
     actual_fob: Optional[str] = None  # entered FOB number
@@ -230,6 +231,12 @@ class WaypointToggle(BaseModel):
     ident: str
     passed: bool
     index: Optional[int] = None
+
+
+class WaypointSkip(BaseModel):
+    ident: str
+    index: int = Field(ge=0)
+    skipped: bool
 
 
 class WaypointLog(BaseModel):
@@ -615,11 +622,28 @@ async def toggle_waypoint(flight_id: str, body: WaypointToggle, user: dict = Dep
     return Flight(**doc)
 
 
+@api_router.post("/flights/{flight_id}/waypoint-skip", response_model=Flight)
+async def skip_waypoint(flight_id: str, body: WaypointSkip, user: dict = Depends(require_user)):
+    doc = await _editable_flight(flight_id, user["user_id"])
+    wps = doc.get("waypoints") or []
+    if body.index >= len(wps) or wps[body.index]["ident"] != body.ident:
+        raise HTTPException(status_code=404, detail="Waypoint not found")
+    if body.index == len(wps) - 1:
+        raise HTTPException(status_code=400, detail="The final waypoint can't be removed")
+    wp = wps[body.index]
+    if body.skipped and (wp.get("passed") or wp.get("ata")):
+        raise HTTPException(status_code=400, detail="This fix is already passed; clear its ATA first")
+    wp["skipped"] = body.skipped
+    await db.flights.update_one({"id": flight_id, "user_id": user["user_id"]}, {"$set": {"waypoints": wps}})
+    return Flight(**doc)
+
+
 @api_router.post("/flights/{flight_id}/reset", response_model=Flight)
 async def reset_tracker(flight_id: str, user: dict = Depends(require_user)):
     doc = await _editable_flight(flight_id, user["user_id"])
     for wp in doc.get("waypoints", []):
         wp["passed"] = False
+        wp["skipped"] = False
         wp["ata"] = None
         wp["actual_fob"] = None
     await db.flights.update_one(
