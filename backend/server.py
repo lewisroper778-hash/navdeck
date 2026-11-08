@@ -51,6 +51,9 @@ INDEXES: dict[str, list[IndexModel]] = {
             partialFilterExpression={"raw_simbrief_id": {"$type": "string"}},
         ),
     ],
+    "client_errors": [
+        IndexModel([("created", ASCENDING)], name="ttl_7d", expireAfterSeconds=7 * 86400),
+    ],
 }
 
 
@@ -763,7 +766,7 @@ class ClientError(BaseModel):
 @app.post("/api/client-errors")
 async def client_error(body: ClientError):
     logger.error("client error at %s: %s", body.url, body.message)
-    await db.client_errors.insert_one(body.model_dump() | {"at": datetime.now(timezone.utc).isoformat()})
+    await db.client_errors.insert_one(body.model_dump() | {"at": datetime.now(timezone.utc).isoformat(), "created": datetime.now(timezone.utc)})
     return {"ok": True}
 
 

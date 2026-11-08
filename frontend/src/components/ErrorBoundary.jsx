@@ -2,7 +2,9 @@ import { Component } from "react";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 
+let reports = 0;
 export function reportError(message, stack) {
+  if (++reports > 5) return;
   try {
     fetch(`${BACKEND_URL}/api/client-errors`, {
       method: "POST",
@@ -31,6 +33,7 @@ export default class ErrorBoundary extends Component {
   reset = async () => {
     localStorage.clear();
     if ("caches" in window) for (const k of await caches.keys()) await caches.delete(k);
+    if (navigator.serviceWorker) for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister();
     window.location.assign("/");
   };
 

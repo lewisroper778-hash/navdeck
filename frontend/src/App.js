@@ -1,5 +1,5 @@
 import "@/App.css";
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Show, useAuth, useUser } from "@clerk/react";
 import { Toaster } from "sonner";
@@ -10,7 +10,7 @@ import FlightsPage from "@/pages/FlightsPage";
 import HomePage from "@/pages/HomePage";
 import { ThemeProvider, cache, useTheme } from "@/lib/utils-app";
 import ErrorBoundary, { reportError } from "@/components/ErrorBoundary";
-import Splash from "@/components/Splash";
+import Splash, { BLOCKED_NOTE } from "@/components/Splash";
 
 const VatsimPage = lazy(() => import("@/pages/VatsimPage"));
 const LogbookPage = lazy(() => import("@/pages/LogbookPage"));
@@ -31,12 +31,13 @@ function ThemedToaster() {
 
 function Protected({ children }) {
   const { isLoaded } = useAuth();
+  const [stuck, setStuck] = useState(false);
   useEffect(() => {
     if (isLoaded) return;
-    const t = setTimeout(() => reportError("Clerk not loaded after 12s"), 12000);
+    const t = setTimeout(() => { setStuck(true); reportError("Clerk not loaded after 12s"); }, 12000);
     return () => clearTimeout(t);
   }, [isLoaded]);
-  if (!isLoaded) return <Splash />;
+  if (!isLoaded) return stuck ? <Splash note={BLOCKED_NOTE} retry /> : <Splash />;
   return (
     <>
       <Show when="signed-in"><CachedUser>{children}</CachedUser></Show>

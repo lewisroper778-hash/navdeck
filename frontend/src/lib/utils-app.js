@@ -3,7 +3,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 const ThemeContext = createContext({ theme: "light", toggle: () => {} });
 
 export function ThemeProvider({ children }) {
-  const [theme, setTheme] = useState(() => localStorage.getItem("enavlog-theme") || "dark");
+  const [theme, setTheme] = useState(() => (localStorage.getItem("enavlog-theme") === "light" ? "light" : "dark"));
   useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark");
     localStorage.setItem("enavlog-theme", theme);
@@ -26,17 +26,20 @@ const k = (s) => `enavlog:${cacheUser}:${s}`;
 const read = (s, d) => {
   try { return JSON.parse(localStorage.getItem(k(s))) ?? d; } catch { return d; }
 };
+const obj = (v) => (v && typeof v === "object" && !Array.isArray(v) ? v : null);
+const profileOf = (v) => (obj(v) ? { ...v, vatsim_friends: Array.isArray(v.vatsim_friends) ? v.vatsim_friends : [] } : null);
+const flightOf = (v) => (obj(v) && typeof v.id === "string" && Array.isArray(v.waypoints) ? v : null);
 const write = (s, v) => {
   try { localStorage.setItem(k(s), JSON.stringify(v)); } catch {}
 };
 export const cache = {
   setUser: (id) => { cacheUser = id || "anon"; },
   setFlights: (list) => write("flights", list),
-  getFlights: () => read("flights", []),
+  getFlights: () => { const v = read("flights", []); return Array.isArray(v) ? v.filter(flightOf) : []; },
   setFlight: (id, f) => write(`flight:${id}`, f),
-  getFlight: (id) => read(`flight:${id}`, null),
+  getFlight: (id) => flightOf(read(`flight:${id}`, null)),
   setProfile: (p) => write("profile", p),
-  getProfile: () => read("profile", null),
+  getProfile: () => profileOf(read("profile", null)),
 };
 
 // Helpers
