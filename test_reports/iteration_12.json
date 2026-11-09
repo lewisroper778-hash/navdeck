@@ -1,0 +1,41 @@
+{
+  "summary": "Iteration 12 covered the Direct-To group skip and undo, the Act ALT column, the bridge waypoint auto-fill, the PDF Act ALT column and the iPad layout. Backend: 14/14 pytest passed. UI: Direct-To, Undo direct, the single bin delete and restore, Act ALT save, reload and invalid input, and sim auto-fill (toast after 4 s with ATA, FOB and ALT filled and the fix ticked) all work. Found 2 bugs: (1) a Direct-To that skips the first navlog fix (MERIT, index 0) recalculates nothing; (2) on iPad at 1024px the Act FOB and Act ALT inputs are squeezed to about 30px and the values are cut off.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/bridge/waypoint", "issue": "altitude_ft accepts values down to -2000 and stores them as e.g. '-500', but the PATCH waypoint-log validator rejects negatives with 422. A bridge value saved this way can't be re-saved unchanged from the UI. Make the two ranges match."},
+      {"endpoint": "POST /api/flights/{id}/direct", "issue": "Tapping a fix before the next fix (an already-passed one) returns 400 '<IDENT> is already your next fix', which is the wrong message. Also, the removed range filters out only skipped fixes, not passed or ATA fixes. If a later fix was ticked out of order it is silently skipped and keeps its ATA."},
+      {"endpoint": "waypoint writes (bridge /waypoint, waypoint-log, direct)", "issue": "Each one reads the flight, edits it and writes back the whole waypoints array with no version check. A bridge post that lands at the same moment as a UI edit can overwrite it (last write wins). Consider positional $set on waypoints.<i> fields."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "flightCalc.applyDirects", "issue": "No recalculation when the direct group starts at waypoint 0, which is the scenario in the request: open flight, next fix MERIT, DCT WITCH. WITCH still shows plain 'DCT' instead of 'DCT · −N nm', Dist stays 61 and ETO/fuel are unchanged. The cause is that prev === null for the first kept fix (`if (prev !== null && i - prev > 1)`) and the flight doc has no origin coordinates. The same direct after passing MERIT works: WITCH shows 'DCT · −2 nm', dist 127, fuel 66081→66112. Fix: store the origin lat/lon from the SimBrief OFP (origin.pos_lat/pos_long) and use it as the virtual previous point for index 0.", "selector": "[data-testid=waypoint-row-WITCH-4]", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Enroute navlog, iPad 1024x768", "issues": ["At lg (1024px), Wind/GS/Dist are visible, so the table (977px) barely overflows its 958px container. The browser shrinks the Act FOB and Act ALT inputs to about 30px instead of scrolling: '68100' shows as '68' and '27050' as '27'. The td w-[100px]/w-[90px] doesn't hold; add min-w on the inputs or the cells (or min-w on the table) so it really scrolls horizontally.", "The 'Act ALT ft' and 'Act FOB LB' headers wrap onto 3 lines."]},
+      {"screen": "Frontend print navlog (FlightReport.jsx)", "issues": ["The browser-print navlog columns don't include Act ALT, although the backend PDF does. Add it for consistency."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_direct_alt_bridge_iter12.py", "/app/test_reports/pytest/iter12.xml"],
+  "action_items": [
+    "Recalculate a Direct-To that starts at the first navlog fix: persist the origin airport lat/lon at import and use it as the previous point in applyDirects. Show 'DCT · −N nm' and the new ETO and fuel.",
+    "Give the Act FOB and Act ALT inputs a min width so the navlog scrolls horizontally on iPad instead of cutting off values.",
+    "Make the bridge altitude_ft range match the waypoint-log validator (0-60000, or allow negatives in both).",
+    "Optional: add Act ALT to FlightReport.jsx print columns; exclude passed or ATA fixes from the direct group; give a clearer 400 message when the tapped fix is behind the next fix."
+  ],
+  "critical_code_review_comments": [
+    "flightCalc.applyDirects: the first kept fix after a skipped run starting at index 0 never gets the recalculation (prev === null).",
+    "NavlogTable: fixed-width tds inside a w-full table; the inputs need min-w-* to force overflow.",
+    "WaypointWatcher.cs (review only): there is no airborne or on-ground guard. The 'beyond' test (closer to the following fix than the current fix is) can fire on the ground at the origin when the SID doubles back, e.g. the origin sits nearer to fix 2 than fix 1 does. Fix 1 would then get a gate-time ATA. Consider only evaluating once airborne or after takeoff.",
+    "bridge.py /waypoint on a skipped fix returns 200 {applied: []} without bumping the version. That is fine, but the client can't tell it apart from 'already filled'."
+  ],
+  "updated_files": ["/app/backend/tests/test_direct_alt_bridge_iter12.py"],
+  "success_rate": {"backend": "100% (14/14)", "frontend": "85% (all flows work; recalculation for a direct from the first fix is missing and the iPad inputs are cut off)"},
+  "seed_data_creation": "None. Used the existing bridge-test-flight and temporary TEST_iter10_* copies (deleted by the fixtures). At the end, deleted bridge-test-flight, all bridge_links for the pilot (0 remain) and /app/backend/tests/.bridge_token. N806SB (ee9720b3) was not touched.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "The iter12 bridge tests in test_direct_alt_bridge_iter12.py need bridge-test-flight (TST002 KEWR-EDDB, 38 fixes with lat/lon, imported_at 2099, LB) and a valid /app/backend/tests/.bridge_token. Both were deleted at the end of this run, so recreate them first. The Direct/ALT tests create their own copies via iter10_copy_flight.py. To retest the direct-from-first-fix bug: on the open flight with nothing passed, click waypoint-direct-WITCH-4 and expect WITCH to show 'DCT · −N nm' with a shorter Dist. Sim auto-fill: page.request.post /api/bridge/waypoint with the X-Bridge-Token header; the 'Sim: MERIT 10:49z filled in' toast appears within 10 s (SimLinkChip polls every 10 s). PDF check: set reportlab rl_config.pageCompression=0, then search the bytes for 'Act ALT'.",
+  "rca of the issue": "Direct from the first fix: applyDirects only recalculates a kept fix if a previous kept fix exists (prev !== null). When MERIT (index 0) is in the skipped group, WITCH is the first kept fix, so it gets no distance, time or fuel recalculation, no direct flag and no saved_nm. Repro: open flight, nothing passed, tap DCT on WITCH. WITCH stays 'DCT', dist 61, ETO 11:04. Fix: use the origin airport coordinates as the starting point."
+}
