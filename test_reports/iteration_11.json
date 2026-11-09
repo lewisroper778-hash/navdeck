@@ -1,0 +1,37 @@
+{
+  "summary": "Iteration 11: tested the boot watchdog, iPad/PWA icons, the NavdeckLink.exe download, the SimLinkPanel FSUIPC7 steps, a bridge regression using the saved token, and ATC direct delete/restore. Backend/static: 12/12 pytest passed. Frontend: every requested flow passed. Found one real bug: if the bundle boots after more than 10s, the fallback screen stays on the page.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/navdeck-bridge.py", "issue": "Returns 200 text/html (the SPA index.html), not 404. This is acceptable because the Python script itself is gone."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "index.html boot watchdog / src/index.js", "issue": "Slow boot leaves the fallback visible. Reproduced by delaying bundle.js 13s: the app renders (window.__navdeckBooted=true) but #boot-fallback stays display:grid. Its min-height is 100vh and it sits under #root, so a full 'NAVDECK didn't start' screen appears below the app (visible on scroll). It also sends a false 'App bundle did not boot within 10s' beacon. This is likely on slow iPad/cellular connections. Fix: in src/index.js after setting __navdeckBooted, add `document.getElementById('boot-fallback')?.style.setProperty('display','none')`, or have the watchdog keep polling and hide it.", "selector": "[data-testid=boot-fallback]", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/settings sim-link-panel", "issues": ["At 1920px the 'Disconnect' button wraps onto its own row under Download and New connection code, because the panel column is narrow. This is cosmetic."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_boot_icons_download_iter11.py", "/app/test_reports/pytest/iter11.xml"],
+  "action_items": [
+    "Hide #boot-fallback when the bundle boots late (src/index.js). Also consider skipping the beacon if __navdeckBooted gets set later."
+  ],
+  "critical_code_review_comments": [
+    "In preview only, the dev error overlay (data-emergent-overlay-host, 'Part of the app failed to load') covers #boot-fallback and catches pointer events when bundle.js fails. Production builds don't have this overlay, so it's not a prod bug. To test the fallback buttons in preview, remove the overlay host first.",
+    "FlightTracker.cs: if NAVDECK Link starts while the aircraft is airborne, it stays in Parked forever (Parked only moves on OnGround && GS>3). Consider starting in Airborne when !OnGround at first sample. Also, GS jitter at spawn above 3 kt can fire a false 'off'. Consider requiring the parking brake to be released, or a sustained GS for a few seconds.",
+    "FlightTracker.cs: a bounce or touch-and-go after the first touchdown is ignored, and the landing rate comes from the first ground contact. This is acceptable but worth noting.",
+    "Fsuipc7Setup.Install writes FSUIPC7.ini. If FSUIPC7 is installed under Program Files, the write throws UnauthorizedAccessException without admin rights. Make sure MainForm catches it and shows a message.",
+    "FSUIPC offsets look correct: 0x0366 on ground, 0x02B4 GS, 0x030C touchdown VS, 0x0BC8 parking brake, 0x126C fuel lb, 0x3D00 title.",
+    "The service worker skips /downloads/ and won't cache HTML for script/style requests. Confirmed: the exe is served with Cache-Control no-store and is not in the navdeck-v3 cache. The only cache seen was navdeck-v3."
+  ],
+  "updated_files": ["/app/backend/tests/test_boot_icons_download_iter11.py", "/app/backend/tests/.bridge_token (new valid token after the UI create/disconnect/create test)"],
+  "success_rate": {"backend": "100% (12/12 iter11 + 10/10 iter10 waypoint-skip regression)", "frontend": "~95% (all requested flows pass; 1 late-boot fallback bug)"},
+  "seed_data_creation": "None kept. Created and deleted the TEST_iter10_96cbb746 flight copy for the ATC UI check. Deleted 8 'App bundle did not boot within 10s' client_errors rows created by my watchdog runs. Reset bridge-test-flight, then deleted it as instructed.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Watchdog test recipe: use page.context.route('**/static/js/*.js', abort). page.route alone misses requests from the registered SW. Then remove [data-emergent-overlay-host] in preview before clicking boot-reload/boot-reset. Each fallback display creates one client_errors row; clean up with python iter11_client_errors.py delete <since_iso>. bridge-test-flight was DELETED at the end of this run, so test_bridge_iter7 / test_boot_icons_download_iter11 bridge tests need it recreated. .bridge_token holds the latest valid token, created via the UI. Navigate to /settings via the SimBrief nav link. One direct page.goto('/settings') right after ticket sign-in timed out on the panel; a later direct goto to /flights/<id>/enroute worked, so this looks like a timing flake.",
+  "test_credentials": "pilot+clerk_test@example.com via python /app/backend/tests/make_ticket.py"
+}

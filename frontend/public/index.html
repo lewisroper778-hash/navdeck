@@ -55,13 +55,14 @@
                 Promise.all(jobs).then(done, done);
             }
             setTimeout(function () {
-                if (window.__navdeckBooted) return;
-                document.getElementById("boot-fallback").style.display = "grid";
+                var el = document.getElementById("boot-fallback");
+                if (window.__navdeckBooted || !el) return;
+                el.style.display = "grid";
                 try {
                     var scripts = Array.prototype.map.call(document.scripts, function (s) { return s.src; }).filter(Boolean).join(" ");
-                    navigator.sendBeacon && navigator.sendBeacon("/api/client-errors", new Blob([JSON.stringify({ message: "App bundle did not boot within 10s", stack: scripts.slice(0, 5000), url: location.href.slice(0, 500), ua: navigator.userAgent.slice(0, 400) })], { type: "application/json" }));
+                    navigator.sendBeacon && navigator.sendBeacon("/api/client-errors", new Blob([JSON.stringify({ message: "App bundle did not boot within 15s", stack: scripts.slice(0, 5000), url: location.href.slice(0, 500), ua: navigator.userAgent.slice(0, 400) })], { type: "application/json" }));
                 } catch (e) {}
-            }, 10000);
+            }, 15000);
         </script>
         <!--
       This HTML file is a template.

@@ -72,3 +72,8 @@ Iteration 3: "make this more rounded edges, and make sure airline logos are visi
 - flightCalc.applyDirects: great-circle leg to next kept fix, ETA/FOB shifted by distance ratio; needs waypoint lat/lon (old imports: notice, re-import backfills)
 - NavlogTable bin per row, greyed SkippedRow with undo; map/cards ignore skipped; PDF shows DCT (skipped)
 - Tested iteration_10 + fixes (colSpan, labels, API guards)
+
+## 2026-06 Boot hardening, icons, Windows NAVDECK Link
+- Blank page RCA (deployer): stale cached app on user devices, no client errors. index.html boot watchdog (#boot-fallback after 15s, Reset app clears SW/caches), dark bg, emergent-main.js defer; SW navdeck-v3 (no HTML for script/style, skips /downloads); ErrorBoundary ChunkLoadError self-heal
+- iPad icons: apple-touch-icon.png, icon-192/512, favicon.png (frontend/scripts/make_icons.py), manifest icons
+- Windows app /app/desktop/NavdeckLink (.NET 8 WinForms, FSUIPCClientDLL 3.3.16; offsets 0366/02B4/030C/0BC8/126C/3D00); build: dotnet publish -c Release (SDK in /root/.dotnet) -> frontend/public/downloads/NavdeckLink.exe (72MB, unsigned). FSUIPC7.ini [Programs] RunIfN=READY,CLOSE. Python helper removed. Tested client logic on Linux vs bridge API; exe itself untested on Windows
