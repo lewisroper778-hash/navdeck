@@ -4,10 +4,10 @@ import { Cable, Copy, Download, RefreshCw, Unlink } from "lucide-react";
 import { Panel, btnPrimary, btnGhost } from "@/components/flight/ui";
 
 const STEPS = [
-  "Install Python 3.10 or newer on your sim PC from python.org (tick \"Add Python to PATH\").",
-  "Open a terminal and run:  pip install SimConnect",
-  "Download the helper below and run it:  python navdeck-bridge.py",
-  "Paste the connection code when it asks. Leave it running while you fly.",
+  "Install FSUIPC7 (the free version is enough) from fsuipc.com if you don't have it.",
+  "Download NAVDECK Link below and put NavdeckLink.exe somewhere it can stay, e.g. C:\\NAVDECK.",
+  "Open it. If Windows says \"Windows protected your PC\", click More info → Run anyway (the app isn't code-signed yet).",
+  "Paste your connection code, then click \"Open with simulator\" so FSUIPC7 starts it with MSFS from now on.",
 ];
 
 export const ago = (iso) => {
@@ -40,12 +40,12 @@ export default function SimLinkPanel({ api }) {
 
   return (
     <Panel title="Simulator link (MSFS 2020 / 2024)" icon={Cable} tone="emerald" testId="sim-link-panel">
-      <p className="text-sm text-slate-600 dark:text-slate-300">A small helper on your sim PC fills in gate out, takeoff, landing with touchdown rate, gate in and fuel at the gate on your open flight.</p>
+      <p className="text-sm text-slate-600 dark:text-slate-300">NAVDECK Link is a small Windows app that reads MSFS through FSUIPC7 and fills in your pushback (gate out), takeoff, landing with touchdown rate, gate in and fuel at the gate on your open flight. Air and block time follow from those.</p>
       <ol className="mt-4 list-decimal space-y-1.5 pl-5 text-sm text-slate-600 dark:text-slate-300">
         {STEPS.map((s) => <li key={s}>{s}</li>)}
       </ol>
       <div className="mt-4 flex flex-wrap gap-2">
-        <a data-testid="sim-link-download" href="/navdeck-bridge.py" download className={btnGhost}><Download className="h-4 w-4" /> Download helper</a>
+        <a data-testid="sim-link-download" href="/downloads/NavdeckLink.exe" download className={btnGhost}><Download className="h-4 w-4" /> Download NAVDECK Link (Windows, 70 MB)</a>
         <button data-testid="sim-link-create" onClick={create} className={btnPrimary}><RefreshCw className="h-4 w-4" /> {status?.paired ? "New connection code" : "Create connection code"}</button>
         {status?.paired && <button data-testid="sim-link-unlink" onClick={unlink} className={btnGhost}><Unlink className="h-4 w-4" /> Disconnect</button>}
       </div>

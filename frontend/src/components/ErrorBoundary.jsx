@@ -31,9 +31,15 @@ export default class ErrorBoundary extends Component {
     // After a new deploy an open tab may ask for page files that no longer exist; reload once to get the new ones
     if (/ChunkLoadError|Loading chunk|dynamically imported module/i.test(`${error.name} ${error.message}`) && !sessionStorage.getItem("navdeck-chunk-reload")) {
       sessionStorage.setItem("navdeck-chunk-reload", "1");
-      window.location.reload();
+      this.refreshAppFiles();
     }
   }
+
+  refreshAppFiles = async () => {
+    if (navigator.serviceWorker) for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister();
+    if ("caches" in window) for (const k of await caches.keys()) await caches.delete(k);
+    window.location.reload();
+  };
 
   reset = async () => {
     localStorage.clear();

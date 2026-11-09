@@ -12,7 +12,7 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(req.url);
   const sameOrigin = url.origin === self.location.origin;
   const cacheable =
-    (sameOrigin && !url.pathname.startsWith("/api") && !url.pathname.includes("hot-update") && !url.pathname.startsWith("/ws")) ||
+    (sameOrigin && !url.pathname.startsWith("/api") && !url.pathname.startsWith("/downloads/") && !url.pathname.includes("hot-update") && !url.pathname.startsWith("/ws")) ||
     url.hostname.endsWith("fonts.googleapis.com") ||
     url.hostname.endsWith("fonts.gstatic.com") ||
     url.hostname.endsWith("flightaware.com") ||
