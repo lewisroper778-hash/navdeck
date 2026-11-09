@@ -22,6 +22,14 @@ class BridgeEvent(BaseModel):
     fuel_lb: Optional[float] = Field(default=None, ge=0, le=2_000_000)
 
 
+class BridgeWaypoint(BaseModel):
+    index: int = Field(ge=0)
+    ident: str = Field(max_length=20)
+    time: str = Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    fuel_lb: Optional[float] = Field(default=None, ge=0, le=2_000_000)
+    altitude_ft: Optional[float] = Field(default=None, ge=-2000, le=60000)
+
+
 class BridgeHeartbeat(BaseModel):
     sim: Optional[str] = Field(default=None, max_length=60)
     aircraft: Optional[str] = Field(default=None, max_length=120)
@@ -93,7 +101,37 @@ def build_bridge_router(db) -> APIRouter:
         f = await target_flight(link)
         if not f:
             return {"flight": None}
-        return {"flight": {k: f.get(k) for k in ("id", "callsign", "origin", "destination", "aircraft")} | {"times": f.get("times") or {}, "landing_rate": f.get("landing_rate")}}
+        wps = [{"index": i, "ident": w["ident"], "lat": w.get("lat"), "lon": w.get("lon"), "done": bool(w.get("passed") or w.get("ata") or w.get("skipped"))}
+               for i, w in enumerate(f.get("waypoints") or [])]
+        return {"flight": {k: f.get(k) for k in ("id", "callsign", "origin", "destination", "aircraft")} | {"times": f.get("times") or {}, "landing_rate": f.get("landing_rate"), "waypoints": wps}}
+
+    @r.post("/waypoint")
+    async def waypoint_passed(body: BridgeWaypoint, link: dict = Depends(bridge_user)):
+        f = await target_flight(link)
+        if not f:
+            raise HTTPException(status_code=409, detail="No open flight in NAVDECK to fill in")
+        wps = f.get("waypoints") or []
+        if body.index >= len(wps) or wps[body.index]["ident"] != body.ident:
+            raise HTTPException(status_code=404, detail="Waypoint not found in the NAVDECK flight")
+        wp, applied = wps[body.index], []
+        if wp.get("skipped"):
+            return {"applied": []}
+        if not wp.get("ata"):
+            wp["ata"] = body.time
+            applied.append("ata")
+        if body.fuel_lb is not None and not wp.get("actual_fob"):
+            units = (f.get("weights") or {}).get("ofp_units", "KG")
+            wp["actual_fob"] = str(round(body.fuel_lb if units == "LB" else body.fuel_lb / LB_PER_KG))
+            applied.append("actual_fob")
+        if body.altitude_ft is not None and not wp.get("actual_alt"):
+            wp["actual_alt"] = str(round(body.altitude_ft))
+            applied.append("actual_alt")
+        wp["passed"] = True
+        await db.flights.update_one({"id": f["id"]}, {"$set": {"waypoints": wps}})
+        now = datetime.now(timezone.utc).isoformat()
+        await db.bridge_links.update_one({"token_hash": link["token_hash"]}, {"$set": {"last_seen": now, "last_event": {"type": "waypoint", "ident": body.ident, "time": body.time, "applied": applied, "at": now}},
+                                                                           "$inc": {"version": 1}})
+        return {"applied": applied}
 
     @r.post("/heartbeat")
     async def heartbeat(body: BridgeHeartbeat, link: dict = Depends(bridge_user)):

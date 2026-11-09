@@ -1,4 +1,4 @@
-import { Navigation, Check, Trash2, Undo2 } from "lucide-react";
+import { Navigation, Check, Trash2, Undo2, CornerDownRight } from "lucide-react";
 import { Panel, inputCls, signedDev } from "./ui";
 import { nowHHMM, isHHMM, isNum } from "@/lib/utils-app";
 import { toast } from "sonner";
@@ -9,7 +9,7 @@ const devTone = (v, invert = false) => {
   return bad ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400";
 };
 
-function SkippedRow({ r, i, onSkip }) {
+function SkippedRow({ r, i, onSkip, onUndoDirect, groupStart, groupTarget }) {
   return (
     <tr data-testid={`waypoint-row-${r.ident}-${i}`} className="border-b border-slate-100 bg-slate-50/70 text-slate-400 dark:border-slate-800 dark:bg-slate-900/40">
       <td className="px-3 py-2" />
@@ -17,21 +17,30 @@ function SkippedRow({ r, i, onSkip }) {
         <div className="font-bold line-through">{r.ident}</div>
         <div className="text-[10px]">removed · direct</div>
       </td>
-      <td colSpan={8} className="px-3 py-2 text-xs">Skipped by ATC direct — not flown</td>
+      <td colSpan={9} className="px-3 py-2 text-xs">{r.direct_group ? `Skipped · direct to ${groupTarget || "next fix"}` : "Skipped by ATC direct — not flown"}</td>
       <td className="hidden lg:table-cell" />
       <td className="hidden lg:table-cell" />
       <td className="hidden lg:table-cell" />
       <td className="px-2 py-1.5">
-        <button data-testid={`waypoint-restore-${r.ident}-${i}`} onClick={() => onSkip(r.ident, false, i)} aria-label={`Restore ${r.ident}`} title="Undo"
-          className="grid h-11 w-11 place-items-center rounded-xl text-sky-600 transition-colors hover:bg-sky-50 dark:text-sky-400 dark:hover:bg-sky-500/10">
-          <Undo2 className="h-4 w-4" />
-        </button>
+        {r.direct_group ? (
+          groupStart && (
+            <button data-testid={`direct-undo-${r.ident}-${i}`} onClick={() => onUndoDirect(r.direct_group)} title="Undo this direct"
+              className="inline-flex h-11 items-center gap-1 whitespace-nowrap rounded-xl px-2.5 text-[11px] font-bold text-sky-600 transition-colors hover:bg-sky-50 dark:text-sky-400 dark:hover:bg-sky-500/10">
+              <Undo2 className="h-4 w-4" /> Undo direct
+            </button>
+          )
+        ) : (
+          <button data-testid={`waypoint-restore-${r.ident}-${i}`} onClick={() => onSkip(r.ident, false, i)} aria-label={`Restore ${r.ident}`} title="Undo"
+            className="grid h-11 w-11 place-items-center rounded-xl text-sky-600 transition-colors hover:bg-sky-50 dark:text-sky-400 dark:hover:bg-sky-500/10">
+            <Undo2 className="h-4 w-4" />
+          </button>
+        )}
       </td>
     </tr>
   );
 }
 
-function Row({ r, i, u, onLog, onToggle, onSkip, isNext, canDelete }) {
+function Row({ r, i, u, onLog, onToggle, onSkip, onDirect, isNext, canDelete, canDirect }) {
   const d = u.toDisp;
   return (
     <tr
@@ -130,19 +139,45 @@ function Row({ r, i, u, onLog, onToggle, onSkip, isNext, canDelete }) {
           <div data-testid={`below-min-${r.ident}-${i}`} className="text-[9px] font-bold text-red-600">&lt; MIN</div>
         )}
       </td>
+      <td className="px-2 py-1.5 w-[90px]">
+        <input
+          key={`alt-${r.actual_alt}`}
+          data-testid={`alt-input-${r.ident}-${i}`}
+          defaultValue={r.actual_alt ?? ""}
+          placeholder={r.altitude || ""}
+          inputMode="numeric"
+          onBlur={(e) => {
+            const v = e.target.value.trim().replace(/,/g, "");
+            if (v && !(/^\d+$/.test(v) && Number(v) <= 60000)) {
+              e.target.value = r.actual_alt ?? "";
+              return toast.error("Altitude must be feet, e.g. 36000");
+            }
+            v !== (r.actual_alt || "") && onLog(r.ident, { actual_alt: v }, i);
+          }}
+          className={`${inputCls} !px-1.5 !py-2 text-right text-xs`}
+        />
+      </td>
       <td className="px-2 py-1.5">
-        {canDelete && (
-          <button data-testid={`waypoint-delete-${r.ident}-${i}`} onClick={() => onSkip(r.ident, true, i)} aria-label={`Remove ${r.ident}`} title="Remove (ATC direct)"
-            className="grid h-11 w-11 place-items-center rounded-xl text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10">
-            <Trash2 className="h-4 w-4" />
-          </button>
-        )}
+        <div className="flex gap-1">
+          {canDirect && (
+            <button data-testid={`waypoint-direct-${r.ident}-${i}`} onClick={() => onDirect(r.ident, i)} aria-label={`Direct to ${r.ident}`} title={`Direct to ${r.ident}`}
+              className="inline-flex h-11 items-center gap-1 rounded-xl px-2.5 text-[11px] font-bold text-sky-600 transition-colors hover:bg-sky-50 dark:text-sky-400 dark:hover:bg-sky-500/10">
+              <CornerDownRight className="h-4 w-4" /> DCT
+            </button>
+          )}
+          {canDelete && (
+            <button data-testid={`waypoint-delete-${r.ident}-${i}`} onClick={() => onSkip(r.ident, true, i)} aria-label={`Remove ${r.ident}`} title="Remove (ATC direct)"
+              className="grid h-11 w-11 place-items-center rounded-xl text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10">
+              <Trash2 className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       </td>
     </tr>
   );
 }
 
-export default function NavlogTable({ rows, u, onLog, onToggle, onSkip }) {
+export default function NavlogTable({ rows, u, onLog, onToggle, onSkip, onDirect, onUndoDirect }) {
   const nextIdx = rows.findIndex((r) => !r.passed && !r.skipped);
   const noCoords = rows.some((r) => r.skipped) && !rows.some((r) => r.lat != null);
   const H = ({ children, left, wide }) => (
@@ -183,21 +218,25 @@ export default function NavlogTable({ rows, u, onLog, onToggle, onSkip }) {
               <H>Plan FOB</H>
               <H left>Act FOB {u.units}</H>
               <H>ΔF</H>
-              <H><span className="sr-only">Remove</span></H>
+              <H left>Act ALT ft</H>
+              <H><span className="sr-only">Actions</span></H>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={14} className="px-3 py-10 text-center text-slate-500">No waypoints in this OFP.</td>
+                <td colSpan={15} className="px-3 py-10 text-center text-slate-500">No waypoints in this OFP.</td>
               </tr>
             )}
             {rows.map((r, i) =>
               r.skipped ? (
-                <SkippedRow key={`${r.ident}-${i}`} r={r} i={i} onSkip={onSkip} />
+                <SkippedRow key={`${r.ident}-${i}`} r={r} i={i} onSkip={onSkip} onUndoDirect={onUndoDirect}
+                  groupStart={!!r.direct_group && rows[i - 1]?.direct_group !== r.direct_group}
+                  groupTarget={r.direct_group ? rows.slice(i).find((x) => !x.skipped)?.ident : null} />
               ) : (
-                <Row key={`${r.ident}-${i}`} r={r} i={i} u={u} onLog={onLog} onToggle={onToggle} onSkip={onSkip} isNext={i === nextIdx}
-                  canDelete={!!onSkip && !r.passed && !r.ata && i < rows.length - 1} />
+                <Row key={`${r.ident}-${i}`} r={r} i={i} u={u} onLog={onLog} onToggle={onToggle} onSkip={onSkip} onDirect={onDirect} isNext={i === nextIdx}
+                  canDelete={!!onSkip && !r.passed && !r.ata && i < rows.length - 1}
+                  canDirect={!!onDirect && nextIdx >= 0 && i > nextIdx} />
               )
             )}
           </tbody>

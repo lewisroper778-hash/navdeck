@@ -2,7 +2,7 @@ namespace NavdeckLink;
 
 internal enum Stage { Parked, TaxiOut, Airborne, TaxiIn, Arrived }
 
-internal readonly record struct Sample(bool OnGround, double GroundSpeedKt, double TouchdownFpm, bool ParkingBrake, int FuelLb);
+internal readonly record struct Sample(bool OnGround, double GroundSpeedKt, double TouchdownFpm, bool ParkingBrake, int FuelLb, double Lat = 0, double Lon = 0, double AltFt = 0);
 
 internal sealed record SimEvent(string Type, int? LandingRate = null, int? FuelLb = null);
 

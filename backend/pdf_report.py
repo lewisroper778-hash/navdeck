@@ -79,14 +79,14 @@ def build_report_pdf(f: dict) -> bytes:
                      ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e0e7ff")), ("BACKGROUND", (0, 2), (-1, 2), colors.HexColor("#e0e7ff"))])
     story += [Table(summary, style=st), Spacer(1, 3 * mm), Paragraph(f"<b>Route</b> {f.get('route') or '—'}", ss["BodyText"])]
 
-    rows, skipped_rows = [["Fix", "Awy", "FL", "Plan FOB", "ATA", "Act FOB"]], []
+    rows, skipped_rows = [["Fix", "Awy", "FL", "Plan FOB", "ATA", "Act FOB", "Act ALT"]], []
     for wp in f.get("waypoints") or []:
         if wp.get("skipped"):
             skipped_rows.append(len(rows))
-            rows.append([wp.get("ident"), "DCT (skipped)", "", "", "", ""])
+            rows.append([wp.get("ident"), "DCT (skipped)", "", "", "", "", ""])
             continue
         rows.append([wp.get("ident"), wp.get("airway") or "DCT", str(int(float(wp["altitude"]) / 100)) if wp.get("altitude") else "",
-                     v(wp.get("fob")), wp.get("ata") or "", wp.get("actual_fob") or ""])
+                     v(wp.get("fob")), wp.get("ata") or "", wp.get("actual_fob") or "", wp.get("actual_alt") or ""])
     grey = [("TEXTCOLOR", (0, r), (-1, r), colors.grey) for r in skipped_rows]
     story += [Spacer(1, 3 * mm), Table(rows, repeatRows=1, style=TableStyle([("GRID", (0, 0), (-1, -1), 0.3, colors.lightgrey), ("FONTSIZE", (0, 0), (-1, -1), 7), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#ede9fe"))] + grey))]
 

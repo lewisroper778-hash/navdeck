@@ -14,6 +14,9 @@ internal sealed class FsuipcLink : IDisposable
     private readonly Offset<short> _parkingBrake = new("navdeck", 0x0BC8); // 0 off, 32767 on
     private readonly Offset<int> _fuelLb = new("navdeck", 0x126C);        // total fuel weight, pounds
     private readonly Offset<string> _title = new("navdeck", 0x3D00, 256);
+    private readonly Offset<long> _lat = new("navdeck", 0x0560);
+    private readonly Offset<long> _lon = new("navdeck", 0x0568);
+    private readonly Offset<long> _alt = new("navdeck", 0x0570);           // metres * 65536 * 65536
 
     public bool IsOpen => FSUIPCConnection.IsOpen;
     public string? AircraftTitle { get; private set; }
@@ -43,7 +46,10 @@ internal sealed class FsuipcLink : IDisposable
                 GroundSpeedKt: _groundSpeed.Value / 65536.0 * MpsToKt,
                 TouchdownFpm: _vsTouchdown.Value / 256.0 * MpsToFpm,
                 ParkingBrake: _parkingBrake.Value > 16000,
-                FuelLb: _fuelLb.Value);
+                FuelLb: _fuelLb.Value,
+                Lat: _lat.Value * 90.0 / (10001750.0 * 65536.0 * 65536.0),
+                Lon: _lon.Value * 360.0 / (65536.0 * 65536.0 * 65536.0 * 65536.0),
+                AltFt: _alt.Value / (65536.0 * 65536.0) * 3.28084);
         }
         catch (FSUIPCException)
         {

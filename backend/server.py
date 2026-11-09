@@ -119,9 +119,11 @@ class Waypoint(BaseModel):
     lon: Optional[float] = None
     passed: bool = False
     skipped: bool = False  # removed from the route by an ATC direct; kept for undo and the record
-    # Actuals (pilot-entered)
+    direct_group: Optional[str] = None  # set when removed by one "Direct to", so the whole group can be undone together
+    # Actuals (pilot-entered or filled by NAVDECK Link)
     ata: Optional[str] = None  # "HH:MM" UTC actual time arrived
     actual_fob: Optional[str] = None  # entered FOB number
+    actual_alt: Optional[str] = None  # altitude in feet when the fix was passed
 
 
 class FuelPlan(BaseModel):
@@ -244,6 +246,7 @@ class WaypointLog(BaseModel):
     index: Optional[int] = None
     ata: Optional[str] = None
     actual_fob: Optional[str] = None
+    actual_alt: Optional[str] = None
 
     _ata = field_validator("ata")(_check_hhmm)
 
@@ -253,6 +256,22 @@ class WaypointLog(BaseModel):
         if v and not v.replace(".", "", 1).isdigit():
             raise ValueError("FOB must be a number")
         return v
+
+    @field_validator("actual_alt")
+    @classmethod
+    def _alt(cls, v):
+        if v and not (v.isdigit() and int(v) <= 60000):
+            raise ValueError("Altitude must be feet between 0 and 60000")
+        return v
+
+
+class DirectTo(BaseModel):
+    ident: str
+    index: int = Field(ge=0)
+
+
+class DirectUndo(BaseModel):
+    group: str
 
 
 class TimesUpdate(BaseModel):
@@ -637,6 +656,37 @@ async def skip_waypoint(flight_id: str, body: WaypointSkip, user: dict = Depends
     if body.skipped and (wp.get("passed") or wp.get("ata")):
         raise HTTPException(status_code=400, detail="This fix is already passed; clear its ATA first")
     wp["skipped"] = body.skipped
+    wp["direct_group"] = None
+    await db.flights.update_one({"id": flight_id, "user_id": user["user_id"]}, {"$set": {"waypoints": wps}})
+    return Flight(**doc)
+
+
+@api_router.post("/flights/{flight_id}/direct", response_model=Flight)
+async def direct_to(flight_id: str, body: DirectTo, user: dict = Depends(require_user)):
+    doc = await _editable_flight(flight_id, user["user_id"])
+    wps = doc.get("waypoints") or []
+    if body.index >= len(wps) or wps[body.index]["ident"] != body.ident or wps[body.index].get("skipped"):
+        raise HTTPException(status_code=404, detail="Waypoint not found")
+    nxt = next((i for i, w in enumerate(wps) if not w.get("passed") and not w.get("skipped") and not w.get("ata")), None)
+    removed = [i for i in range(nxt if nxt is not None else body.index, body.index) if not wps[i].get("skipped")]
+    if not removed:
+        raise HTTPException(status_code=400, detail=f"{body.ident} is already your next fix")
+    group = str(uuid.uuid4())
+    for i in removed:
+        wps[i].update(skipped=True, direct_group=group)
+    await db.flights.update_one({"id": flight_id, "user_id": user["user_id"]}, {"$set": {"waypoints": wps}})
+    return Flight(**doc)
+
+
+@api_router.post("/flights/{flight_id}/direct/undo", response_model=Flight)
+async def undo_direct(flight_id: str, body: DirectUndo, user: dict = Depends(require_user)):
+    doc = await _editable_flight(flight_id, user["user_id"])
+    wps = doc.get("waypoints") or []
+    hits = [w for w in wps if w.get("direct_group") == body.group]
+    if not hits:
+        raise HTTPException(status_code=404, detail="That direct was already undone")
+    for w in hits:
+        w.update(skipped=False, direct_group=None)
     await db.flights.update_one({"id": flight_id, "user_id": user["user_id"]}, {"$set": {"waypoints": wps}})
     return Flight(**doc)
 
@@ -647,6 +697,8 @@ async def reset_tracker(flight_id: str, user: dict = Depends(require_user)):
     for wp in doc.get("waypoints", []):
         wp["passed"] = False
         wp["skipped"] = False
+        wp["direct_group"] = None
+        wp["actual_alt"] = None
         wp["ata"] = None
         wp["actual_fob"] = None
     await db.flights.update_one(
@@ -679,6 +731,8 @@ async def log_waypoint(flight_id: str, body: WaypointLog, user: dict = Depends(r
             wp["passed"] = bool(wp["ata"])
         if body.actual_fob is not None:
             wp["actual_fob"] = body.actual_fob or None
+        if body.actual_alt is not None:
+            wp["actual_alt"] = body.actual_alt or None
     await db.flights.update_one(
         {"id": flight_id, "user_id": user["user_id"]},
         {"$set": {"waypoints": doc["waypoints"]}},

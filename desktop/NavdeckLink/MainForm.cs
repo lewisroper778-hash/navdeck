@@ -11,6 +11,9 @@ internal sealed class MainForm : Form
     private NavdeckApi? _api;
     private DateTime _lastBeat = DateTime.MinValue;
     private bool _testFlight;
+    private readonly WaypointWatcher _watcher = new();
+    private DateTime _lastRoute = DateTime.MinValue;
+    private readonly Label _nextFix = Theme.Label("", 10f, Theme.Muted);
 
     private readonly Label _simStatus = Theme.Label("Waiting for FSUIPC7…", 10, Theme.Amber, true);
     private readonly Label _navStatus = Theme.Label("Not connected to NAVDECK", 10, Theme.Amber, true);
@@ -38,7 +41,7 @@ internal sealed class MainForm : Form
         buttons.Controls.Add(Theme.Button("Connection code", Theme.Accent, (_, _) => AskCode()));
         buttons.Controls.Add(_startup);
         buttons.Controls.Add(Theme.Button("Test flight", Theme.Line, (_, _) => RunTestFlight()));
-        buttons.Controls.Add(Theme.Button("New flight", Theme.Line, (_, _) => { _tracker.Reset(); Log("Ready for a new flight"); RefreshView(); }));
+        buttons.Controls.Add(Theme.Button("New flight", Theme.Line, async (_, _) => { _tracker.Reset(); _watcher.Reset(); Log("Ready for a new flight"); await RefreshRoute(); RefreshView(); }));
 
         var layout = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, BackColor = Theme.Bg, WrapContents = false };
         layout.Controls.Add(Theme.Label("NAVDECK LINK", 9, Theme.Accent, true));
@@ -48,6 +51,7 @@ internal sealed class MainForm : Form
         layout.Controls.Add(Theme.Label("PHASE", 8, Theme.Muted, true));
         layout.Controls.Add(_stage);
         layout.Controls.Add(_times);
+        layout.Controls.Add(_nextFix);
         layout.Controls.Add(buttons);
         layout.Controls.Add(Theme.Label("ACTIVITY", 8, Theme.Muted, true));
         layout.Controls.Add(_log);
@@ -87,6 +91,8 @@ internal sealed class MainForm : Form
         {
             var f = await _api.GetFlightAsync();
             SetStatus(_navStatus, f is null ? "NAVDECK connected · import a flight before pushback" : $"Filling {f.Callsign} {f.Origin} → {f.Destination}", f is null ? Theme.Amber : Theme.Green);
+            if (f is not null) _watcher.SetRoute(f.Pending);
+            _lastRoute = DateTime.UtcNow;
         }
         catch (AuthException ex)
         {
@@ -109,7 +115,37 @@ internal sealed class MainForm : Form
             return;
         }
         OnSimEvent(_tracker.Update(s, DateTime.UtcNow));
+        if (_tracker.Stage == Stage.Airborne && _watcher.Update(s.Lat, s.Lon) is { } fix) _ = LogFix(fix, s);
     }
+
+    // Picks up directs and manual entries made in NAVDECK so the next fix stays in step
+    private async Task RefreshRoute()
+    {
+        if (_api is null) return;
+        _lastRoute = DateTime.UtcNow;
+        try
+        {
+            if (await _api.GetFlightAsync() is { } f) _watcher.SetRoute(f.Pending);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or AuthException) { }
+    }
+
+    private async Task LogFix(RouteFix fix, Sample s)
+    {
+        var alt = (int)Math.Round(s.AltFt / 10) * 10;
+        Log($"{DateTime.UtcNow:HH:mm}z passed {fix.Ident} · {alt:N0} ft · {s.FuelLb:N0} lb");
+        if (_api is null) return;
+        try
+        {
+            var applied = await _api.SendWaypointAsync(fix, s.FuelLb > 0 ? s.FuelLb : null, alt);
+            Log(applied.Length > 0 ? $"  NAVDECK updated: {string.Join(", ", applied)}" : "  already filled in NAVDECK");
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or AuthException)
+        {
+            Log($"  not sent: {ex.Message}");
+        }
+    }
+
 
     private async Task SlowTick()
     {
@@ -120,6 +156,7 @@ internal sealed class MainForm : Form
             Log("Connected to MSFS through FSUIPC7");
         }
         if (_api is null && Config.IsValidCode(_config.Code) && _navStatus.ForeColor != Theme.Red) await Connect();
+        else if (DateTime.UtcNow - _lastRoute > TimeSpan.FromSeconds(60)) await RefreshRoute();
         if (_api is not null && DateTime.UtcNow - _lastBeat > TimeSpan.FromSeconds(30))
         {
             _lastBeat = DateTime.UtcNow;
@@ -230,6 +267,9 @@ internal sealed class MainForm : Form
             $"Landing   {T(_tracker.Landing)}     Gate in  {T(_tracker.GateIn)}\n" +
             $"Air time  {D(_tracker.AirTime)}      Block   {D(_tracker.BlockTime)}\n" +
             $"Touchdown {(_tracker.LandingRate is { } r ? $"{r} fpm" : "—")}";
+        _nextFix.Text = _watcher.Next is { } n
+            ? $"Next fix {n.Ident}{(_watcher.DistanceToNext is { } dist && _tracker.Stage == Stage.Airborne ? $" · {dist:0} nm" : "")} · time, fuel and altitude log automatically"
+            : "No navlog fixes with positions to log";
     }
 
     private static void SetStatus(Label l, string text, Color c)

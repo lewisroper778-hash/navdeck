@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Cable } from "lucide-react";
 
-const LABELS = { off: "Gate out", takeoff: "Takeoff", landing: "Landing", on: "Gate in" };
+const LABELS = { off: "Gate out", takeoff: "Takeoff", landing: "Landing", on: "Gate in", waypoint: "Waypoint" };
 
 // Shows the sim helper status and reloads the flight whenever the helper fills something in
 export default function SimLinkChip({ api, flight, onUpdate }) {
@@ -17,7 +17,7 @@ export default function SimLinkChip({ api, flight, onUpdate }) {
         const e = data.last_event;
         const jumped = data.version - version.current > 1;
         if (jumped) toast.success(`Sim: ${data.version - version.current} updates filled in`, { description: `Latest: ${LABELS[e?.type] || ""} ${e?.time || ""}z` });
-        else if (e?.applied?.length) toast.success(`Sim: ${LABELS[e.type]} ${e.time}z filled in`, { description: e.applied.includes("landing_rate") ? "Touchdown rate recorded" : undefined });
+        else if (e?.applied?.length) toast.success(`Sim: ${e.type === "waypoint" ? e.ident : LABELS[e.type]} ${e.time}z filled in`, { description: e.applied.includes("landing_rate") ? "Touchdown rate recorded" : e.type === "waypoint" ? "Time, fuel and altitude logged" : undefined });
       }
       version.current = data.version ?? 0;
     }).catch(() => {});

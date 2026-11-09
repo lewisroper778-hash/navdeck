@@ -5,7 +5,7 @@ using System.Text.Json.Serialization;
 
 namespace NavdeckLink;
 
-internal sealed record FlightInfo(string Id, string? Callsign, string? Origin, string? Destination);
+internal sealed record FlightInfo(string Id, string? Callsign, string? Origin, string? Destination, List<RouteFix> Pending);
 
 internal sealed class AuthException(string message) : Exception(message);
 
@@ -30,7 +30,21 @@ internal sealed class NavdeckApi
         using var doc = JsonDocument.Parse(await res.Content.ReadAsStringAsync());
         if (!doc.RootElement.TryGetProperty("flight", out var f) || f.ValueKind != JsonValueKind.Object) return null;
         string? S(string k) => f.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
-        return new FlightInfo(S("id") ?? "", S("callsign"), S("origin"), S("destination"));
+        var pending = new List<RouteFix>();
+        if (f.TryGetProperty("waypoints", out var wps) && wps.ValueKind == JsonValueKind.Array)
+            foreach (var w in wps.EnumerateArray())
+                if (!w.GetProperty("done").GetBoolean() && w.GetProperty("lat").ValueKind == JsonValueKind.Number && w.GetProperty("lon").ValueKind == JsonValueKind.Number)
+                    pending.Add(new RouteFix(w.GetProperty("index").GetInt32(), w.GetProperty("ident").GetString() ?? "", w.GetProperty("lat").GetDouble(), w.GetProperty("lon").GetDouble()));
+        return new FlightInfo(S("id") ?? "", S("callsign"), S("origin"), S("destination"), pending);
+    }
+
+    public async Task<string[]> SendWaypointAsync(RouteFix fix, int? fuelLb, int altitudeFt)
+    {
+        var body = new { index = fix.Index, ident = fix.Ident, time = DateTime.UtcNow.ToString("HH:mm"), fuel_lb = fuelLb, altitude_ft = altitudeFt };
+        using var res = await _http.PostAsJsonAsync("waypoint", body, Json);
+        await EnsureOk(res);
+        using var doc = JsonDocument.Parse(await res.Content.ReadAsStringAsync());
+        return doc.RootElement.TryGetProperty("applied", out var a) ? a.EnumerateArray().Select(x => x.GetString() ?? "").ToArray() : [];
     }
 
     public Task HeartbeatAsync(string? aircraft, bool connected) =>

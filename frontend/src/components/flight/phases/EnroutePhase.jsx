@@ -4,7 +4,7 @@ import { signedDev } from "../ui";
 import RouteMap from "../RouteMap";
 
 export default function EnroutePhase({ ctx }) {
-  const { f, rows: allRows, fuelCalc, u, logWp, toggleWp, skipWp } = ctx;
+  const { f, rows: allRows, fuelCalc, u, logWp, toggleWp, skipWp, directTo, undoDirect } = ctx;
   const rows = allRows.filter((r) => !r.skipped);
   const next = rows.find((r) => !r.passed);
   const passed = rows.filter((r) => r.passed).length;
@@ -30,7 +30,7 @@ export default function EnroutePhase({ ctx }) {
         ))}
       </div>
       <RouteMap rows={rows} />
-      <NavlogTable rows={allRows} u={u} onLog={logWp} onToggle={toggleWp} onSkip={skipWp} />
+      <NavlogTable rows={allRows} u={u} onLog={logWp} onToggle={toggleWp} onSkip={skipWp} onDirect={directTo} onUndoDirect={undoDirect} />
       <FuelPanel flight={f} rows={rows} fuelCalc={fuelCalc} u={u} mode="check" />
     </div>
   );
