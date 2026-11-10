@@ -10,50 +10,7 @@ from reportlab.lib.units import mm
 from reportlab.lib.utils import ImageReader
 from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-STORAGE_BASE = (os.environ.get("INTEGRATION_PROXY_URL") or "").strip() or "https://integrations.emergentagent.com"
-STORAGE_URL = STORAGE_BASE.rstrip("/") + "/objstore/api/v1/storage"
 APP_NAME = "navdeck"
-_storage_key = None
-
-
-def init_storage(force: bool = False):
-    global _storage_key
-    if _storage_key and not force:
-        return _storage_key
-    resp = requests.post(f"{STORAGE_URL}/init", json={"emergent_key": os.environ.get("EMERGENT_LLM_KEY")}, timeout=30)
-    resp.raise_for_status()
-    _storage_key = resp.json()["storage_key"]
-    return _storage_key
-
-
-def _storage_call(method, path, **kw):
-    for attempt in range(2):
-        resp = requests.request(method, f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": init_storage(attempt == 1), **kw.pop("headers", {})}, timeout=120, **kw)
-        if resp.status_code != 404 or attempt == 1:
-            resp.raise_for_status()
-            return resp
-    return resp
-
-
-def put_object(path: str, data: bytes, content_type: str) -> dict:
-    return _storage_call("PUT", path, headers={"Content-Type": content_type}, data=data).json()
-
-
-def get_object(path: str) -> bytes:
-    return _storage_call("GET", path).content
-
-
-def _logo(code):
-    if not code:
-        return None
-    url = f"https://pics.avs.io/400/160/{code}.png" if len(code) == 2 else f"https://www.flightaware.com/images/airline_logos/180px/{code}.png"
-    try:
-        r = requests.get(url, timeout=8)
-        if r.ok and r.headers.get("Content-Type", "").startswith("image"):
-            return Image(io.BytesIO(r.content), width=40 * mm, height=14 * mm, kind="proportional")
-    except requests.RequestException:
-        pass
-    return None
 
 
 def build_report_pdf(f: dict) -> bytes:

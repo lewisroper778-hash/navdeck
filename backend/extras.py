@@ -12,14 +12,16 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request,
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from pymongo.errors import DuplicateKeyError
+from motor.motor_asyncio import AsyncIOMotorGridFSBucket
+from bson import ObjectId
 from starlette.concurrency import run_in_threadpool
 
 try:
     from backend.clerk_auth import require_user
-    from backend.pdf_report import APP_NAME, build_report_pdf, get_object, put_object
+    from backend.pdf_report import APP_NAME, build_report_pdf
 except ModuleNotFoundError:
     from clerk_auth import require_user
-    from pdf_report import APP_NAME, build_report_pdf, get_object, put_object
+    from pdf_report import APP_NAME, build_report_pdf
     from vatsim_atc import build_atc
     from friend_tracking import track as track_friends
 else:
@@ -170,7 +172,9 @@ def build_router(db, owned_flight, editable_flight) -> APIRouter:
         d = await db.documents.find_one({"id": doc_id, "user_id": user["user_id"], "is_deleted": False}, {"_id": 0})
         if not d:
             raise HTTPException(status_code=404, detail="Document not found")
-        data = await run_in_threadpool(get_object, d["storage_path"])
+        bucket = AsyncIOMotorGridFSBucket(db)
+        stream = await bucket.open_download_stream(ObjectId(d["storage_path"]))
+        data = await stream.read()
         return Response(content=data, media_type="application/pdf", headers={"Content-Disposition": f'inline; filename="{d["filename"]}"'})
 
     @r.get("/vatsim/pilots")
@@ -280,40 +284,27 @@ def build_router(db, owned_flight, editable_flight) -> APIRouter:
         return await db.ai_messages.find({"flight_id": flight_id, "user_id": user["user_id"]}, {"_id": 0}).sort("created_at", 1).to_list(200)
 
     @r.post("/ai/{flight_id}/{mode}")
-    async def ai(
-        flight_id: str,
-        mode: str,
-        body: AiRequest,
-        user: dict = Depends(require_user),
-    ):
-        await owned_flight(flight_id, user["user_id"])
-        raise HTTPException(
-            status_code=503,
-            detail="NavDeck AI Co-pilot is temporarily unavailable.",
-
-        async def stream():
-            text = ""
-            try:
-                async for ev in llm.stream_message(UserMessage(text=prompt)):
-                    if isinstance(ev, TextDelta):
-                        text += ev.content
-                        yield f"data: {json.dumps({'delta': ev.content})}\n\n"
-                    elif isinstance(ev, StreamDone):
-                        break
-            except Exception as e:  # surface provider errors to the UI instead of a silent hang
-                yield f"data: {json.dumps({'error': str(e)[:200]})}\n\n"
-                return
-            now = datetime.now(timezone.utc).isoformat()
-            if mode == "chat":
-                await db.ai_messages.insert_many([
-                    {"flight_id": flight_id, "user_id": user["user_id"], "role": "pilot", "text": body.message, "created_at": now},
-                    {"flight_id": flight_id, "user_id": user["user_id"], "role": "copilot", "text": text, "created_at": now + "z"},
-                ])
-            else:
-                await db.flights.update_one({"id": flight_id}, {"$set": {f"ai.{mode}": text}})
-            yield "data: [DONE]\n\n"
-
-        return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+    async def ai(flight_id: str, mode: str, body: AiRequest, user: dict = Depends(require_user)):
+        f = await owned_flight(flight_id, user["user_id"])
+        if mode not in (*PROMPTS, "chat"):
+            raise HTTPException(status_code=404, detail="Unknown AI mode")
+        system = "You are NAVDECK Co-pilot, an experienced airline first officer helping a flight-simulator pilot. Be concise and practical. This is for simulation only. Reply in plain text only: no markdown, no asterisks or hash symbols; use short CAPITALISED headings followed by a colon when you need sections."
+        context = _flight_context(f)
+        if mode == "chat":
+            if not (body.message or "").strip():
+                raise HTTPException(status_code=400, detail="Message is required")
+            history = await db.ai_messages.find({"flight_id": flight_id, "user_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(12)
+            convo = "\n".join(f"{m['role']}: {m['text']}" for m in reversed(history))
+            prompt = f"{context}\n\nConversation so far:\n{convo}\n\nPilot: {body.message}"
+        elif mode == "metar":
+            if not (body.message or (f.get("arrival_notes") or {}).get("metar")):
+                raise HTTPException(status_code=400, detail="Add or fetch a METAR/ATIS first")
+            prompt = f"{PROMPTS['metar']}\nArrival airport {f.get('destination')}. METAR/ATIS: {body.message or (f.get('arrival_notes') or {}).get('metar') or 'not provided'}"
+        elif mode == "notams":
+            prompt = _notam_prompt(f)
+        else:
+            prompt = f"{PROMPTS[mode]}\n\n{context}"
+        raise HTTPException(status_code=503, detail="NavDeck AI Co-pilot is temporarily unavailable")
 
     return r
 
@@ -321,8 +312,9 @@ def build_router(db, owned_flight, editable_flight) -> APIRouter:
 async def store_report(db, f: dict) -> dict:
     data = await run_in_threadpool(build_report_pdf, f)
     path = f"{APP_NAME}/reports/{f['user_id']}/{uuid.uuid4()}.pdf"
-    res = await run_in_threadpool(put_object, path, data, "application/pdf")
-    rec = {"id": str(uuid.uuid4()), "user_id": f["user_id"], "flight_id": f["id"], "storage_path": res["path"], "size": res.get("size"),
+    bucket = AsyncIOMotorGridFSBucket(db)
+    file_id = await bucket.upload_from_stream(path, data, metadata={"content_type": "application/pdf"})
+    rec = {"id": str(uuid.uuid4()), "user_id": f["user_id"], "flight_id": f["id"], "storage_path": str(file_id), "size": len(data),
            "filename": f"NAVDECK_{f.get('callsign') or 'FLT'}_{f.get('origin')}-{f.get('destination')}.pdf",
            "title": f"{f.get('callsign') or ''} {f.get('origin')} → {f.get('destination')}", "is_deleted": False,
            "created_at": datetime.now(timezone.utc).isoformat()}
