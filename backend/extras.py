@@ -8,7 +8,6 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 import requests
-from emergentintegrations.llm.chat import LlmChat, StreamDone, TextDelta, UserMessage
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -281,27 +280,16 @@ def build_router(db, owned_flight, editable_flight) -> APIRouter:
         return await db.ai_messages.find({"flight_id": flight_id, "user_id": user["user_id"]}, {"_id": 0}).sort("created_at", 1).to_list(200)
 
     @r.post("/ai/{flight_id}/{mode}")
-    async def ai(flight_id: str, mode: str, body: AiRequest, user: dict = Depends(require_user)):
-        f = await owned_flight(flight_id, user["user_id"])
-        if mode not in (*PROMPTS, "chat"):
-            raise HTTPException(status_code=404, detail="Unknown AI mode")
-        system = "You are NAVDECK Co-pilot, an experienced airline first officer helping a flight-simulator pilot. Be concise and practical. This is for simulation only. Reply in plain text only: no markdown, no asterisks or hash symbols; use short CAPITALISED headings followed by a colon when you need sections."
-        context = _flight_context(f)
-        if mode == "chat":
-            if not (body.message or "").strip():
-                raise HTTPException(status_code=400, detail="Message is required")
-            history = await db.ai_messages.find({"flight_id": flight_id, "user_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(12)
-            convo = "\n".join(f"{m['role']}: {m['text']}" for m in reversed(history))
-            prompt = f"{context}\n\nConversation so far:\n{convo}\n\nPilot: {body.message}"
-        elif mode == "metar":
-            if not (body.message or (f.get("arrival_notes") or {}).get("metar")):
-                raise HTTPException(status_code=400, detail="Add or fetch a METAR/ATIS first")
-            prompt = f"{PROMPTS['metar']}\nArrival airport {f.get('destination')}. METAR/ATIS: {body.message or (f.get('arrival_notes') or {}).get('metar') or 'not provided'}"
-        elif mode == "notams":
-            prompt = _notam_prompt(f)
-        else:
-            prompt = f"{PROMPTS[mode]}\n\n{context}"
-        llm = LlmChat(api_key=os.environ["EMERGENT_LLM_KEY"], session_id=f"{flight_id}-{mode}-{uuid.uuid4()}", system_message=system).with_model("openai", AI_MODEL)
+    async def ai(
+        flight_id: str,
+        mode: str,
+        body: AiRequest,
+        user: dict = Depends(require_user),
+    ):
+        await owned_flight(flight_id, user["user_id"])
+        raise HTTPException(
+            status_code=503,
+            detail="NavDeck AI Co-pilot is temporarily unavailable.",
 
         async def stream():
             text = ""
