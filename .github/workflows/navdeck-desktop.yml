@@ -2,6 +2,12 @@ name: NAVDECK Desktop Windows Build
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - 'feature/desktop-live-map'
+    paths:
+      - 'desktop/**'
+      - '.github/workflows/navdeck-desktop.yml'
   pull_request:
     paths:
       - 'desktop/**'
@@ -50,6 +56,26 @@ jobs:
             throw "Published Windows executable was not found."
           }
           Write-Host "Desktop executable and live map are present."
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --yes --no-progress
+
+      - name: Build Windows setup installer
+        shell: pwsh
+        run: |
+          $compiler = "${env:ProgramFiles(x86)}\\Inno Setup 6\\ISCC.exe"
+          if (-not (Test-Path $compiler)) { throw "Inno Setup compiler not found." }
+          & $compiler "desktop/installer.iss"
+          if ($LASTEXITCODE -ne 0) { throw "Installer compilation failed." }
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: NAVDECK-Desktop-Setup-x64
+          path: desktop-installer/*.exe
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Upload Windows application
         uses: actions/upload-artifact@v4
