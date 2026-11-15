@@ -16,6 +16,7 @@ internal sealed class DesktopForm : Form
     private readonly Dictionary<string, Button> _navButtons = new();
     private bool _authenticated;
     private bool _signingOut;
+    private bool _closingAfterCleanup;
     private readonly CheckBox _staySignedIn = new()
     {
         Text = "Stay signed in on this computer",
@@ -189,14 +190,26 @@ internal sealed class DesktopForm : Form
             }
         };
 
+        FormClosing += async (_, args) =>
+        {
+            if (_closingAfterCleanup || _staySignedIn.Checked ||
+                _browser.CoreWebView2 is null) return;
+            args.Cancel = true;
+            try
+            {
+                // Clear cookies, IndexedDB, local storage and Clerk session state.
+                await _browser.CoreWebView2.Profile.ClearBrowsingDataAsync();
+            }
+            catch (Exception)
+            {
+                // A new launch with Stay signed in disabled clears the profile again.
+            }
+            _closingAfterCleanup = true;
+            Close();
+        };
         FormClosed += (_, _) =>
         {
             _statusTimer.Stop();
-            if (!_staySignedIn.Checked && _browser.CoreWebView2 is not null)
-            {
-                try { _browser.CoreWebView2.CookieManager.DeleteAllCookies(); }
-                catch (Exception) { /* Browser may already be disposed. */ }
-            }
             if (_bridge is { IsDisposed: false })
                 _bridge.Close();
         };
@@ -376,7 +389,7 @@ internal sealed class DesktopForm : Form
         }
         catch (IOException) { _staySignedIn.Checked = false; }
         catch (UnauthorizedAccessException) { _staySignedIn.Checked = false; }
-        _staySignedIn.CheckedChanged += (_, _) =>
+        _staySignedIn.CheckedChanged += async (_, _) =>
         {
             try
             {
@@ -386,6 +399,18 @@ internal sealed class DesktopForm : Form
             }
             catch (IOException) { /* Do not block sign-in for a preference write. */ }
             catch (UnauthorizedAccessException) { }
+            // Honor changes made on the login screen immediately, not only
+            // after restarting the application.
+            if (!_staySignedIn.Checked && !_authenticated &&
+                _browser.CoreWebView2 is not null)
+            {
+                try
+                {
+                    await _browser.CoreWebView2.Profile.ClearBrowsingDataAsync();
+                    _browser.CoreWebView2.Navigate("https://test.navdeck.online/sign-in");
+                }
+                catch (Exception) { }
+            }
         };
         // The trusted Clerk login page is the entire workspace until
         // an authenticated Clerk session is confirmed.
@@ -452,19 +477,18 @@ internal sealed class DesktopForm : Form
         {
             try
             {
-                // Separate ephemeral and persistent browser profiles so users
-                // who opt out do not retain Clerk session tokens or web storage.
-                var profile = _staySignedIn.Checked
-                    ? Path.Combine(
-                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                        "NAVDECK", "Desktop", "WebView2")
-                    : Path.Combine(Path.GetTempPath(), "NAVDECK", "Desktop",
-                        "Session-" + Environment.ProcessId);
+                // Keep one user profile, clearing all sign-in storage when
+                // the user opts out. This also honors checkbox changes at runtime.
+                var profile = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "NAVDECK", "Desktop", "WebView2");
                 Directory.CreateDirectory(profile);
                 var environment = await Microsoft.Web.WebView2.Core.CoreWebView2Environment
                     .CreateAsync(userDataFolder: profile);
                 await _browser.EnsureCoreWebView2Async(environment);
                 _browser.CoreWebView2.Settings.AreDevToolsEnabled = false;
+                if (!_staySignedIn.Checked)
+                    await _browser.CoreWebView2.Profile.ClearBrowsingDataAsync();
 
                 // The signed-in signal must originate from the trusted NAVDECK site.
                 _browser.CoreWebView2.WebMessageReceived += (_, args) =>
