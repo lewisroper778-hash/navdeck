@@ -43,7 +43,7 @@ internal sealed class DesktopForm : Form
 
     private void SelectNavigation(string selected)
     {
-        _status.Text = selected.TrimStart('◈', '✈', '▤', '◎', '◉', '▣', ' ') +
+        _status.Text = selected.TrimStart('◈', '✈', '▤', '◎', '⌂', '▣', ' ') +
             "  /  NAVDECK Desktop";
         foreach (var item in _navButtons)
         {
@@ -237,7 +237,7 @@ internal sealed class DesktopForm : Form
         AddNavigation("✈   My Flights", "/flights");
         AddNavigation("▤   SimBrief", "/settings");
         AddNavigation("◎   VATSIM", "/vatsim");
-        AddNavigation("◉   Community", "/community");
+        AddNavigation("⌂   NAVDECK Home", "/");
         AddNavigation("▣   Logbook", "/logbook");
         SelectNavigation("◈   Overview");
 
@@ -534,7 +534,8 @@ internal sealed class DesktopForm : Form
 
                     const string desktopCss = """
                         .navdeck-sidebar,
-                        .navdeck-topbar {
+                        .navdeck-topbar,
+                        header:has([data-testid="nav-logo"]) {
                             display: none !important;
                         }
 
@@ -577,6 +578,7 @@ internal sealed class DesktopForm : Form
                             }
 
                             style.textContent = CSS_TEXT;
+                            document.documentElement.classList.add('dark');
                         })();
                         """;
 
@@ -593,6 +595,31 @@ internal sealed class DesktopForm : Form
                     {
                         // Navigation can change before injection completes.
                     }
+                };
+
+                _browser.CoreWebView2.SourceChanged += (_, _) =>
+                {
+                    if (!_authenticated ||
+                        !Uri.TryCreate(_browser.CoreWebView2.Source,
+                            UriKind.Absolute, out var uri)) return;
+
+                    if (uri.Host == "navdeck-desktop.local")
+                    {
+                        SelectNavigation("◈   Overview");
+                        return;
+                    }
+                    if (uri.Host != "test.navdeck.online") return;
+                    var current = uri.AbsolutePath;
+                    SelectNavigation(
+                        current.StartsWith("/flights", StringComparison.OrdinalIgnoreCase)
+                            ? "✈   My Flights"
+                        : current.StartsWith("/settings", StringComparison.OrdinalIgnoreCase)
+                            ? "▤   SimBrief"
+                        : current.StartsWith("/vatsim", StringComparison.OrdinalIgnoreCase)
+                            ? "◎   VATSIM"
+                        : current.StartsWith("/logbook", StringComparison.OrdinalIgnoreCase)
+                            ? "▣   Logbook"
+                        : "⌂   NAVDECK Home");
                 };
 
                 _browser.CoreWebView2.Navigate(
