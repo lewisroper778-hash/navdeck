@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NAVDECK Live Map</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+*{box-sizing:border-box}html,body,#map{height:100%;width:100%;margin:0}body{background:#101722;color:#e5edf8;font:14px 'Segoe UI',sans-serif}
+#map{background:#111827}.panel{position:absolute;z-index:1000;background:#101827ee;border:1px solid #344258;border-radius:12px;box-shadow:0 8px 30px #0008;padding:14px 18px}
+#status{top:20px;left:20px}.eyebrow{color:#9db0ce;letter-spacing:2px;font-size:11px;font-weight:700;margin-bottom:8px}#connection{font-weight:700}
+#metrics{bottom:20px;left:20px;right:20px;display:flex;gap:28px;flex-wrap:wrap}#follow{top:20px;right:20px;cursor:pointer;color:white;font-weight:700}
+.metric b{color:#6dd8ff}.leaflet-control-attribution{background:#101827cc!important;color:#abb9cc!important}.leaflet-control-attribution a{color:#91c7e9!important}
+.aircraft{width:38px;height:38px;filter:drop-shadow(0 2px 4px #000a)}.aircraft svg{width:38px;height:38px}
+</style></head><body>
+<div id="map"></div><div id="status" class="panel"><div class="eyebrow">NAVDECK LIVE MAP</div><div id="connection">○ Awaiting simulator telemetry</div></div>
+<button id="follow" class="panel" type="button">Following aircraft</button>
+<div id="metrics" class="panel"><span class="metric">ALT <b id="alt">—</b> FT</span><span class="metric">GS <b id="gs">—</b> KT</span><span class="metric">HDG <b id="hdg">—</b>°</span><span class="metric">GPS <b id="gps">—</b></span></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(() => {
+  const status=document.getElementById('connection');
+  if(!window.L){status.textContent='Map library unavailable — check internet connection';return;}
+  const map=L.map('map',{zoomControl:true}).setView([51.5,-0.12],5);
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',{attribution:'Tiles &copy; Esri',maxZoom:18}).addTo(map);
+  let marker=null,follow=true,busy=false;
+  const button=document.getElementById('follow');
+  button.onclick=()=>{follow=!follow;button.textContent=follow?'Following aircraft':'Follow aircraft';};
+  const format=(n,d=0)=>Number.isFinite(n)?n.toFixed(d):'—';
+  async function update(){
+    if(busy)return;
+    if(typeof window.navdeckDesktop?.getTelemetry!=='function'){status.textContent='○ Native simulator bridge unavailable';return;}
+    busy=true;
+    try{
+      const t=await window.navdeckDesktop.getTelemetry();
+      if(!t||!Number.isFinite(t.lat)||!Number.isFinite(t.lon)||Math.abs(t.lat)>90||Math.abs(t.lon)>180){
+        status.textContent='○ Awaiting simulator telemetry';if(marker){map.removeLayer(marker);marker=null;}return;
+      }
+      status.textContent='● Aircraft tracking live';
+      const heading=Number.isFinite(t.heading_deg)?t.heading_deg:0;
+      const icon=L.divIcon({className:'',html:`<div class="aircraft" style="transform:rotate(${heading}deg)"><svg viewBox="0 0 24 24"><path d="M12 2 L15 10 L22 14 L22 17 L13.5 14.5 L13.5 20 L16 22 L16 23 L12 22 L8 23 L8 22 L10.5 20 L10.5 14.5 L2 17 L2 14 L9 10 Z" fill="#38bdf8" stroke="#e0f2fe" stroke-width=".7"/></svg></div>`,iconSize:[38,38],iconAnchor:[19,19]});
+      if(!marker){marker=L.marker([t.lat,t.lon],{icon}).addTo(map).bindTooltip('Live simulator aircraft');map.setView([t.lat,t.lon],9);}
+      else{marker.setLatLng([t.lat,t.lon]);marker.setIcon(icon);if(follow)map.panTo([t.lat,t.lon],{animate:true});}
+      document.getElementById('alt').textContent=format(t.altitude_ft);
+      document.getElementById('gs').textContent=format(t.groundspeed_kt);
+      document.getElementById('hdg').textContent=format(heading);
+      document.getElementById('gps').textContent=format(t.lat,3)+', '+format(t.lon,3);
+    }catch{status.textContent='○ Simulator telemetry unavailable';}
+    finally{busy=false;}
+  }
+  update();setInterval(update,1000);
+})();
+</script></body></html>

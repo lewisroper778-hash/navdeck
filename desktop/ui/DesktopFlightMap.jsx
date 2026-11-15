@@ -9,7 +9,17 @@ import {
   useMap,
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
-import { planeIcon } from "../../frontend/src/components/flight/RouteMap";
+import L from "leaflet";
+
+function planeIcon(heading = 0, color = "#38bdf8", size = 36) {
+  const angle = Number.isFinite(heading) ? heading : 0;
+  return L.divIcon({
+    className: "navdeck-desktop-aircraft-icon",
+    html: `<div style="width:${size}px;height:${size}px;transform:rotate(${angle}deg);filter:drop-shadow(0 2px 5px #0009)"><svg width="${size}" height="${size}" viewBox="0 0 24 24"><path d="M12 2 L15 10 L22 14 L22 17 L13.5 14.5 L13.5 20 L16 22 L16 23 L12 22 L8 23 L8 22 L10.5 20 L10.5 14.5 L2 17 L2 14 L9 10 Z" fill="${color}" stroke="#e0f2fe" stroke-width=".7"/></svg></div>`,
+    iconSize: [size, size], iconAnchor: [size / 2, size / 2],
+  });
+}
+
 
 const TILE_URL =
   "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}";
@@ -41,6 +51,31 @@ function FitRoute({ points }) {
 export default function DesktopFlightMap({ api, flightId, rows = [] }) {
   const [telemetry, setTelemetry] = useState(null);
   const [follow, setFollow] = useState(true);
+
+  const [desktopTelemetry, setDesktopTelemetry] = useState(null);
+  const desktopAvailable = typeof window !== "undefined" &&
+    typeof window.navdeckDesktop?.getTelemetry === "function";
+
+  useEffect(() => {
+    if (!desktopAvailable) return;
+    let active = true;
+    let busy = false;
+    async function refresh() {
+      if (!active || busy) return;
+      busy = true;
+      try {
+        const sample = await window.navdeckDesktop.getTelemetry();
+        if (!active) return;
+        setDesktopTelemetry(sample && Number.isFinite(sample.lat) &&
+          Number.isFinite(sample.lon) && Math.abs(sample.lat) <= 90 &&
+          Math.abs(sample.lon) <= 180 ? sample : null);
+      } catch { if (active) setDesktopTelemetry(null); }
+      finally { busy = false; }
+    }
+    refresh();
+    const timer = setInterval(refresh, 1000);
+    return () => { active = false; clearInterval(timer); };
+  }, [desktopAvailable]);
 
   const points = useMemo(
     () =>
@@ -106,11 +141,12 @@ export default function DesktopFlightMap({ api, flightId, rows = [] }) {
     };
   }, [api, flightId]);
 
-  const position = telemetry
-    ? [telemetry.lat, telemetry.lon]
+  const liveTelemetry = desktopAvailable ? desktopTelemetry : telemetry;
+  const position = liveTelemetry
+    ? [liveTelemetry.lat, liveTelemetry.lon]
     : null;
 
-  const heading = Number.isFinite(telemetry?.heading_deg)
+  const heading = Number.isFinite(liveTelemetry?.heading_deg)
     ? telemetry.heading_deg
     : 0;
 
@@ -182,7 +218,7 @@ export default function DesktopFlightMap({ api, flightId, rows = [] }) {
           NAVDECK LIVE MAP
         </div>
         <div className="mt-1 text-sm font-bold">
-          {telemetry ? "● Aircraft tracking live" : "○ Awaiting simulator telemetry"}
+          {liveTelemetry ? "● Aircraft tracking live" : "○ Awaiting simulator telemetry"}
         </div>
       </div>
 
@@ -194,13 +230,13 @@ export default function DesktopFlightMap({ api, flightId, rows = [] }) {
         {follow ? "Following aircraft" : "Follow aircraft"}
       </button>
 
-      {telemetry && (
+      {liveTelemetry && (
         <div className="absolute bottom-4 left-4 right-4 z-[1000] flex flex-wrap gap-3 rounded-xl border border-white/10 bg-[#111827]/95 p-4 text-white shadow-xl">
-          <span>ALT {Math.round(telemetry.altitude_ft ?? 0).toLocaleString()} FT</span>
-          <span>GS {Math.round(telemetry.groundspeed_kt ?? 0)} KT</span>
+          <span>ALT {Math.round(liveTelemetry.altitude_ft ?? 0).toLocaleString()} FT</span>
+          <span>GS {Math.round(liveTelemetry.groundspeed_kt ?? 0)} KT</span>
           <span>HDG {Math.round(heading)}°</span>
           <span>
-            GPS {telemetry.lat.toFixed(3)}, {telemetry.lon.toFixed(3)}
+            GPS {liveTelemetry.lat.toFixed(3)}, {liveTelemetry.lon.toFixed(3)}
           </span>
         </div>
       )}
