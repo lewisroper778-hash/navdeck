@@ -5,6 +5,23 @@ namespace NavdeckLink;
 internal sealed class DesktopForm : Form
 {
     private readonly WebView2 _browser = new();
+    private MainForm? _bridge;
+
+    private readonly Label _simStatus = new()
+    {
+        Text = "● Simulator disconnected",
+        AutoSize = true,
+        ForeColor = Color.FromArgb(245, 158, 158),
+        BackColor = Color.Transparent,
+        Font = new Font("Segoe UI", 9, FontStyle.Bold)
+    };
+
+    private readonly System.Windows.Forms.Timer _statusTimer = new()
+    {
+        Interval = 1000
+    };
+
+
     private readonly Label _status = new()
     {
         Text = "NAVDECK Desktop",
@@ -43,11 +60,42 @@ internal sealed class DesktopForm : Form
 
         bridgeButton.Click += (_, _) =>
         {
-            var bridge = new MainForm(false);
-            bridge.Show(this);
+            if (_bridge is null || _bridge.IsDisposed)
+                return;
+
+            _bridge.Show();
+            _bridge.WindowState = FormWindowState.Normal;
+            _bridge.BringToFront();
+            _bridge.Activate();
         };
 
         toolbar.Controls.Add(bridgeButton);
+
+        _simStatus.Location = new Point(230, 16);
+        toolbar.Controls.Add(_simStatus);
+
+        _statusTimer.Tick += (_, _) =>
+        {
+            if (_bridge is null || _bridge.IsDisposed)
+                return;
+
+            if (_bridge.SimulatorConnected)
+            {
+                _simStatus.Text =
+                    "● MSFS Connected | " + _bridge.SimulatorAircraft;
+
+                _simStatus.ForeColor =
+                    Color.FromArgb(74, 222, 128);
+            }
+            else
+            {
+                _simStatus.Text = "● Simulator disconnected";
+                _simStatus.ForeColor =
+                    Color.FromArgb(245, 158, 158);
+            }
+        };
+
+        FormClosed += (_, _) => _statusTimer.Stop();
 
         _browser.Dock = DockStyle.Fill;
         Controls.Add(_browser);
@@ -55,6 +103,14 @@ internal sealed class DesktopForm : Form
 
         Shown += async (_, _) =>
         {
+            _bridge = new MainForm(false);
+            _bridge.ShowInTaskbar = false;
+            _bridge.Opacity = 0;
+            _bridge.Show(this);
+            _bridge.Hide();
+            _bridge.Opacity = 1;
+            _statusTimer.Start();
+
             try
             {
                 await _browser.EnsureCoreWebView2Async();

@@ -2,6 +2,11 @@ namespace NavdeckLink;
 
 internal sealed class MainForm : Form
 {
+    public bool SimulatorConnected => _sim.IsOpen;
+    public bool NavdeckConnected => _api is not null;
+    public string SimulatorAircraft =>
+        _sim.AircraftTitle ?? "Unknown aircraft";
+
     private readonly Config _config = Config.Load();
     private readonly FsuipcLink _sim = new();
     private readonly FlightTracker _tracker = new();
