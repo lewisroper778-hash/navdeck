@@ -63,6 +63,9 @@ internal sealed class NavdeckApi
             lon = s.Lon,
             altitude_ft = s.AltFt,
             groundspeed_kt = s.GroundSpeedKt,
+            heading_deg = double.IsFinite(s.HeadingDeg)
+                ? (double?)((s.HeadingDeg % 360 + 360) % 360)
+                : null,
             fuel_lb = s.FuelLb >= 0 && s.FuelLb <= 2000000
                 ? (double?)s.FuelLb : null
         });

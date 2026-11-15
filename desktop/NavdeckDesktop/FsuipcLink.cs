@@ -16,6 +16,7 @@ internal sealed class FsuipcLink : IDisposable
     private readonly Offset<string> _title = new("navdeck", 0x3D00, 256);
     private readonly Offset<long> _lat = new("navdeck", 0x0560);
     private readonly Offset<long> _lon = new("navdeck", 0x0568);
+    private readonly Offset<uint> _heading = new("navdeck", 0x0580);
     private readonly Offset<long> _alt = new("navdeck", 0x0570);           // metres * 65536 * 65536
 
     public bool IsOpen => FSUIPCConnection.IsOpen;
@@ -49,7 +50,8 @@ internal sealed class FsuipcLink : IDisposable
                 FuelLb: _fuelLb.Value,
                 Lat: _lat.Value * 90.0 / (10001750.0 * 65536.0 * 65536.0),
                 Lon: _lon.Value * 360.0 / (65536.0 * 65536.0 * 65536.0 * 65536.0),
-                AltFt: _alt.Value / (65536.0 * 65536.0) * 3.28084);
+                AltFt: _alt.Value / (65536.0 * 65536.0) * 3.28084,
+                HeadingDeg: _heading.Value * 360.0 / 4294967296.0);
         }
         catch (FSUIPCException)
         {
