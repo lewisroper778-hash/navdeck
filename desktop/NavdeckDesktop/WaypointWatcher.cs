@@ -9,6 +9,7 @@ internal sealed class WaypointWatcher
     private readonly HashSet<int> _sent = [];
     private double _minDist = double.MaxValue;
 
+    public IReadOnlyList<RouteFix> Pending => _route.Where(f => !_sent.Contains(f.Index)).ToArray();
     public RouteFix? Next => _route.FirstOrDefault(f => !_sent.Contains(f.Index));
     public double? DistanceToNext { get; private set; }
 
