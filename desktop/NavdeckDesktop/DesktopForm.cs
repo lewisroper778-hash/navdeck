@@ -368,16 +368,14 @@ internal sealed class DesktopForm : Form
         {
             try
             {
-                // Store WebView2 browser data in the user's profile, not Program Files.
-                var profile = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "NAVDECK", "Desktop", "WebView2");
-                if (!_staySignedIn.Checked && Directory.Exists(profile))
-                {
-                    try { Directory.Delete(profile, recursive: true); }
-                    catch (IOException) { /* A previous browser instance may still be exiting. */ }
-                    catch (UnauthorizedAccessException) { }
-                }
+                // Separate ephemeral and persistent browser profiles so users
+                // who opt out do not retain Clerk session tokens or web storage.
+                var profile = _staySignedIn.Checked
+                    ? Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                        "NAVDECK", "Desktop", "WebView2")
+                    : Path.Combine(Path.GetTempPath(), "NAVDECK", "Desktop",
+                        "Session-" + Environment.ProcessId);
                 Directory.CreateDirectory(profile);
                 var environment = await Microsoft.Web.WebView2.Core.CoreWebView2Environment
                     .CreateAsync(userDataFolder: profile);
