@@ -750,36 +750,64 @@ internal sealed class DesktopForm : Form
                         return;
 
                     const string desktopCss = """
+                        :root { color-scheme: dark; }
+
                         .navdeck-sidebar,
                         .navdeck-topbar,
                         header:has([data-testid="nav-logo"]) {
                             display: none !important;
                         }
 
-                        body {
+                        html, body, .App {
+                            background: #1c1c20 !important;
+                            color: #eeeeef;
                             margin: 0 !important;
-                            background: #111318 !important;
+                            min-height: 100%;
                         }
 
-                        /* Desktop workspace fills the application. */
+                        /* Website functions retain their React logic, but their
+                           workspace chrome follows the native desktop theme. */
                         main {
-                            margin-left: 0 !important;
-                            padding-top: 24px !important;
+                            margin: 0 !important;
+                            padding: 22px 22px 32px !important;
                             max-width: none !important;
                             width: 100% !important;
+                            min-width: 0 !important;
                             box-sizing: border-box !important;
+                            background: #1c1c20 !important;
                         }
 
-                        /* Remove website navigation spacing. */
                         .navdeck-sidebar + main,
                         .navdeck-topbar + main {
                             margin-left: 0 !important;
                         }
 
-                        /* Keep flight panels within the workspace. */
-                        main > * {
-                            min-width: 0;
+                        .App main > * { min-width: 0; }
+
+                        .App main div[class*="bg-gradient-to-"] {
+                            background-image: none !important;
+                            background-color: #2a2b30 !important;
+                            border: 1px solid #393a40 !important;
                         }
+
+                        .App main [class*="rounded-[28px]"],
+                        .App main [class*="rounded-[32px]"] {
+                            border-radius: 10px !important;
+                        }
+
+                        .App main button,
+                        .App main input,
+                        .App main select {
+                            border-radius: 6px !important;
+                        }
+
+                        .App main button:focus-visible,
+                        .App main a:focus-visible {
+                            outline: 2px solid #9c6bfa !important;
+                            outline-offset: 2px;
+                        }
+
+                        ::selection { background: #7e43c5; color: #fff; }
                         """;
 
                     var script = """
