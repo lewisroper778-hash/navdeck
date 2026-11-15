@@ -27,6 +27,7 @@ internal sealed class MainForm : Form
     private readonly System.Windows.Forms.Timer _slow = new() { Interval = 5000 };
     private readonly System.Windows.Forms.Timer _routeRefreshTimer = new() { Interval = 5000 };
     private readonly bool _startMinimized;
+    private readonly bool _promptForConnectionCode;
     private NavdeckApi? _api;
     private DateTime _lastBeat = DateTime.MinValue;
     private Sample? _latestTelemetry;
@@ -68,9 +69,10 @@ internal sealed class MainForm : Form
 
 
 
-    public MainForm(bool startMinimized)
+    public MainForm(bool startMinimized, bool promptForConnectionCode = true)
     {
         _startMinimized = startMinimized;
+        _promptForConnectionCode = promptForConnectionCode;
         Text = "NAVDECK Link";
         Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
         BackColor = Theme.Bg;
@@ -580,8 +582,14 @@ internal sealed class MainForm : Form
     private async Task Start()
     {
         if (_startMinimized) WindowState = FormWindowState.Minimized;
-        if (!Config.IsValidCode(_config.Code)) AskCode();
-        else await Connect();
+        if (Config.IsValidCode(_config.Code))
+            await Connect();
+        else if (_promptForConnectionCode)
+            AskCode();
+        else
+            SetStatus(_navStatus,
+                "Open Simulator Connection to enter your NAVDECK link code",
+                Theme.Amber);
         UpdateStartupButton();
         RefreshView();
         _poll.Start();
