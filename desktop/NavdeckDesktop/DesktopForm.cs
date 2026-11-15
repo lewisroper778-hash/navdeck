@@ -6,6 +6,7 @@ internal sealed class DesktopForm : Form
 {
     private readonly WebView2 _browser = new();
     private MainForm? _bridge;
+    private readonly Dictionary<string, Button> _navButtons = new();
 
     private readonly Label _simStatus = new()
     {
@@ -29,6 +30,20 @@ internal sealed class DesktopForm : Form
         ForeColor = Color.White,
         BackColor = Color.Transparent
     };
+
+    private void SelectNavigation(string selected)
+    {
+        _status.Text = selected.TrimStart('◈', '✈', '▤', '◎', '◉', '▣', ' ') +
+            "  /  NAVDECK Desktop";
+        foreach (var item in _navButtons)
+        {
+            bool active = item.Key == selected;
+            item.Value.BackColor = active
+                ? Color.FromArgb(28, 56, 91) : Color.FromArgb(13, 19, 30);
+            item.Value.ForeColor = active
+                ? Color.FromArgb(110, 212, 255) : Color.FromArgb(172, 190, 215);
+        }
+    }
 
     public DesktopForm()
     {
@@ -158,8 +173,10 @@ internal sealed class DesktopForm : Form
             button.FlatAppearance.MouseOverBackColor =
                 Color.FromArgb(36, 51, 78);
 
+            _navButtons[title] = button;
             button.Click += (_, _) =>
             {
+                SelectNavigation(title);
                 if (_browser.CoreWebView2 is not null)
                     _browser.CoreWebView2.Navigate(
                         route.StartsWith("https://", StringComparison.Ordinal)
@@ -176,6 +193,7 @@ internal sealed class DesktopForm : Form
         AddNavigation("◎   VATSIM", "/vatsim");
         AddNavigation("◉   Community", "/community");
         AddNavigation("▣   Logbook", "/logbook");
+        SelectNavigation("◈   Overview");
 
         var connectionButton = new Button
         {
