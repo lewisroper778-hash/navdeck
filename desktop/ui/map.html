@@ -13,7 +13,7 @@
 .flight-sub{display:flex;justify-content:space-between;gap:16px;font-size:12px;margin-top:10px;color:#a6bbd5}
 .flight-sub strong{color:#ecf6ff;font-weight:650;text-align:right}
 @media(max-width:720px){#status,#flight{left:10px;min-width:230px;padding:10px}#status{top:10px}#flight{top:139px}#metrics{bottom:10px;left:10px;right:10px;gap:12px}#follow{top:10px;right:10px}}.eyebrow{color:#9db0ce;letter-spacing:2px;font-size:11px;font-weight:700;margin-bottom:8px}#connection{font-weight:700}
-#metrics{bottom:24px;left:24px;right:24px;display:flex;gap:18px;flex-wrap:wrap;justify-content:space-around;backdrop-filter:blur(14px)}#follow{top:20px;right:20px;cursor:pointer;color:white;font-weight:700}
+#metrics{bottom:24px;left:24px;right:24px;display:flex;gap:18px;flex-wrap:wrap;justify-content:space-around;backdrop-filter:blur(14px)}#follow{top:20px;right:20px;cursor:pointer;color:white;font-weight:700}#fitroute{top:75px;right:20px;cursor:pointer;color:#cce5fa;font-weight:700}
 .metric{display:flex;flex-direction:column;gap:7px;color:#94a8c5;font-size:10px;font-weight:800;letter-spacing:1.8px}.metric b{color:#eef7ff;font-size:21px;letter-spacing:0;font-weight:700}.leaflet-control-attribution{background:#101827cc!important;color:#abb9cc!important}.leaflet-control-attribution a{color:#91c7e9!important}
 .aircraft{width:38px;height:38px;filter:drop-shadow(0 2px 4px #000a)}.aircraft svg{width:38px;height:38px}
 </style></head><body>
@@ -28,6 +28,7 @@
   <div class="flight-sub"><span>AIRCRAFT</span><strong id="aircraft-name">Waiting for simulator</strong></div>
 </section>
 <button id="follow" class="panel" type="button">⌖  Following aircraft</button>
+<button id="fitroute" class="panel" type="button" title="View all pending route waypoints">◇  Fit flight plan</button>
 <div id="metrics" class="panel"><span class="metric">ALT <b id="alt">—</b> FT</span><span class="metric">GS <b id="gs">—</b> KT</span><span class="metric">HDG <b id="hdg">—</b>°</span><span class="metric">GPS <b id="gps">—</b></span></div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
@@ -39,6 +40,41 @@
   let marker=null,follow=true,busy=false;
   let routeLine=null;
   const track=[];
+  let plannedRoute=null, directLine=null, routeSignature='';
+  let nextFix=null;
+  const routeMarkers=L.layerGroup().addTo(map);
+  const fitButton=document.getElementById('fitroute');
+  fitButton.onclick=()=>{
+    const coords=plannedRoute?.getLatLngs() || [];
+    if(!coords.length)return;
+    follow=false;
+    document.getElementById('follow').textContent='⌖  Follow aircraft';
+    const bounds=L.latLngBounds(coords);
+    if(marker)bounds.extend(marker.getLatLng());
+    map.fitBounds(bounds,{padding:[55,55],maxZoom:11});
+  };
+  function showFlightPlan(raw){
+    const fixes=Array.isArray(raw)?raw.filter(f=>f&&Number.isFinite(f.lat)&&
+      Number.isFinite(f.lon)&&Math.abs(f.lat)<=90&&Math.abs(f.lon)<=180).slice(0,300):[];
+    const signature=fixes.map(f=>String(f.ident)+':'+f.lat+':'+f.lon).join('|');
+    nextFix=fixes[0]||null;
+    if(signature===routeSignature)return;
+    routeSignature=signature;
+    routeMarkers.clearLayers();
+    if(plannedRoute){map.removeLayer(plannedRoute);plannedRoute=null;}
+    if(directLine){map.removeLayer(directLine);directLine=null;}
+    if(!fixes.length)return;
+    plannedRoute=L.polyline(fixes.map(f=>[f.lat,f.lon]),{
+      color:'#62cbf4',weight:2.5,dashArray:'5 8',opacity:.65
+    }).addTo(map);
+    fixes.forEach((f,i)=>{
+      const tooltip=document.createElement('span');
+      tooltip.textContent=String(f.ident||'FIX');
+      L.circleMarker([f.lat,f.lon],{radius:i===0?6:4,
+        color:i===0?'#f8fafc':'#7dd3fc',fillColor:'#0e344b',
+        fillOpacity:1,weight:2}).bindTooltip(tooltip).addTo(routeMarkers);
+    });
+  }
   const button=document.getElementById('follow');
   button.onclick=()=>{follow=!follow;button.textContent=follow?'⌖  Following aircraft':'⌖  Follow aircraft';};
   const format=(n,d=0)=>Number.isFinite(n)?n.toFixed(d):'—';
@@ -55,6 +91,7 @@
       display('phase',t?.stage,'Parked');
       display('waypoints',t?.waypoints,'No waypoints synced');
       display('aircraft-name',t?.aircraft,'Waiting for simulator');
+      showFlightPlan(t?.flight_plan);
       if(!t||!Number.isFinite(t.lat)||!Number.isFinite(t.lon)||
           Math.abs(t.lat)>90||Math.abs(t.lon)>180||(t.lat===0&&t.lon===0)){
         status.textContent=t?.sim_connected?'○ Waiting for aircraft GPS':'○ Simulator disconnected';
@@ -68,6 +105,14 @@
       const icon=L.divIcon({className:'',html:`<div class="aircraft" style="transform:rotate(${heading}deg)"><svg viewBox="0 0 24 24"><path d="M12 2 L15 10 L22 14 L22 17 L13.5 14.5 L13.5 20 L16 22 L16 23 L12 22 L8 23 L8 22 L10.5 20 L10.5 14.5 L2 17 L2 14 L9 10 Z" fill="#38bdf8" stroke="#e0f2fe" stroke-width=".7"/></svg></div>`,iconSize:[38,38],iconAnchor:[19,19]});
       if(!marker){marker=L.marker([t.lat,t.lon],{icon}).addTo(map).bindTooltip('Live simulator aircraft');if(follow)map.setView([t.lat,t.lon],9);}
       else{marker.setLatLng([t.lat,t.lon]);marker.setIcon(icon);if(follow)map.panTo([t.lat,t.lon],{animate:true});}
+      if(nextFix){
+        const legs=[[t.lat,t.lon],[nextFix.lat,nextFix.lon]];
+        if(!directLine)directLine=L.polyline(legs,{
+          color:'#facc15',weight:2,opacity:.75,dashArray:'4 6'}).addTo(map);
+        else directLine.setLatLngs(legs);
+      } else if(directLine) {
+        map.removeLayer(directLine);directLine=null;
+      }
       const last=track[track.length-1];
       if(last && Math.abs(last[0]-t.lat)+Math.abs(last[1]-t.lon)>2){track.length=0;}
       if(!last || Math.abs(last[0]-t.lat)+Math.abs(last[1]-t.lon)>0.00008){
