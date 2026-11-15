@@ -57,6 +57,26 @@ jobs:
           }
           Write-Host "Desktop executable and live map are present."
 
+      - name: Syntax-check packaged map JavaScript
+        shell: pwsh
+        run: |
+          $html = Get-Content "desktop-output/desktop-map/map.html" -Raw
+          $inlineScripts = [regex]::Matches($html, '(?s)<script(?:\\s[^>]*)?>(.*?)</script>')
+          $count = 0
+          foreach ($match in $inlineScripts) {
+            $source = $match.Groups[1].Value
+            if ([string]::IsNullOrWhiteSpace($source)) { continue }
+            $temp = Join-Path $env:RUNNER_TEMP "navdeck-map-check-$count.js"
+            [System.IO.File]::WriteAllText($temp, $source)
+            & node --check $temp
+            if ($LASTEXITCODE -ne 0) {
+              throw "Invalid JavaScript in packaged map script $count"
+            }
+            $count++
+          }
+          if ($count -lt 1) { throw "No inline map JavaScript found to validate." }
+          Write-Host "Validated $count inline map script(s)."
+
       - name: Install Inno Setup
         shell: pwsh
         run: choco install innosetup --yes --no-progress
