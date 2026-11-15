@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>NAVDECK Live Map</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="vendor/leaflet.css">
 <style>
 *{box-sizing:border-box}html,body,#map{height:100%;width:100%;margin:0}body{background:#101722;color:#e5edf8;font:14px 'Segoe UI',sans-serif}
 #map{background:#111827}.panel{position:absolute;z-index:1000;background:#101827ee;border:1px solid #344258;border-radius:12px;box-shadow:0 8px 30px #0008;padding:14px 18px}
@@ -30,7 +30,7 @@
 <button id="follow" class="panel" type="button">⌖  Following aircraft</button>
 <button id="fitroute" class="panel" type="button" title="View all pending route waypoints">◇  Fit flight plan</button>
 <div id="metrics" class="panel"><span class="metric">ALT <b id="alt">—</b> FT</span><span class="metric">GS <b id="gs">—</b> KT</span><span class="metric">HDG <b id="hdg">—</b>°</span><span class="metric">GPS <b id="gps">—</b></span></div>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="vendor/leaflet.js"></script>
 <script>
 (() => {
   const status=document.getElementById('connection');
