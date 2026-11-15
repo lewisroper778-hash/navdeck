@@ -5,12 +5,28 @@
 <style>
 *{box-sizing:border-box}html,body,#map{height:100%;width:100%;margin:0}body{background:#101722;color:#e5edf8;font:14px 'Segoe UI',sans-serif}
 #map{background:#111827}.panel{position:absolute;z-index:1000;background:#101827ee;border:1px solid #344258;border-radius:12px;box-shadow:0 8px 30px #0008;padding:14px 18px}
-#status{top:24px;left:24px;min-width:290px;backdrop-filter:blur(14px)}.eyebrow{color:#9db0ce;letter-spacing:2px;font-size:11px;font-weight:700;margin-bottom:8px}#connection{font-weight:700}
+#status{top:24px;left:24px;min-width:300px;backdrop-filter:blur(14px)}
+#flight{top:167px;left:24px;min-width:300px;max-width:360px;backdrop-filter:blur(14px)}
+.flight-name{font-size:23px;font-weight:750;letter-spacing:.2px;margin:8px 0 3px}
+.flight-route{font-size:13px;color:#95b2d5;margin:0 0 13px}
+.flight-divider{height:1px;background:#30435c;margin:12px 0}
+.flight-sub{display:flex;justify-content:space-between;gap:16px;font-size:12px;margin-top:10px;color:#a6bbd5}
+.flight-sub strong{color:#ecf6ff;font-weight:650;text-align:right}
+@media(max-width:720px){#status,#flight{left:10px;min-width:230px;padding:10px}#status{top:10px}#flight{top:139px}#metrics{bottom:10px;left:10px;right:10px;gap:12px}#follow{top:10px;right:10px}}.eyebrow{color:#9db0ce;letter-spacing:2px;font-size:11px;font-weight:700;margin-bottom:8px}#connection{font-weight:700}
 #metrics{bottom:24px;left:24px;right:24px;display:flex;gap:18px;flex-wrap:wrap;justify-content:space-around;backdrop-filter:blur(14px)}#follow{top:20px;right:20px;cursor:pointer;color:white;font-weight:700}
 .metric{display:flex;flex-direction:column;gap:7px;color:#94a8c5;font-size:10px;font-weight:800;letter-spacing:1.8px}.metric b{color:#eef7ff;font-size:21px;letter-spacing:0;font-weight:700}.leaflet-control-attribution{background:#101827cc!important;color:#abb9cc!important}.leaflet-control-attribution a{color:#91c7e9!important}
 .aircraft{width:38px;height:38px;filter:drop-shadow(0 2px 4px #000a)}.aircraft svg{width:38px;height:38px}
 </style></head><body>
 <div id="map"></div><div id="status" class="panel"><div class="eyebrow">● LIVE OPERATIONS</div><div style="font-size:21px;font-weight:750;margin-bottom:8px">Flight overview</div><div id="connection" style="color:#a8c0db">○ Awaiting simulator telemetry</div><div style="font-size:11px;color:#7085a5;margin-top:9px">REAL-TIME AIRCRAFT POSITION</div></div>
+<section id="flight" class="panel" aria-label="Flight details">
+  <div class="eyebrow">ACTIVE FLIGHT</div>
+  <div class="flight-name" id="callsign">No flight loaded</div>
+  <div class="flight-route" id="route">Departure — → Destination —</div>
+  <div class="flight-divider"></div>
+  <div class="flight-sub"><span>FLIGHT PHASE</span><strong id="phase">Parked</strong></div>
+  <div class="flight-sub"><span>FLIGHT PLAN</span><strong id="waypoints">No waypoints synced</strong></div>
+  <div class="flight-sub"><span>AIRCRAFT</span><strong id="aircraft-name">Waiting for simulator</strong></div>
+</section>
 <button id="follow" class="panel" type="button">⌖  Following aircraft</button>
 <div id="metrics" class="panel"><span class="metric">ALT <b id="alt">—</b> FT</span><span class="metric">GS <b id="gs">—</b> KT</span><span class="metric">HDG <b id="hdg">—</b>°</span><span class="metric">GPS <b id="gps">—</b></span></div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -32,8 +48,20 @@
     busy=true;
     try{
       const t=await window.navdeckDesktop.getTelemetry();
-      if(!t||!Number.isFinite(t.lat)||!Number.isFinite(t.lon)||Math.abs(t.lat)>90||Math.abs(t.lon)>180){
-        status.textContent='○ Awaiting simulator telemetry';status.style.color='#a8c0db';if(marker){map.removeLayer(marker);marker=null;}return;
+      const display=(id,value,fallback)=>{document.getElementById(id).textContent=
+        typeof value==='string' && value.trim()?value:fallback;};
+      display('callsign',t?.flight,'No flight loaded');
+      display('route',t?.route,'Departure — → Destination —');
+      display('phase',t?.stage,'Parked');
+      display('waypoints',t?.waypoints,'No waypoints synced');
+      display('aircraft-name',t?.aircraft,'Waiting for simulator');
+      if(!t||!Number.isFinite(t.lat)||!Number.isFinite(t.lon)||
+          Math.abs(t.lat)>90||Math.abs(t.lon)>180||(t.lat===0&&t.lon===0)){
+        status.textContent=t?.sim_connected?'○ Waiting for aircraft GPS':'○ Simulator disconnected';
+        status.style.color='#a8c0db';
+        if(marker){map.removeLayer(marker);marker=null;}
+        for(const id of ['alt','gs','hdg','gps'])document.getElementById(id).textContent='—';
+        return;
       }
       status.textContent='● Aircraft tracking live';status.style.color='#68e5bd';
       const heading=Number.isFinite(t.heading_deg)?t.heading_deg:0;
@@ -41,6 +69,7 @@
       if(!marker){marker=L.marker([t.lat,t.lon],{icon}).addTo(map).bindTooltip('Live simulator aircraft');if(follow)map.setView([t.lat,t.lon],9);}
       else{marker.setLatLng([t.lat,t.lon]);marker.setIcon(icon);if(follow)map.panTo([t.lat,t.lon],{animate:true});}
       const last=track[track.length-1];
+      if(last && Math.abs(last[0]-t.lat)+Math.abs(last[1]-t.lon)>2){track.length=0;}
       if(!last || Math.abs(last[0]-t.lat)+Math.abs(last[1]-t.lon)>0.00008){
         track.push([t.lat,t.lon]);
         if(track.length>1200)track.shift();
