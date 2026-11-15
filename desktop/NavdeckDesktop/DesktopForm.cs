@@ -35,24 +35,26 @@ internal sealed class DesktopForm : Form
         Text = "NAVDECK Desktop";
         Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
         WindowState = FormWindowState.Maximized;
-        MinimumSize = new Size(1000, 700);
+        MinimumSize = new Size(1100, 720);
+        Font = new Font("Segoe UI", 10f);
         BackColor = Color.FromArgb(12, 17, 27);
 
         var toolbar = new Panel
         {
             Dock = DockStyle.Top,
-            Height = 48,
-            BackColor = Color.FromArgb(20, 27, 40)
+            Height = 70,
+            BackColor = Color.FromArgb(16, 23, 36)
         };
 
-        _status.Location = new Point(18, 16);
+        _status.Location = new Point(22, 22);
+        _status.Font = new Font("Segoe UI Semibold", 13f, FontStyle.Bold);
         toolbar.Controls.Add(_status);
 
         var bridgeButton = new Button
         {
-            Text = "SIMULATOR CONNECTION",
+            Text = "⚙  SIMULATOR",
             Dock = DockStyle.Right,
-            Width = 210,
+            Width = 185,
             FlatStyle = FlatStyle.Flat,
             BackColor = Color.FromArgb(30, 44, 66),
             ForeColor = Color.White
@@ -71,7 +73,7 @@ internal sealed class DesktopForm : Form
 
         toolbar.Controls.Add(bridgeButton);
 
-        _simStatus.Location = new Point(230, 16);
+        _simStatus.Location = new Point(375, 26);
         toolbar.Controls.Add(_simStatus);
 
         _statusTimer.Tick += (_, _) =>
@@ -102,9 +104,9 @@ internal sealed class DesktopForm : Form
         var sidebar = new Panel
         {
             Dock = DockStyle.Left,
-            Width = 220,
-            BackColor = Color.FromArgb(25, 26, 31),
-            Padding = new Padding(12)
+            Width = 248,
+            BackColor = Color.FromArgb(13, 19, 30),
+            Padding = new Padding(18, 18, 12, 12)
         };
 
         var navigation = new FlowLayoutPanel
@@ -121,32 +123,40 @@ internal sealed class DesktopForm : Form
         {
             Text = "✈  NAVDECK",
             ForeColor = Color.White,
-            Font = new Font("Segoe UI", 17, FontStyle.Bold),
-            Width = 190,
-            Height = 65,
+            Font = new Font("Segoe UI Semibold", 20, FontStyle.Bold),
+            Width = 210,
+            Height = 72,
             TextAlign = ContentAlignment.MiddleLeft
         };
         navigation.Controls.Add(logo);
+        navigation.Controls.Add(new Label
+        {
+            Text = "FLIGHT OPERATIONS",
+            ForeColor = Color.FromArgb(105, 129, 159),
+            Font = new Font("Segoe UI", 8, FontStyle.Bold),
+            Width = 208, Height = 38,
+            Padding = new Padding(10, 14, 0, 0)
+        });
 
         void AddNavigation(string title, string route)
         {
             var button = new Button
             {
                 Text = title,
-                Width = 185,
-                Height = 44,
+                Width = 208,
+                Height = 48,
                 TextAlign = ContentAlignment.MiddleLeft,
                 FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(35, 36, 43),
-                ForeColor = Color.FromArgb(220, 222, 230),
-                Font = new Font("Segoe UI", 10),
+                BackColor = Color.FromArgb(13, 19, 30),
+                ForeColor = Color.FromArgb(172, 190, 215),
+                Font = new Font("Segoe UI Semibold", 10),
                 Margin = new Padding(0, 3, 0, 3),
                 Cursor = Cursors.Hand
             };
 
             button.FlatAppearance.BorderSize = 0;
             button.FlatAppearance.MouseOverBackColor =
-                Color.FromArgb(66, 46, 112);
+                Color.FromArgb(36, 51, 78);
 
             button.Click += (_, _) =>
             {
@@ -160,21 +170,21 @@ internal sealed class DesktopForm : Form
             navigation.Controls.Add(button);
         }
 
-        AddNavigation("Dashboard", "https://navdeck-desktop.local/map.html");
-        AddNavigation("My Flights", "/flights");
-        AddNavigation("SimBrief", "/settings");
-        AddNavigation("VATSIM", "/vatsim");
-        AddNavigation("Community", "/community");
-        AddNavigation("Logbook", "/logbook");
+        AddNavigation("◈   Overview", "https://navdeck-desktop.local/map.html");
+        AddNavigation("✈   My Flights", "/flights");
+        AddNavigation("▤   SimBrief", "/settings");
+        AddNavigation("◎   VATSIM", "/vatsim");
+        AddNavigation("◉   Community", "/community");
+        AddNavigation("▣   Logbook", "/logbook");
 
         var connectionButton = new Button
         {
-            Text = "Simulator Connection",
-            Width = 185,
-            Height = 44,
+            Text = "⚙   Simulator Connection",
+            Width = 208,
+            Height = 48,
             TextAlign = ContentAlignment.MiddleLeft,
             FlatStyle = FlatStyle.Flat,
-            BackColor = Color.FromArgb(66, 46, 112),
+            BackColor = Color.FromArgb(30, 54, 83),
             ForeColor = Color.White,
             Margin = new Padding(0, 16, 0, 3),
             Cursor = Cursors.Hand
@@ -192,6 +202,14 @@ internal sealed class DesktopForm : Form
             _bridge.Activate();
         };
 
+        navigation.Controls.Add(new Label
+        {
+            Text = "SYSTEM",
+            ForeColor = Color.FromArgb(105, 129, 159),
+            Font = new Font("Segoe UI", 8, FontStyle.Bold),
+            Width = 208, Height = 45,
+            Padding = new Padding(10, 20, 0, 0)
+        });
         navigation.Controls.Add(connectionButton);
 
         _browser.Dock = DockStyle.Fill;
@@ -373,7 +391,7 @@ internal sealed class DesktopForm : Form
                 _browser.CoreWebView2.Navigate(
                     "https://navdeck-desktop.local/map.html"
                 );
-                _status.Text = "NAVDECK Desktop | Live map";
+                _status.Text = "Overview  /  NAVDECK Desktop";
             }
             catch (Exception ex)
             {
