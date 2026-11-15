@@ -152,14 +152,15 @@ internal sealed class DesktopForm : Form
             {
                 if (_browser.CoreWebView2 is not null)
                     _browser.CoreWebView2.Navigate(
-                        "https://test.navdeck.online" + route
+                        route.StartsWith("https://", StringComparison.Ordinal)
+                            ? route : "https://test.navdeck.online" + route
                     );
             };
 
             navigation.Controls.Add(button);
         }
 
-        AddNavigation("Dashboard", "/");
+        AddNavigation("Dashboard", "https://navdeck-desktop.local/map.html");
         AddNavigation("My Flights", "/flights");
         AddNavigation("SimBrief", "/settings");
         AddNavigation("VATSIM", "/vatsim");
@@ -212,6 +213,85 @@ internal sealed class DesktopForm : Form
             {
                 await _browser.EnsureCoreWebView2Async();
                 _browser.CoreWebView2.Settings.AreDevToolsEnabled = false;
+                // Only the packaged desktop map may request simulator telemetry.
+                const string mapOrigin = "https://navdeck-desktop.local";
+                var mapFolder = Path.Combine(AppContext.BaseDirectory, "desktop-map");
+                _browser.CoreWebView2.SetVirtualHostNameToFolderMapping(
+                    "navdeck-desktop.local", mapFolder,
+                    Microsoft.Web.WebView2.Core.CoreWebView2HostResourceAccessKind.DenyCors);
+
+                await _browser.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+                    """
+                    (() => {
+                      if (location.origin !== 'https://navdeck-desktop.local') return;
+                      let nextId = 0;
+                      const pending = new Map();
+                      window.navdeckDesktop = {
+                        getTelemetry() {
+                          return new Promise(resolve => {
+                            const id = ++nextId;
+                            const timeout = setTimeout(() => {
+                              pending.delete(id);
+                              resolve(null);
+                            }, 3000);
+                            pending.set(id, value => {
+                              clearTimeout(timeout);
+                              resolve(value);
+                            });
+                            window.chrome.webview.postMessage({type:'navdeck:getTelemetry',id});
+                          });
+                        }
+                      };
+                      window.chrome.webview.addEventListener('message', event => {
+                        if (event.data?.type !== 'navdeck:telemetry') return;
+                        const resolve = pending.get(event.data.id);
+                        if (resolve) {
+                          pending.delete(event.data.id);
+                          resolve(event.data.telemetry ?? null);
+                        }
+                      });
+                    })();
+                    """);
+
+                _browser.CoreWebView2.WebMessageReceived += (_, args) =>
+                {
+                    // Web messages from login providers or remote pages are untrusted.
+                    if (!Uri.TryCreate(args.Source, UriKind.Absolute, out var sender) ||
+                        sender.GetLeftPart(UriPartial.Authority) != mapOrigin)
+                        return;
+                    try
+                    {
+                        using var message = System.Text.Json.JsonDocument.Parse(args.WebMessageAsJson);
+                        var root = message.RootElement;
+                        if (!root.TryGetProperty("type", out var type) ||
+                            type.GetString() != "navdeck:getTelemetry" ||
+                            !root.TryGetProperty("id", out var id) ||
+                            !id.TryGetInt32(out int requestId))
+                            return;
+
+                        var sample = _bridge?.LiveAircraftSample;
+                        object? telemetry = sample is { } t
+                            ? new
+                            {
+                                lat = t.Lat,
+                                lon = t.Lon,
+                                altitude_ft = t.AltFt,
+                                groundspeed_kt = t.GroundSpeedKt,
+                                heading_deg = t.HeadingDeg,
+                                fuel_lb = t.FuelLb
+                            }
+                            : null;
+
+                        _browser.CoreWebView2.PostWebMessageAsJson(
+                            System.Text.Json.JsonSerializer.Serialize(
+                                new { type = "navdeck:telemetry", id = requestId, telemetry }));
+                    }
+                    catch (Exception)
+                    {
+                        // Ignore malformed or unrelated web messages.
+                    }
+                };
+
                 // Apply desktop-only styling to NAVDECK pages.
                 _browser.CoreWebView2.NavigationCompleted +=
                     async (_, args) =>
@@ -291,9 +371,9 @@ internal sealed class DesktopForm : Form
                 };
 
                 _browser.CoreWebView2.Navigate(
-                    "https://test.navdeck.online"
+                    "https://navdeck-desktop.local/map.html"
                 );
-                _status.Text = "NAVDECK Desktop | Connected to test server";
+                _status.Text = "NAVDECK Desktop | Live map";
             }
             catch (Exception ex)
             {
