@@ -323,6 +323,15 @@ internal sealed class DesktopForm : Form
                     })();
                     """);
 
+                // Prevent unauthenticated navigation to local app content.
+                _browser.CoreWebView2.NavigationStarting += (_, navigation) =>
+                {
+                    if (_authenticated) return;
+                    if (Uri.TryCreate(navigation.Uri, UriKind.Absolute, out var destination) &&
+                        destination.Host == "navdeck-desktop.local")
+                        navigation.Cancel = true;
+                };
+
                 // Only the packaged desktop map may request simulator telemetry.
                 const string mapOrigin = "https://navdeck-desktop.local";
                 var mapFolder = Path.Combine(AppContext.BaseDirectory, "desktop-map");
@@ -379,7 +388,7 @@ internal sealed class DesktopForm : Form
                             !id.TryGetInt32(out int requestId))
                             return;
 
-                        var sample = _bridge?.LiveAircraftSample;
+                        var sample = _authenticated ? _bridge?.LiveAircraftSample : null;
                         object? telemetry = sample is { } t
                             ? new
                             {
