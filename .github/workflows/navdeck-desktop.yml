@@ -60,6 +60,24 @@ jobs:
             throw "Packaged Leaflet stylesheet is incomplete."
           }
 
+      - name: Bundle public-domain aircraft imagery
+        shell: pwsh
+        run: |
+          $assets = "desktop-output/desktop-map/assets"
+          New-Item -ItemType Directory -Force $assets | Out-Null
+          $aircraft = "https://upload.wikimedia.org/wikipedia/commons/4/42/Canjet_takeoff.jpg"
+          try {
+            Invoke-WebRequest -Uri $aircraft -OutFile "$assets/aircraft.jpg" -ErrorAction Stop
+            if ((Get-Item "$assets/aircraft.jpg").Length -lt 10000) {
+              throw "Aircraft photo downloaded incompletely."
+            }
+            Write-Host "Public-domain aircraft image bundled."
+          }
+          catch {
+            Write-Warning "Aircraft photo unavailable; the dashboard will show its built-in vector illustration."
+            Remove-Item "$assets/aircraft.jpg" -ErrorAction SilentlyContinue
+          }
+
       - name: Verify packaged live map
         shell: pwsh
         run: |
