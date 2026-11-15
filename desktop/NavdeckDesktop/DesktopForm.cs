@@ -589,6 +589,12 @@ internal sealed class DesktopForm : Form
                             route = _bridge?.LiveFlightRoute,
                             stage = _bridge?.LiveFlightStage,
                             waypoints = _bridge?.LiveWaypointSummary,
+                            flight_plan = _bridge?.LivePendingWaypoints
+                                .Where(f => double.IsFinite(f.Lat) && double.IsFinite(f.Lon) &&
+                                    Math.Abs(f.Lat) <= 90 && Math.Abs(f.Lon) <= 180)
+                                .Take(300)
+                                .Select(f => new { ident = f.Ident, lat = f.Lat, lon = f.Lon })
+                                .ToArray(),
                             sim_connected = _bridge?.SimulatorConnected == true,
                             navdeck_connected = _bridge?.NavdeckConnected == true
                         };
