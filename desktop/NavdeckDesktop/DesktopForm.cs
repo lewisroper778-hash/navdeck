@@ -8,7 +8,6 @@ internal sealed class DesktopForm : Form
     private MainForm? _bridge;
     private readonly Dictionary<string, Button> _navButtons = new();
     private bool _authenticated;
-    private readonly Panel _loginOverlay = new() { Visible = false };
     private readonly CheckBox _staySignedIn = new()
     {
         Text = "Stay signed in on this computer",
@@ -247,25 +246,8 @@ internal sealed class DesktopForm : Form
         Controls.Add(sidebar);
         Controls.Add(toolbar);
 
-        // Keep the workspace inaccessible until the existing NAVDECK account
-        // is authenticated by Clerk on the trusted NAVDECK sign-in website.
-        var loginTitle = new Label
-        {
-            Text = "NAVDECK",
-            ForeColor = Color.White,
-            Font = new Font("Segoe UI Semibold", 28, FontStyle.Bold),
-            AutoSize = true,
-            Location = new Point(40, 38)
-        };
-        var loginSubtitle = new Label
-        {
-            Text = "Sign in to your flight operations workspace",
-            ForeColor = Color.FromArgb(166, 188, 216),
-            Font = new Font("Segoe UI", 12f),
-            AutoSize = true,
-            Location = new Point(44, 100)
-        };
-        _staySignedIn.Location = new Point(44, 147);
+        // NAVDECK credentials are entered only into the trusted Clerk website.
+        // The desktop shell remains locked until Clerk reports an active session.
         var preferenceFile = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "NAVDECK", "Desktop", "stay-signed-in.txt");
@@ -278,8 +260,8 @@ internal sealed class DesktopForm : Form
                 _staySignedIn.Checked ? "true" : "false");
         };
         // The trusted Clerk login page remains visible inside WebView2.
-        // Preference is displayed in the native navigation while signed out.
         navigation.Controls.Add(_staySignedIn);
+        foreach (var button in _navButtons.Values) button.Enabled = false;
 
         Shown += async (_, _) =>
         {
@@ -321,6 +303,7 @@ internal sealed class DesktopForm : Form
                         if (_authenticated) return;
                         _authenticated = true;
                         _staySignedIn.Visible = false;
+                        foreach (var button in _navButtons.Values) button.Enabled = true;
                         _browser.CoreWebView2.Navigate("https://navdeck-desktop.local/map.html");
                         SelectNavigation("◈   Overview");
                     }
