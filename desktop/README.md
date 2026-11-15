@@ -23,7 +23,7 @@ The app workspace is locked until Clerk reports an authenticated session. Signed
 - The live dashboard shows the aircraft's position, heading, altitude and groundspeed, a flight trail, and (when paired with NAVDECK) route fixes and a direct-to-next line.
 - **Simulator Connection** in the left sidebar opens the existing connection controls **inside** the desktop window. Enter a NAVDECK bridge connection code there to enable NAVDECK cloud flight/waypoint synchronisation; account sign-in and bridge pairing are separate.
 - The dashboard works without an active flight plan; planned route fixes appear after the bridge is paired and the flight plan is loaded.
-- The flight map uses online Esri map tiles and Leaflet scripts, so an internet connection is required to render its base map.
+- Leaflet JavaScript and CSS are bundled in the Windows installer. The aircraft marker and flight-plan overlays run locally, but the Esri base map tiles still need an internet connection.
 
 ## Scope and testing
 
