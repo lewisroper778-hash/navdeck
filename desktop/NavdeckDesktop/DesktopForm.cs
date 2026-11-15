@@ -8,12 +8,7 @@ internal sealed class DesktopForm : Form
     private MainForm? _bridge;
     private readonly Dictionary<string, Button> _navButtons = new();
     private bool _authenticated;
-    private readonly Panel _loginOverlay = new()
-    {
-        Dock = DockStyle.Fill,
-        BackColor = Color.FromArgb(12, 17, 27),
-        Visible = true
-    };
+    private readonly Panel _loginOverlay = new() { Visible = false };
     private readonly CheckBox _staySignedIn = new()
     {
         Text = "Stay signed in on this computer",
@@ -271,16 +266,20 @@ internal sealed class DesktopForm : Form
             Location = new Point(44, 100)
         };
         _staySignedIn.Location = new Point(44, 147);
+        var preferenceFile = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "NAVDECK", "Desktop", "stay-signed-in.txt");
+        _staySignedIn.Checked = !File.Exists(preferenceFile) ||
+            File.ReadAllText(preferenceFile).Trim() == "true";
         _staySignedIn.CheckedChanged += (_, _) =>
-            Properties.Settings.Default.StaySignedIn = _staySignedIn.Checked;
-        _staySignedIn.Checked = Properties.Settings.Default.StaySignedIn;
-        _loginOverlay.Controls.Add(loginTitle);
-        _loginOverlay.Controls.Add(loginSubtitle);
-        _loginOverlay.Controls.Add(_staySignedIn);
-        // Login is performed in the embedded trusted Clerk page, not in a
-        // custom password form; NAVDECK Desktop never handles passwords.
-        Controls.Add(_loginOverlay);
-        _loginOverlay.BringToFront();
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(preferenceFile)!);
+            File.WriteAllText(preferenceFile,
+                _staySignedIn.Checked ? "true" : "false");
+        };
+        // The trusted Clerk login page remains visible inside WebView2.
+        // Preference is displayed in the native navigation while signed out.
+        navigation.Controls.Add(_staySignedIn);
 
         Shown += async (_, _) =>
         {
@@ -321,7 +320,7 @@ internal sealed class DesktopForm : Form
                             signedIn.ValueKind != System.Text.Json.JsonValueKind.True) return;
                         if (_authenticated) return;
                         _authenticated = true;
-                        _loginOverlay.Visible = false;
+                        _staySignedIn.Visible = false;
                         _browser.CoreWebView2.Navigate("https://navdeck-desktop.local/map.html");
                         SelectNavigation("◈   Overview");
                     }
