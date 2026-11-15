@@ -118,6 +118,33 @@ jobs:
           if ($count -lt 1) { throw "No inline map JavaScript found to validate." }
           Write-Host "Validated $count inline map script(s)."
 
+      - name: Capture dashboard visual preview
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $edge = "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe"
+          if (-not (Test-Path $edge)) {
+            Write-Warning "Microsoft Edge unavailable for preview."
+            exit 0
+          }
+          $source = (Resolve-Path "desktop-output/desktop-map/map.html").Path.Replace('\', '/')
+          $url = "file:///$source"
+          $shot = Join-Path $PWD "desktop-ui-preview.png"
+          & $edge --headless --disable-gpu --no-first-run --hide-scrollbars --virtual-time-budget=6000 "--window-size=1600,950" "--screenshot=$shot" "$url"
+          if (Test-Path $shot) {
+            Write-Host "UI preview captured."
+          } else {
+            Write-Warning "UI preview could not be captured."
+          }
+
+      - name: Upload dashboard visual preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: NAVDECK-Desktop-UI-Preview
+          path: desktop-ui-preview.png
+          if-no-files-found: warn
+          retention-days: 7
+
       - name: Install Inno Setup
         shell: pwsh
         run: choco install innosetup --yes --no-progress
