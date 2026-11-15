@@ -55,6 +55,31 @@ internal sealed class DesktopForm : Form
         }
     }
 
+    private void StartSimulatorBridge()
+    {
+        try
+        {
+            _bridge = new MainForm(false)
+            {
+                ShowInTaskbar = false,
+                Opacity = 0
+            };
+            _bridge.Show(this);
+            _bridge.Hide();
+            _bridge.Opacity = 1;
+            _statusTimer.Start();
+        }
+        catch (Exception ex)
+        {
+            _simStatus.Text = "Simulator connection unavailable";
+            _simStatus.ForeColor = Color.FromArgb(245, 158, 158);
+            MessageBox.Show(
+                "The simulator connection could not start. You can still use NAVDECK.\n\n" +
+                ex.Message, "NAVDECK Desktop", MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+        }
+    }
+
     public DesktopForm()
     {
         Text = "NAVDECK Desktop";
@@ -255,6 +280,23 @@ internal sealed class DesktopForm : Form
         Controls.Add(_browser);
         Controls.Add(sidebar);
         Controls.Add(toolbar);
+        toolbar.Visible = false;
+        sidebar.Visible = false;
+        var loginHeader = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 64,
+            BackColor = Color.FromArgb(13, 19, 30)
+        };
+        loginHeader.Controls.Add(new Label
+        {
+            Text = "✈  NAVDECK  /  SECURE SIGN IN",
+            ForeColor = Color.White,
+            Font = new Font("Segoe UI Semibold", 13f, FontStyle.Bold),
+            Location = new Point(24, 20),
+            AutoSize = true
+        });
+        Controls.Add(loginHeader);
 
         // NAVDECK credentials are entered only into the trusted Clerk website.
         // The desktop shell remains locked until Clerk reports an active session.
@@ -279,8 +321,11 @@ internal sealed class DesktopForm : Form
             catch (IOException) { /* Do not block sign-in for a preference write. */ }
             catch (UnauthorizedAccessException) { }
         };
-        // The trusted Clerk login page remains visible inside WebView2.
-        navigation.Controls.Add(_staySignedIn);
+        // The trusted Clerk login page is the entire workspace until
+        // an authenticated Clerk session is confirmed.
+        _staySignedIn.Dock = DockStyle.Right;
+        _staySignedIn.Padding = new Padding(12, 0, 22, 0);
+        loginHeader.Controls.Add(_staySignedIn);
         var signOutButton = new Button
         {
             Text = "↪   Sign out",
@@ -307,6 +352,9 @@ internal sealed class DesktopForm : Form
             catch (Exception) { }
             _browser.CoreWebView2.CookieManager.DeleteAllCookies();
             _authenticated = false;
+            toolbar.Visible = false;
+            sidebar.Visible = false;
+            loginHeader.Visible = true;
             foreach (var button in _navButtons.Values) button.Enabled = false;
             signOutButton.Visible = false;
             _staySignedIn.Visible = true;
@@ -318,27 +366,24 @@ internal sealed class DesktopForm : Form
 
         Shown += async (_, _) =>
         {
-            _bridge = new MainForm(false);
-            _bridge.ShowInTaskbar = false;
-            _bridge.Opacity = 0;
-            _bridge.Show(this);
-            _bridge.Hide();
-            _bridge.Opacity = 1;
-            _statusTimer.Start();
-
             try
             {
                 // Store WebView2 browser data in the user's profile, not Program Files.
                 var profile = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                     "NAVDECK", "Desktop", "WebView2");
+                if (!_staySignedIn.Checked && Directory.Exists(profile))
+                {
+                    try { Directory.Delete(profile, recursive: true); }
+                    catch (IOException) { /* A previous browser instance may still be exiting. */ }
+                    catch (UnauthorizedAccessException) { }
+                }
                 Directory.CreateDirectory(profile);
                 var environment = await Microsoft.Web.WebView2.Core.CoreWebView2Environment
                     .CreateAsync(userDataFolder: profile);
                 await _browser.EnsureCoreWebView2Async(environment);
                 _browser.CoreWebView2.Settings.AreDevToolsEnabled = false;
-                if (!_staySignedIn.Checked)
-                    _browser.CoreWebView2.CookieManager.DeleteAllCookies();
+
                 // The signed-in signal must originate from the trusted NAVDECK site.
                 _browser.CoreWebView2.WebMessageReceived += (_, args) =>
                 {
@@ -355,8 +400,12 @@ internal sealed class DesktopForm : Form
                             signedIn.ValueKind != System.Text.Json.JsonValueKind.True) return;
                         if (_authenticated) return;
                         _authenticated = true;
-                        _staySignedIn.Visible = false;
+                        loginHeader.Visible = false;
+                        toolbar.Visible = true;
+                        sidebar.Visible = true;
                         signOutButton.Visible = true;
+                        if (_bridge is null || _bridge.IsDisposed)
+                            StartSimulatorBridge();
                         foreach (var button in _navButtons.Values) button.Enabled = true;
                         _browser.CoreWebView2.Navigate("https://navdeck-desktop.local/map.html");
                         SelectNavigation("◈   Overview");
