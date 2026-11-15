@@ -140,6 +140,7 @@ button{font:inherit;cursor:pointer;color:inherit}
   <div id="map-title"><div class="label">NAVDECK • TRACKING</div><div class="title">Live operations</div></div>
   <div id="map-toolbar">
     <button class="map-button" id="map-mode" type="button" title="Switch map view">Satellite view ▾</button>
+    <button class="map-button" id="toggle-traffic" type="button" title="Toggle live VATSIM flight-simulation traffic">✈  VATSIM traffic · ON</button>
     <div id="map-controls">
       <button class="map-button map-icon-button" id="zoom-in" aria-label="Zoom in">+</button>
       <button class="map-button map-icon-button" id="zoom-out" aria-label="Zoom out">−</button>
@@ -151,7 +152,7 @@ button{font:inherit;cursor:pointer;color:inherit}
   <div id="bottom-cards">
     <section class="bottom-card"><div class="card-eyebrow"><span class="badge">✈</span> LIVE AIRCRAFT</div><div class="card-number" id="card-aircraft">No connection</div><div class="card-note"><span id="card-speed">— KT G/S</span><span id="card-flight-state">● Awaiting simulator</span></div></section>
     <section class="bottom-card"><div class="card-eyebrow"><span class="badge">↗</span> CURRENT FLIGHT</div><div class="card-number" id="card-route">— → —</div><div class="card-note"><span id="card-fix">No flight plan</span><span id="card-phase">Standby</span></div></section>
-    <section class="bottom-card"><div class="card-eyebrow"><span class="badge">◎</span> CONNECTION STATUS</div><div class="card-number" id="card-online">Standby</div><div class="card-note"><span>FSUIPC7 / NAVDECK</span><span id="card-link">Not paired</span></div></section>
+    <section class="bottom-card"><div class="card-eyebrow"><span class="badge">◎</span> LIVE VATSIM NETWORK</div><div class="card-number" id="card-online">Checking traffic</div><div class="card-note"><span>Virtual pilots · live feed</span><span id="card-link">Not paired</span></div></section>
   </div>
   <div id="offline-overlay"><h3>Map imagery unavailable</h3><p>Your live flight data and flight plan will still update. Check the internet connection for satellite imagery.</p></div>
 </main>
@@ -161,7 +162,7 @@ button{font:inherit;cursor:pointer;color:inherit}
 (function(){
   'use strict';
   var $=function(id){return document.getElementById(id);};
-  var state={follow:true,mode:'satellite',marker:null,trail:[],trailLayer:null,flightLine:null,directLine:null,flightPins:null,fixes:[],signature:'',busy:false,latest:null,errors:0};
+  var state={follow:true,mode:'satellite',marker:null,trail:[],trailLayer:null,flightLine:null,directLine:null,flightPins:null,fixes:[],signature:'',busy:false,latest:null,errors:0,trafficLayer:null,trafficPilots:[],trafficVisible:true,trafficLoaded:false,trafficBusy:false,trafficRenderedAt:0};
   var setText=function(id,value,fallback){$(id).textContent=value===undefined||value===null||value===''?fallback:String(value);};
   var fmt=function(n,d){return Number.isFinite(n)?Number(n).toFixed(d||0):'—';};
   var clean=function(t){return typeof t==='string'?t.trim():'';};
@@ -183,6 +184,7 @@ button{font:inherit;cursor:pointer;color:inherit}
   }
   setLayer('satellite');
   state.flightPins=L.layerGroup().addTo(map);
+  state.trafficLayer=L.layerGroup().addTo(map);
   function toggleFollow(on){
     state.follow=on;
     $('map-follow').style.background=on?'#603a98':'#242429';
@@ -197,6 +199,11 @@ button{font:inherit;cursor:pointer;color:inherit}
   $('zoom-in').addEventListener('click',function(){map.zoomIn();});
   $('zoom-out').addEventListener('click',function(){map.zoomOut();});
   $('map-mode').addEventListener('click',function(){setLayer(state.mode==='satellite'?'gray':'satellite');});
+  $('toggle-traffic').addEventListener('click',function(){
+    state.trafficVisible=!state.trafficVisible;
+    $('toggle-traffic').textContent='✈  VATSIM traffic · '+(state.trafficVisible?'ON':'OFF');
+    renderTraffic(true);
+  });
   $('map-fit').addEventListener('click',fitRoute);
   $('route-action').addEventListener('click',fitRoute);
   $('map-follow').addEventListener('click',function(){toggleFollow(!state.follow);});
@@ -248,7 +255,7 @@ button{font:inherit;cursor:pointer;color:inherit}
     setText('card-route',route&&route!=='Departure —  →  Destination —'?route:'— → —');
     setText('card-fix',state.fixes[0]?String(state.fixes[0].ident||'FIX')+' next':'No flight plan');
     setText('card-phase',clean(t&&t.stage)||'Standby');
-    setText('card-online',t&&t.sim_connected?'Simulator online':'Offline');
+    if(!state.trafficLoaded)setText('card-online','Checking traffic');
     setText('card-link',t&&t.navdeck_connected?'Cloud connected':'Not paired');
     $('card-flight-state').style.color=t&&t.sim_connected?'#54d9a2':'#a9a9b3';
     $('card-link').style.color=t&&t.navdeck_connected?'#54d9a2':'#a9a9b3';
@@ -283,6 +290,50 @@ button{font:inherit;cursor:pointer;color:inherit}
       else state.directLine.setLatLngs(leg);
     }else if(state.directLine){map.removeLayer(state.directLine);state.directLine=null;}
   }
+  function renderTraffic(force){
+    if(!state.trafficLayer)return;
+    if(!force&&Date.now()-state.trafficRenderedAt<5000)return;
+    state.trafficRenderedAt=Date.now();
+    state.trafficLayer.clearLayers();
+    if(!state.trafficVisible)return;
+    var bounds=map.getBounds().pad(.28),visible=0;
+    for(var i=0;i<state.trafficPilots.length&&visible<140;i++){
+      var p=state.trafficPilots[i];
+      if(!p||!Number.isFinite(p.lat)||!Number.isFinite(p.lon)||
+          !bounds.contains([p.lat,p.lon]))continue;
+      var heading=Number.isFinite(p.heading_deg)?p.heading_deg:0;
+      var aircraftIcon=L.divIcon({
+        className:'',
+        iconSize:[22,22],iconAnchor:[11,11],
+        html:'<div style="width:22px;height:22px;transform:rotate('+heading+'deg);filter:drop-shadow(0 2px 3px #000c)">'+
+          '<svg viewBox="0 0 24 24"><path d="M12 2 L15 10 L22 14 L22 16 L13.5 14.5 L13.5 20 L16 22 L12 21 L8 22 L10.5 20 L10.5 14.5 L2 16 L2 14 L9 10 Z" fill="#eceef4" stroke="#474b53" stroke-width="1"/></svg></div>'
+      });
+      var tip=document.createElement('span');
+      tip.textContent=String(p.callsign||'VATSIM flight')+' · '+
+        String(p.aircraft||'Aircraft')+' · '+fmt(p.altitude_ft)+' ft';
+      L.marker([p.lat,p.lon],{icon:aircraftIcon,opacity:.88,zIndexOffset:-200})
+        .bindTooltip(tip,{direction:'top',opacity:.95}).addTo(state.trafficLayer);
+      visible++;
+    }
+  }
+  map.on('moveend zoomend',function(){renderTraffic(false);});
+  async function updateTraffic(){
+    if(state.trafficBusy||!window.navdeckDesktop||
+       typeof window.navdeckDesktop.getTraffic!=='function')return;
+    state.trafficBusy=true;
+    try{
+      var pilots=await window.navdeckDesktop.getTraffic();
+      if(Array.isArray(pilots)){
+        state.trafficPilots=pilots;
+        state.trafficLoaded=true;
+        setText('card-online',pilots.length.toLocaleString()+' pilots');
+        renderTraffic(true);
+      }
+    }catch(e){
+      if(!state.trafficLoaded)setText('card-online','Feed unavailable');
+    }finally{state.trafficBusy=false;}
+  }
+
   async function tick(){
     if(state.busy)return;
     if(!window.navdeckDesktop||typeof window.navdeckDesktop.getTelemetry!=='function'){setText('connection','Native simulator bridge unavailable');return;}
@@ -297,7 +348,9 @@ button{font:inherit;cursor:pointer;color:inherit}
   }
   toggleFollow(true);
   tick();
+  updateTraffic();
   setInterval(tick,1000);
+  setInterval(updateTraffic,30000);
 })();
 </script>
 </body>
