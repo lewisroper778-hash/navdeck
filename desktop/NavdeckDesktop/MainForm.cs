@@ -14,6 +14,7 @@ internal sealed class MainForm : Form
     public string LiveFlightRoute => _flightRoute.Text;
     public string LiveFlightStage => _stage.Text;
     public string LiveWaypointSummary => _waypointCount.Text;
+    public IReadOnlyList<RouteFix> LivePendingWaypoints => _watcher.Pending;
 
 
     private readonly Config _config = Config.Load();
@@ -614,7 +615,22 @@ internal sealed class MainForm : Form
         {
             var f = await _api.GetFlightAsync();
             SetStatus(_navStatus, f is null ? "NAVDECK connected · import a flight before pushback" : $"Filling {f.Callsign} {f.Origin} → {f.Destination}", f is null ? Theme.Amber : Theme.Green);
-            if (f is not null) _watcher.SetRoute(f.Pending);
+            if (f is not null)
+            {
+                _watcher.SetRoute(f.Pending);
+                _flightCallsign.Text = string.IsNullOrWhiteSpace(f.Callsign)
+                    ? "ACTIVE FLIGHT" : f.Callsign;
+                _flightRoute.Text = $"{f.Origin ?? "—"}  →  {f.Destination ?? "—"}";
+                _waypointCount.Text = $"{f.Pending.Count} pending waypoints";
+                _routeStatus.Text = $"Flight plan synchronised · {DateTime.UtcNow:HH:mm}Z";
+            }
+            else
+            {
+                _watcher.Reset();
+                _flightCallsign.Text = "NO ACTIVE FLIGHT";
+                _flightRoute.Text = "Departure —  →  Destination —";
+                _waypointCount.Text = "0 pending waypoints";
+            }
             _lastRoute = DateTime.UtcNow;
         }
         catch (AuthException ex)
