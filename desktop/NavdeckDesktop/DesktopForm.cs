@@ -67,9 +67,9 @@ internal sealed class DesktopForm : Form
         {
             bool active = item.Key == selected;
             item.Value.BackColor = active
-                ? Color.FromArgb(28, 56, 91) : Color.FromArgb(13, 19, 30);
+                ? Color.FromArgb(53, 53, 58) : Color.FromArgb(29, 29, 33);
             item.Value.ForeColor = active
-                ? Color.FromArgb(110, 212, 255) : Color.FromArgb(172, 190, 215);
+                ? Color.White : Color.FromArgb(163, 163, 172);
         }
     }
 
@@ -127,12 +127,12 @@ internal sealed class DesktopForm : Form
 
     public DesktopForm()
     {
-        Text = "NAVDECK Desktop";
+        Text = "NAVDECK — Flight Operations";
         Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
         WindowState = FormWindowState.Maximized;
         MinimumSize = new Size(1100, 720);
         Font = new Font("Segoe UI", 10f);
-        BackColor = Color.FromArgb(12, 17, 27);
+        BackColor = Color.FromArgb(22, 23, 26);
 
         var toolbar = new Panel
         {
@@ -219,9 +219,9 @@ internal sealed class DesktopForm : Form
         var sidebar = new Panel
         {
             Dock = DockStyle.Left,
-            Width = 248,
-            BackColor = Color.FromArgb(13, 19, 30),
-            Padding = new Padding(18, 18, 12, 12)
+            Width = 264,
+            BackColor = Color.FromArgb(29, 29, 33),
+            Padding = new Padding(15, 12, 12, 12)
         };
 
         var navigation = new FlowLayoutPanel
@@ -236,12 +236,12 @@ internal sealed class DesktopForm : Form
         var clockPanel = new Panel
         {
             Dock = DockStyle.Bottom,
-            Height = 105,
-            BackColor = Color.FromArgb(19, 29, 45)
+            Height = 166,
+            BackColor = Color.FromArgb(31, 31, 35)
         };
         clockPanel.Controls.Add(new Label
         {
-            Text = "CURRENT ZULU TIME",
+            Text = "LOCAL OPERATIONS / ZULU",
             Font = new Font("Segoe UI Semibold", 8f, FontStyle.Bold),
             ForeColor = Color.FromArgb(124, 154, 188),
             Location = new Point(14, 12),
@@ -260,11 +260,11 @@ internal sealed class DesktopForm : Form
 
         var logo = new Label
         {
-            Text = "✈  NAVDECK",
-            ForeColor = Color.White,
-            Font = new Font("Segoe UI Semibold", 20, FontStyle.Bold),
-            Width = 210,
-            Height = 72,
+            Text = "↗  NAVDECK",
+            ForeColor = Color.FromArgb(244, 244, 248),
+            Font = new Font("Segoe UI Semibold", 17, FontStyle.Bold),
+            Width = 222,
+            Height = 56,
             TextAlign = ContentAlignment.MiddleLeft
         };
         navigation.Controls.Add(logo);
@@ -282,20 +282,20 @@ internal sealed class DesktopForm : Form
             var button = new Button
             {
                 Text = title,
-                Width = 208,
-                Height = 48,
+                Width = 228,
+                Height = 42,
                 TextAlign = ContentAlignment.MiddleLeft,
                 FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(13, 19, 30),
-                ForeColor = Color.FromArgb(172, 190, 215),
-                Font = new Font("Segoe UI Semibold", 10),
-                Margin = new Padding(0, 3, 0, 3),
+                BackColor = Color.FromArgb(29, 29, 33),
+                ForeColor = Color.FromArgb(163, 163, 172),
+                Font = new Font("Segoe UI", 9.75f),
+                Margin = new Padding(0, 2, 0, 2),
                 Cursor = Cursors.Hand
             };
 
             button.FlatAppearance.BorderSize = 0;
             button.FlatAppearance.MouseOverBackColor =
-                Color.FromArgb(36, 51, 78);
+                Color.FromArgb(50, 50, 55);
 
             _navButtons[title] = button;
             button.Click += (_, _) =>
@@ -324,11 +324,11 @@ internal sealed class DesktopForm : Form
         var connectionButton = new Button
         {
             Text = "⚙   Simulator Connection",
-            Width = 208,
-            Height = 48,
+            Width = 228,
+            Height = 42,
             TextAlign = ContentAlignment.MiddleLeft,
             FlatStyle = FlatStyle.Flat,
-            BackColor = Color.FromArgb(30, 54, 83),
+            BackColor = Color.FromArgb(43, 43, 48),
             ForeColor = Color.White,
             Margin = new Padding(0, 16, 0, 3),
             Cursor = Cursors.Hand
@@ -507,7 +507,7 @@ internal sealed class DesktopForm : Form
                         if (_authenticated || _signingOut) return;
                         _authenticated = true;
                         loginHeader.Visible = false;
-                        toolbar.Visible = true;
+                        toolbar.Visible = false;
                         sidebar.Visible = true;
                         signOutButton.Visible = true;
                         if (_bridge is null || _bridge.IsDisposed)
