@@ -122,7 +122,17 @@ internal sealed class DesktopForm : Form
             }
         };
 
-        FormClosed += (_, _) => _statusTimer.Stop();
+        FormClosed += (_, _) =>
+        {
+            _statusTimer.Stop();
+            if (!_staySignedIn.Checked && _browser.CoreWebView2 is not null)
+            {
+                try { _browser.CoreWebView2.CookieManager.DeleteAllCookies(); }
+                catch (Exception) { /* Browser may already be disposed. */ }
+            }
+            if (_bridge is { IsDisposed: false })
+                _bridge.Close();
+        };
 
 
         // Desktop navigation: independent of the website's existing navbar.
@@ -251,13 +261,23 @@ internal sealed class DesktopForm : Form
         var preferenceFile = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "NAVDECK", "Desktop", "stay-signed-in.txt");
-        _staySignedIn.Checked = !File.Exists(preferenceFile) ||
-            File.ReadAllText(preferenceFile).Trim() == "true";
+        try
+        {
+            _staySignedIn.Checked = !File.Exists(preferenceFile) ||
+                File.ReadAllText(preferenceFile).Trim() == "true";
+        }
+        catch (IOException) { _staySignedIn.Checked = false; }
+        catch (UnauthorizedAccessException) { _staySignedIn.Checked = false; }
         _staySignedIn.CheckedChanged += (_, _) =>
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(preferenceFile)!);
-            File.WriteAllText(preferenceFile,
-                _staySignedIn.Checked ? "true" : "false");
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(preferenceFile)!);
+                File.WriteAllText(preferenceFile,
+                    _staySignedIn.Checked ? "true" : "false");
+            }
+            catch (IOException) { /* Do not block sign-in for a preference write. */ }
+            catch (UnauthorizedAccessException) { }
         };
         // The trusted Clerk login page remains visible inside WebView2.
         navigation.Controls.Add(_staySignedIn);
