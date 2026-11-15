@@ -11,7 +11,7 @@ AppPublisher={#MyAppPublisher}
 DefaultDirName={autopf}\NAVDECK Desktop
 DefaultGroupName=NAVDECK Desktop
 DisableProgramGroupPage=yes
-OutputDir=..\..\desktop-installer
+OutputDir=..\desktop-installer
 OutputBaseFilename=NAVDECK-Desktop-Setup-x64
 Compression=lzma2
 SolidCompression=yes
@@ -25,7 +25,7 @@ CloseApplications=yes
 RestartApplications=yes
 
 [Files]
-Source: "..\..\desktop-output\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\desktop-output\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{autoprograms}\NAVDECK Desktop"; Filename: "{app}\{#MyAppExeName}"
