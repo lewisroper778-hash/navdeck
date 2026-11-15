@@ -21,6 +21,8 @@
   const map=L.map('map',{zoomControl:true}).setView([51.5,-0.12],5);
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',{attribution:'Tiles &copy; Esri',maxZoom:18}).addTo(map);
   let marker=null,follow=true,busy=false;
+  let routeLine=null;
+  const track=[];
   const button=document.getElementById('follow');
   button.onclick=()=>{follow=!follow;button.textContent=follow?'⌖  Following aircraft':'⌖  Follow aircraft';};
   const format=(n,d=0)=>Number.isFinite(n)?n.toFixed(d):'—';
@@ -36,8 +38,15 @@
       status.textContent='● Aircraft tracking live';status.style.color='#68e5bd';
       const heading=Number.isFinite(t.heading_deg)?t.heading_deg:0;
       const icon=L.divIcon({className:'',html:`<div class="aircraft" style="transform:rotate(${heading}deg)"><svg viewBox="0 0 24 24"><path d="M12 2 L15 10 L22 14 L22 17 L13.5 14.5 L13.5 20 L16 22 L16 23 L12 22 L8 23 L8 22 L10.5 20 L10.5 14.5 L2 17 L2 14 L9 10 Z" fill="#38bdf8" stroke="#e0f2fe" stroke-width=".7"/></svg></div>`,iconSize:[38,38],iconAnchor:[19,19]});
-      if(!marker){marker=L.marker([t.lat,t.lon],{icon}).addTo(map).bindTooltip('Live simulator aircraft');map.setView([t.lat,t.lon],9);}
+      if(!marker){marker=L.marker([t.lat,t.lon],{icon}).addTo(map).bindTooltip('Live simulator aircraft');if(follow)map.setView([t.lat,t.lon],9);}
       else{marker.setLatLng([t.lat,t.lon]);marker.setIcon(icon);if(follow)map.panTo([t.lat,t.lon],{animate:true});}
+      const last=track[track.length-1];
+      if(!last || Math.abs(last[0]-t.lat)+Math.abs(last[1]-t.lon)>0.00008){
+        track.push([t.lat,t.lon]);
+        if(track.length>1200)track.shift();
+        if(!routeLine)routeLine=L.polyline(track,{color:'#38bdf8',weight:3,opacity:.7}).addTo(map);
+        else routeLine.setLatLngs(track);
+      }
       document.getElementById('alt').textContent=format(t.altitude_ft);
       document.getElementById('gs').textContent=format(t.groundspeed_kt);
       document.getElementById('hdg').textContent=format(heading);
