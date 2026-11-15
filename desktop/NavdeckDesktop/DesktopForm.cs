@@ -432,13 +432,14 @@ internal sealed class DesktopForm : Form
                     """
                     (() => {
                       if (location.origin !== 'https://test.navdeck.online') return;
-                      let attempts = 0;
+                      // Continue monitoring while the user completes sign-in,
+                      // including slow sign-in, MFA and password recovery flows.
                       const timer = setInterval(() => {
                         if (window.Clerk?.user && window.Clerk?.session) {
                           clearInterval(timer);
                           window.chrome.webview.postMessage({type:'navdeck:auth',signedIn:true});
-                        } else if (++attempts >= 120) clearInterval(timer);
-                      }, 500);
+                        }
+                      }, 1000);
                     })();
                     """);
 
