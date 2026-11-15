@@ -60,7 +60,7 @@ internal sealed class DesktopForm : Form
     {
         try
         {
-            _bridge = new MainForm(false)
+            _bridge = new MainForm(false, promptForConnectionCode: false)
             {
                 ShowInTaskbar = false,
                 Opacity = 0
