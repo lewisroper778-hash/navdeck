@@ -281,6 +281,39 @@ internal sealed class DesktopForm : Form
         };
         // The trusted Clerk login page remains visible inside WebView2.
         navigation.Controls.Add(_staySignedIn);
+        var signOutButton = new Button
+        {
+            Text = "↪   Sign out",
+            Width = 208, Height = 46,
+            TextAlign = ContentAlignment.MiddleLeft,
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(24, 34, 51),
+            ForeColor = Color.FromArgb(181, 197, 217),
+            Cursor = Cursors.Hand,
+            Visible = false
+        };
+        signOutButton.FlatAppearance.BorderSize = 0;
+        signOutButton.Click += async (_, _) =>
+        {
+            if (_browser.CoreWebView2 is null) return;
+            // Remove local session state even if remote sign-out cannot complete.
+            try
+            {
+                if (Uri.TryCreate(_browser.CoreWebView2.Source, UriKind.Absolute,
+                    out var current) && current.Host == "test.navdeck.online")
+                    await _browser.CoreWebView2.ExecuteScriptAsync(
+                        "window.Clerk?.signOut?.()");
+            }
+            catch (Exception) { }
+            _browser.CoreWebView2.CookieManager.DeleteAllCookies();
+            _authenticated = false;
+            foreach (var button in _navButtons.Values) button.Enabled = false;
+            signOutButton.Visible = false;
+            _staySignedIn.Visible = true;
+            _browser.CoreWebView2.Navigate("https://test.navdeck.online/sign-in");
+            _status.Text = "Sign in  /  NAVDECK Desktop";
+        };
+        navigation.Controls.Add(signOutButton);
         foreach (var button in _navButtons.Values) button.Enabled = false;
 
         Shown += async (_, _) =>
@@ -323,6 +356,7 @@ internal sealed class DesktopForm : Form
                         if (_authenticated) return;
                         _authenticated = true;
                         _staySignedIn.Visible = false;
+                        signOutButton.Visible = true;
                         foreach (var button in _navButtons.Values) button.Enabled = true;
                         _browser.CoreWebView2.Navigate("https://navdeck-desktop.local/map.html");
                         SelectNavigation("◈   Overview");
