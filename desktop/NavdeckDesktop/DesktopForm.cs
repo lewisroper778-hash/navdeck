@@ -7,6 +7,22 @@ internal sealed class DesktopForm : Form
     private readonly WebView2 _browser = new();
     private MainForm? _bridge;
     private readonly Dictionary<string, Button> _navButtons = new();
+    private bool _authenticated;
+    private readonly Panel _loginOverlay = new()
+    {
+        Dock = DockStyle.Fill,
+        BackColor = Color.FromArgb(12, 17, 27),
+        Visible = true
+    };
+    private readonly CheckBox _staySignedIn = new()
+    {
+        Text = "Stay signed in on this computer",
+        Checked = true,
+        AutoSize = true,
+        ForeColor = Color.FromArgb(190, 207, 229),
+        BackColor = Color.Transparent,
+        Font = new Font("Segoe UI", 10f)
+    };
 
     private readonly Label _simStatus = new()
     {
@@ -176,6 +192,7 @@ internal sealed class DesktopForm : Form
             _navButtons[title] = button;
             button.Click += (_, _) =>
             {
+                if (!_authenticated) return;
                 SelectNavigation(title);
                 if (_browser.CoreWebView2 is not null)
                     _browser.CoreWebView2.Navigate(
@@ -235,6 +252,36 @@ internal sealed class DesktopForm : Form
         Controls.Add(sidebar);
         Controls.Add(toolbar);
 
+        // Keep the workspace inaccessible until the existing NAVDECK account
+        // is authenticated by Clerk on the trusted NAVDECK sign-in website.
+        var loginTitle = new Label
+        {
+            Text = "NAVDECK",
+            ForeColor = Color.White,
+            Font = new Font("Segoe UI Semibold", 28, FontStyle.Bold),
+            AutoSize = true,
+            Location = new Point(40, 38)
+        };
+        var loginSubtitle = new Label
+        {
+            Text = "Sign in to your flight operations workspace",
+            ForeColor = Color.FromArgb(166, 188, 216),
+            Font = new Font("Segoe UI", 12f),
+            AutoSize = true,
+            Location = new Point(44, 100)
+        };
+        _staySignedIn.Location = new Point(44, 147);
+        _staySignedIn.CheckedChanged += (_, _) =>
+            Properties.Settings.Default.StaySignedIn = _staySignedIn.Checked;
+        _staySignedIn.Checked = Properties.Settings.Default.StaySignedIn;
+        _loginOverlay.Controls.Add(loginTitle);
+        _loginOverlay.Controls.Add(loginSubtitle);
+        _loginOverlay.Controls.Add(_staySignedIn);
+        // Login is performed in the embedded trusted Clerk page, not in a
+        // custom password form; NAVDECK Desktop never handles passwords.
+        Controls.Add(_loginOverlay);
+        _loginOverlay.BringToFront();
+
         Shown += async (_, _) =>
         {
             _bridge = new MainForm(false);
@@ -256,6 +303,44 @@ internal sealed class DesktopForm : Form
                     .CreateAsync(userDataFolder: profile);
                 await _browser.EnsureCoreWebView2Async(environment);
                 _browser.CoreWebView2.Settings.AreDevToolsEnabled = false;
+                if (!_staySignedIn.Checked)
+                    await _browser.CoreWebView2.CookieManager.DeleteAllCookiesAsync();
+                // The signed-in signal must originate from the trusted NAVDECK site.
+                _browser.CoreWebView2.WebMessageReceived += (_, args) =>
+                {
+                    if (!Uri.TryCreate(args.Source, UriKind.Absolute, out var source) ||
+                        source.Scheme != Uri.UriSchemeHttps ||
+                        source.Host != "test.navdeck.online")
+                        return;
+                    try
+                    {
+                        using var document = System.Text.Json.JsonDocument.Parse(args.WebMessageAsJson);
+                        if (!document.RootElement.TryGetProperty("type", out var type) ||
+                            type.GetString() != "navdeck:auth") return;
+                        if (!document.RootElement.TryGetProperty("signedIn", out var signedIn) ||
+                            signedIn.ValueKind != System.Text.Json.JsonValueKind.True) return;
+                        if (_authenticated) return;
+                        _authenticated = true;
+                        _loginOverlay.Visible = false;
+                        _browser.CoreWebView2.Navigate("https://navdeck-desktop.local/map.html");
+                        SelectNavigation("◈   Overview");
+                    }
+                    catch (System.Text.Json.JsonException) { }
+                };
+                await _browser.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+                    """
+                    (() => {
+                      if (location.origin !== 'https://test.navdeck.online') return;
+                      let attempts = 0;
+                      const timer = setInterval(() => {
+                        if (window.Clerk?.user && window.Clerk?.session) {
+                          clearInterval(timer);
+                          window.chrome.webview.postMessage({type:'navdeck:auth',signedIn:true});
+                        } else if (++attempts >= 120) clearInterval(timer);
+                      }, 500);
+                    })();
+                    """);
+
                 // Only the packaged desktop map may request simulator telemetry.
                 const string mapOrigin = "https://navdeck-desktop.local";
                 var mapFolder = Path.Combine(AppContext.BaseDirectory, "desktop-map");
@@ -414,9 +499,9 @@ internal sealed class DesktopForm : Form
                 };
 
                 _browser.CoreWebView2.Navigate(
-                    "https://navdeck-desktop.local/map.html"
+                    "https://test.navdeck.online/sign-in"
                 );
-                _status.Text = "Overview  /  NAVDECK Desktop";
+                _status.Text = "Sign in  /  NAVDECK Desktop";
             }
             catch (Exception ex)
             {
