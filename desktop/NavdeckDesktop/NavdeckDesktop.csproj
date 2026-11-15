@@ -29,6 +29,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Data/runways.csv" LogicalName="NavdeckLink.Data.runways.csv" />
+    <Content Include="../ui/map.html" Link="desktop-map/map.html" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
   </ItemGroup>
 
 </Project>
