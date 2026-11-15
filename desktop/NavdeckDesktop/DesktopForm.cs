@@ -257,6 +257,9 @@ internal sealed class DesktopForm : Form
             AutoSize = true
         });
         sidebar.Controls.Add(clockPanel);
+        _simStatus.Location = new Point(14, 70);
+        _simStatus.Font = new Font("Segoe UI", 9f);
+        clockPanel.Controls.Add(_simStatus);
 
         var logo = new Label
         {
@@ -268,13 +271,57 @@ internal sealed class DesktopForm : Form
             TextAlign = ContentAlignment.MiddleLeft
         };
         navigation.Controls.Add(logo);
+
+        var navSearch = new TextBox
+        {
+            PlaceholderText = "⌕  Search navigation",
+            Width = 228,
+            Height = 38,
+            Font = new Font("Segoe UI", 10f),
+            BackColor = Color.FromArgb(40, 40, 45),
+            ForeColor = Color.White,
+            BorderStyle = BorderStyle.FixedSingle,
+            Margin = new Padding(0, 8, 0, 9)
+        };
+        navSearch.TextChanged += (_, _) =>
+        {
+            foreach (var item in _navButtons)
+                item.Value.Visible = item.Value.Text.Contains(
+                    navSearch.Text.Trim(), StringComparison.OrdinalIgnoreCase);
+        };
+        navigation.Controls.Add(navSearch);
+
+        var newFlightButton = new Button
+        {
+            Text = "＋   New flight",
+            Width = 228,
+            Height = 42,
+            TextAlign = ContentAlignment.MiddleLeft,
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(128, 60, 245),
+            ForeColor = Color.White,
+            Font = new Font("Segoe UI Semibold", 10, FontStyle.Bold),
+            Margin = new Padding(0, 0, 0, 11),
+            Cursor = Cursors.Hand
+        };
+        newFlightButton.FlatAppearance.BorderSize = 0;
+        newFlightButton.FlatAppearance.MouseOverBackColor = Color.FromArgb(145, 83, 252);
+        newFlightButton.Click += (_, _) =>
+        {
+            if (!_authenticated || _browser.CoreWebView2 is null) return;
+            ShowBrowserWorkspace();
+            SelectNavigation("▤   SimBrief");
+            _browser.CoreWebView2.Navigate("https://test.navdeck.online/settings");
+        };
+        navigation.Controls.Add(newFlightButton);
+
         navigation.Controls.Add(new Label
         {
-            Text = "FLIGHT OPERATIONS",
-            ForeColor = Color.FromArgb(105, 129, 159),
+            Text = "WORKSPACE",
+            ForeColor = Color.FromArgb(127, 127, 138),
             Font = new Font("Segoe UI", 8, FontStyle.Bold),
-            Width = 208, Height = 38,
-            Padding = new Padding(10, 14, 0, 0)
+            Width = 228, Height = 29,
+            Padding = new Padding(10, 7, 0, 0)
         });
 
         void AddNavigation(string title, string route)
@@ -346,10 +393,10 @@ internal sealed class DesktopForm : Form
         navigation.Controls.Add(new Label
         {
             Text = "SYSTEM",
-            ForeColor = Color.FromArgb(105, 129, 159),
+            ForeColor = Color.FromArgb(127, 127, 138),
             Font = new Font("Segoe UI", 8, FontStyle.Bold),
-            Width = 208, Height = 45,
-            Padding = new Padding(10, 20, 0, 0)
+            Width = 228, Height = 40,
+            Padding = new Padding(10, 17, 0, 0)
         });
         navigation.Controls.Add(connectionButton);
 
@@ -470,7 +517,10 @@ internal sealed class DesktopForm : Form
             _status.Text = "Sign in  /  NAVDECK Desktop";
             _signingOut = false;
         };
-        navigation.Controls.Add(signOutButton);
+        signOutButton.Location = new Point(10, 107);
+        signOutButton.Width = 228;
+        signOutButton.Height = 38;
+        clockPanel.Controls.Add(signOutButton);
         foreach (var button in _navButtons.Values) button.Enabled = false;
 
         Shown += async (_, _) =>
