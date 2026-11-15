@@ -8,6 +8,7 @@ internal sealed class DesktopForm : Form
     private MainForm? _bridge;
     private readonly Dictionary<string, Button> _navButtons = new();
     private bool _authenticated;
+    private bool _signingOut;
     private readonly CheckBox _staySignedIn = new()
     {
         Text = "Stay signed in on this computer",
@@ -340,17 +341,8 @@ internal sealed class DesktopForm : Form
         signOutButton.FlatAppearance.BorderSize = 0;
         signOutButton.Click += async (_, _) =>
         {
-            if (_browser.CoreWebView2 is null) return;
-            // Remove local session state even if remote sign-out cannot complete.
-            try
-            {
-                if (Uri.TryCreate(_browser.CoreWebView2.Source, UriKind.Absolute,
-                    out var current) && current.Host == "test.navdeck.online")
-                    await _browser.CoreWebView2.ExecuteScriptAsync(
-                        "window.Clerk?.signOut?.()");
-            }
-            catch (Exception) { }
-            _browser.CoreWebView2.CookieManager.DeleteAllCookies();
+            if (_browser.CoreWebView2 is null || _signingOut) return;
+            _signingOut = true;
             _authenticated = false;
             toolbar.Visible = false;
             sidebar.Visible = false;
@@ -358,8 +350,34 @@ internal sealed class DesktopForm : Form
             foreach (var button in _navButtons.Values) button.Enabled = false;
             signOutButton.Visible = false;
             _staySignedIn.Visible = true;
+            _statusTimer.Stop();
+            if (_bridge is { IsDisposed: false }) _bridge.Close();
+            _bridge = null;
+            try
+            {
+                // Revoke the Clerk session when already on the NAVDECK website.
+                if (Uri.TryCreate(_browser.CoreWebView2.Source,
+                        UriKind.Absolute, out var current) &&
+                    current.Host == "test.navdeck.online")
+                {
+                    await _browser.CoreWebView2.ExecuteScriptAsync(
+                        "window.Clerk?.signOut?.()");
+                }
+                // Cookies alone are not enough: Clerk can persist session data
+                // in local storage and IndexedDB.
+                await _browser.CoreWebView2.Profile.ClearBrowsingDataAsync();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    "Some session data could not be cleared. Close NAVDECK Desktop " +
+                    "before using this computer with another account.\n\n" +
+                    ex.Message, "NAVDECK Desktop", MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+            }
             _browser.CoreWebView2.Navigate("https://test.navdeck.online/sign-in");
             _status.Text = "Sign in  /  NAVDECK Desktop";
+            _signingOut = false;
         };
         navigation.Controls.Add(signOutButton);
         foreach (var button in _navButtons.Values) button.Enabled = false;
@@ -396,7 +414,7 @@ internal sealed class DesktopForm : Form
                             type.GetString() != "navdeck:auth") return;
                         if (!document.RootElement.TryGetProperty("signedIn", out var signedIn) ||
                             signedIn.ValueKind != System.Text.Json.JsonValueKind.True) return;
-                        if (_authenticated) return;
+                        if (_authenticated || _signingOut) return;
                         _authenticated = true;
                         loginHeader.Visible = false;
                         toolbar.Visible = true;
