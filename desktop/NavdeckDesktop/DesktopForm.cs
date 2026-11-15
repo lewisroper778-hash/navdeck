@@ -726,6 +726,23 @@ internal sealed class DesktopForm : Form
                     }
                     if (uri.Host != "test.navdeck.online") return;
                     var current = uri.AbsolutePath;
+                    if (current.StartsWith("/sign-in", StringComparison.OrdinalIgnoreCase) ||
+                        current.StartsWith("/sign-up", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // An expired web session must return to the login gate.
+                        _authenticated = false;
+                        _statusTimer.Stop();
+                        if (_bridge is { IsDisposed: false }) _bridge.Close();
+                        _bridge = null;
+                        loginHeader.Visible = true;
+                        sidebar.Visible = false;
+                        toolbar.Visible = false;
+                        signOutButton.Visible = false;
+                        _staySignedIn.Visible = true;
+                        _status.Text = "Sign in  /  NAVDECK Desktop";
+                        foreach (var button in _navButtons.Values) button.Enabled = false;
+                        return;
+                    }
                     SelectNavigation(
                         current.StartsWith("/flights", StringComparison.OrdinalIgnoreCase)
                             ? "✈   My Flights"
