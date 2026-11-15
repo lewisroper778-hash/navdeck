@@ -492,17 +492,22 @@ internal sealed class DesktopForm : Form
                             return;
 
                         var sample = _authenticated ? _bridge?.LiveAircraftSample : null;
-                        object? telemetry = sample is { } t
-                            ? new
-                            {
-                                lat = t.Lat,
-                                lon = t.Lon,
-                                altitude_ft = t.AltFt,
-                                groundspeed_kt = t.GroundSpeedKt,
-                                heading_deg = t.HeadingDeg,
-                                fuel_lb = t.FuelLb
-                            }
-                            : null;
+                        var telemetry = new
+                        {
+                            lat = sample?.Lat,
+                            lon = sample?.Lon,
+                            altitude_ft = sample?.AltFt,
+                            groundspeed_kt = sample?.GroundSpeedKt,
+                            heading_deg = sample?.HeadingDeg,
+                            fuel_lb = sample?.FuelLb,
+                            aircraft = _bridge?.SimulatorAircraft,
+                            flight = _bridge?.LiveFlightCallsign,
+                            route = _bridge?.LiveFlightRoute,
+                            stage = _bridge?.LiveFlightStage,
+                            waypoints = _bridge?.LiveWaypointSummary,
+                            sim_connected = _bridge?.SimulatorConnected == true,
+                            navdeck_connected = _bridge?.NavdeckConnected == true
+                        };
 
                         _browser.CoreWebView2.PostWebMessageAsJson(
                             System.Text.Json.JsonSerializer.Serialize(
