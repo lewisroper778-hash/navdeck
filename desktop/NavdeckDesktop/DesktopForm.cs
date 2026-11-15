@@ -5,6 +5,13 @@ namespace NavdeckLink;
 internal sealed class DesktopForm : Form
 {
     private readonly WebView2 _browser = new();
+    private readonly Panel _workspace = new() { Dock = DockStyle.Fill };
+    private readonly Panel _simulatorWorkspace = new()
+    {
+        Dock = DockStyle.Fill,
+        Visible = false,
+        BackColor = Color.FromArgb(12, 17, 27)
+    };
     private MainForm? _bridge;
     private readonly Dictionary<string, Button> _navButtons = new();
     private bool _authenticated;
@@ -62,12 +69,15 @@ internal sealed class DesktopForm : Form
         {
             _bridge = new MainForm(false, promptForConnectionCode: false)
             {
+                TopLevel = false,
+                FormBorderStyle = FormBorderStyle.None,
                 ShowInTaskbar = false,
-                Opacity = 0
+                Dock = DockStyle.Fill,
+                MinimumSize = Size.Empty
             };
-            _bridge.Show(this);
+            _simulatorWorkspace.Controls.Add(_bridge);
+            _bridge.Show();
             _bridge.Hide();
-            _bridge.Opacity = 1;
             _statusTimer.Start();
         }
         catch (Exception ex)
@@ -79,6 +89,30 @@ internal sealed class DesktopForm : Form
                 ex.Message, "NAVDECK Desktop", MessageBoxButtons.OK,
                 MessageBoxIcon.Warning);
         }
+    }
+
+    private void ShowSimulatorWorkspace()
+    {
+        if (!_authenticated || _bridge is null || _bridge.IsDisposed) return;
+        _browser.Visible = false;
+        _simulatorWorkspace.Visible = true;
+        _simulatorWorkspace.BringToFront();
+        _bridge.Show();
+        _bridge.BringToFront();
+        _status.Text = "Simulator Connection  /  NAVDECK Desktop";
+        foreach (var button in _navButtons.Values)
+        {
+            button.BackColor = Color.FromArgb(13, 19, 30);
+            button.ForeColor = Color.FromArgb(172, 190, 215);
+        }
+    }
+
+    private void ShowBrowserWorkspace()
+    {
+        _simulatorWorkspace.Visible = false;
+        if (_bridge is { IsDisposed: false }) _bridge.Hide();
+        _browser.Visible = true;
+        _browser.BringToFront();
     }
 
     public DesktopForm()
@@ -116,10 +150,7 @@ internal sealed class DesktopForm : Form
             if (_bridge is null || _bridge.IsDisposed)
                 return;
 
-            _bridge.Show();
-            _bridge.WindowState = FormWindowState.Normal;
-            _bridge.BringToFront();
-            _bridge.Activate();
+            ShowSimulatorWorkspace();
         };
 
         toolbar.Controls.Add(bridgeButton);
@@ -223,6 +254,7 @@ internal sealed class DesktopForm : Form
             button.Click += (_, _) =>
             {
                 if (!_authenticated) return;
+                ShowBrowserWorkspace();
                 SelectNavigation(title);
                 if (_browser.CoreWebView2 is not null)
                     _browser.CoreWebView2.Navigate(
@@ -261,10 +293,7 @@ internal sealed class DesktopForm : Form
             if (_bridge is null || _bridge.IsDisposed)
                 return;
 
-            _bridge.Show();
-            _bridge.WindowState = FormWindowState.Normal;
-            _bridge.BringToFront();
-            _bridge.Activate();
+            ShowSimulatorWorkspace();
         };
 
         navigation.Controls.Add(new Label
@@ -278,7 +307,9 @@ internal sealed class DesktopForm : Form
         navigation.Controls.Add(connectionButton);
 
         _browser.Dock = DockStyle.Fill;
-        Controls.Add(_browser);
+        _workspace.Controls.Add(_browser);
+        _workspace.Controls.Add(_simulatorWorkspace);
+        Controls.Add(_workspace);
         Controls.Add(sidebar);
         Controls.Add(toolbar);
         toolbar.Visible = false;
@@ -344,6 +375,7 @@ internal sealed class DesktopForm : Form
             if (_browser.CoreWebView2 is null || _signingOut) return;
             _signingOut = true;
             _authenticated = false;
+            ShowBrowserWorkspace();
             toolbar.Visible = false;
             sidebar.Visible = false;
             loginHeader.Visible = true;
@@ -423,6 +455,7 @@ internal sealed class DesktopForm : Form
                         if (_bridge is null || _bridge.IsDisposed)
                             StartSimulatorBridge();
                         foreach (var button in _navButtons.Values) button.Enabled = true;
+                        ShowBrowserWorkspace();
                         _browser.CoreWebView2.Navigate("https://navdeck-desktop.local/map.html");
                         SelectNavigation("◈   Overview");
                     }
@@ -618,7 +651,7 @@ internal sealed class DesktopForm : Form
 
                 _browser.CoreWebView2.SourceChanged += (_, _) =>
                 {
-                    if (!_authenticated ||
+                    if (!_authenticated || _simulatorWorkspace.Visible ||
                         !Uri.TryCreate(_browser.CoreWebView2.Source,
                             UriKind.Absolute, out var uri)) return;
 
