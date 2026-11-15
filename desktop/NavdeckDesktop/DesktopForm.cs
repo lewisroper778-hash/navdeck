@@ -285,7 +285,7 @@ internal sealed class DesktopForm : Form
                 await _browser.EnsureCoreWebView2Async(environment);
                 _browser.CoreWebView2.Settings.AreDevToolsEnabled = false;
                 if (!_staySignedIn.Checked)
-                    await _browser.CoreWebView2.CookieManager.DeleteAllCookiesAsync();
+                    _browser.CoreWebView2.CookieManager.DeleteAllCookies();
                 // The signed-in signal must originate from the trusted NAVDECK site.
                 _browser.CoreWebView2.WebMessageReceived += (_, args) =>
                 {
