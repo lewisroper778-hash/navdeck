@@ -10,6 +10,11 @@ internal sealed class MainForm : Form
     public bool NavdeckConnected => _api is not null;
     public string SimulatorAircraft =>
         _sim.AircraftTitle ?? "Unknown aircraft";
+    public string LiveFlightCallsign => _flightCallsign.Text;
+    public string LiveFlightRoute => _flightRoute.Text;
+    public string LiveFlightStage => _stage.Text;
+    public string LiveWaypointSummary => _waypointCount.Text;
+
 
     private readonly Config _config = Config.Load();
     private readonly FsuipcLink _sim = new();
