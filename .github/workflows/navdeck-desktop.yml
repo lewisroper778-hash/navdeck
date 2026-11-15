@@ -41,6 +41,25 @@ jobs:
           --no-restore
           --output desktop-output
 
+      - name: Bundle local Leaflet map assets
+        shell: pwsh
+        run: |
+          $vendor = "desktop-output/desktop-map/vendor"
+          New-Item -ItemType Directory -Force $vendor | Out-Null
+          $base = "https://unpkg.com/leaflet@1.9.4/dist"
+          Invoke-WebRequest -Uri "$base/leaflet.js" -OutFile "$vendor/leaflet.js"
+          Invoke-WebRequest -Uri "$base/leaflet.css" -OutFile "$vendor/leaflet.css"
+          New-Item -ItemType Directory -Force "$vendor/images" | Out-Null
+          foreach ($name in @("marker-icon.png", "marker-icon-2x.png", "marker-shadow.png", "layers.png", "layers-2x.png")) {
+            Invoke-WebRequest -Uri "$base/images/$name" -OutFile "$vendor/images/$name"
+          }
+          if ((Get-Item "$vendor/leaflet.js").Length -lt 100000) {
+            throw "Packaged Leaflet JavaScript is incomplete."
+          }
+          if ((Get-Item "$vendor/leaflet.css").Length -lt 10000) {
+            throw "Packaged Leaflet stylesheet is incomplete."
+          }
+
       - name: Verify packaged live map
         shell: pwsh
         run: |
@@ -51,6 +70,10 @@ jobs:
           $html = Get-Content $map -Raw
           if ($html -notmatch 'navdeckDesktop.getTelemetry') {
             throw "Packaged live map is missing native telemetry integration."
+          }
+          if ($html -notmatch 'vendor/leaflet.js' -or
+              -not (Test-Path "desktop-output/desktop-map/vendor/leaflet.js")) {
+            throw "The installed map must include its local Leaflet runtime."
           }
           if (-not (Test-Path "desktop-output/NavdeckDesktop.exe")) {
             throw "Published Windows executable was not found."
