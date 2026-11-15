@@ -526,9 +526,19 @@ internal sealed class DesktopForm : Form
                       // Continue monitoring while the user completes sign-in,
                       // including slow sign-in, MFA and password recovery flows.
                       const timer = setInterval(() => {
-                        if (window.Clerk?.user && window.Clerk?.session) {
+                        const clerkSession = Boolean(
+                          window.Clerk?.user && window.Clerk?.session
+                        );
+                        // NAVDECK's protected pages only mount their navbar
+                        // after the Clerk signed-in check has passed.
+                        const protectedAppVisible = Boolean(
+                          document.querySelector('[data-testid="nav-logo"]')
+                        );
+                        if (clerkSession || protectedAppVisible) {
                           clearInterval(timer);
-                          window.chrome.webview.postMessage({type:'navdeck:auth',signedIn:true});
+                          window.chrome.webview.postMessage({
+                            type:'navdeck:auth', signedIn:true
+                          });
                         }
                       }, 1000);
                     })();
