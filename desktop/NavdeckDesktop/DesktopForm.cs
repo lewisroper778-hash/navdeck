@@ -41,6 +41,15 @@ internal sealed class DesktopForm : Form
     };
 
 
+    private readonly Label _utcClock = new()
+    {
+        Text = DateTime.UtcNow.ToString("HH:mm:ss") + "Z",
+        Font = new Font("Consolas", 17, FontStyle.Bold),
+        ForeColor = Color.FromArgb(229, 245, 255),
+        AutoSize = true,
+        Location = new Point(14, 31)
+    };
+
     private readonly Label _status = new()
     {
         Text = "NAVDECK Desktop",
@@ -160,6 +169,7 @@ internal sealed class DesktopForm : Form
 
         _statusTimer.Tick += (_, _) =>
         {
+            _utcClock.Text = DateTime.UtcNow.ToString("HH:mm:ss") + "Z";
             if (_bridge is null || _bridge.IsDisposed)
                 return;
 
@@ -210,6 +220,30 @@ internal sealed class DesktopForm : Form
         };
 
         sidebar.Controls.Add(navigation);
+        var clockPanel = new Panel
+        {
+            Dock = DockStyle.Bottom,
+            Height = 105,
+            BackColor = Color.FromArgb(19, 29, 45)
+        };
+        clockPanel.Controls.Add(new Label
+        {
+            Text = "CURRENT ZULU TIME",
+            Font = new Font("Segoe UI Semibold", 8f, FontStyle.Bold),
+            ForeColor = Color.FromArgb(124, 154, 188),
+            Location = new Point(14, 12),
+            AutoSize = true
+        });
+        clockPanel.Controls.Add(_utcClock);
+        clockPanel.Controls.Add(new Label
+        {
+            Text = "NAVDECK DESKTOP  •  v1.0",
+            Font = new Font("Segoe UI", 8f),
+            ForeColor = Color.FromArgb(114, 137, 165),
+            Location = new Point(14, 79),
+            AutoSize = true
+        });
+        sidebar.Controls.Add(clockPanel);
 
         var logo = new Label
         {
