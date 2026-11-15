@@ -15,6 +15,7 @@ internal sealed class DesktopForm : Form
     private MainForm? _bridge;
     private readonly Dictionary<string, Button> _navButtons = new();
     private bool _authenticated;
+    private readonly VatsimTrafficFeed _vatsimTraffic = new();
     private bool _signingOut;
     private bool _closingAfterCleanup;
     private readonly CheckBox _staySignedIn = new()
@@ -616,28 +617,30 @@ internal sealed class DesktopForm : Form
                       if (location.origin !== 'https://navdeck-desktop.local') return;
                       let nextId = 0;
                       const pending = new Map();
-                      window.navdeckDesktop = {
-                        getTelemetry() {
-                          return new Promise(resolve => {
-                            const id = ++nextId;
-                            const timeout = setTimeout(() => {
-                              pending.delete(id);
-                              resolve(null);
-                            }, 3000);
-                            pending.set(id, value => {
-                              clearTimeout(timeout);
-                              resolve(value);
-                            });
-                            window.chrome.webview.postMessage({type:'navdeck:getTelemetry',id});
+                      function request(type, timeoutMs) {
+                        return new Promise(resolve => {
+                          const id = ++nextId;
+                          const timeout = setTimeout(() => {
+                            pending.delete(id);
+                            resolve(null);
+                          }, timeoutMs);
+                          pending.set(id, value => {
+                            clearTimeout(timeout);
+                            resolve(value);
                           });
-                        }
+                          window.chrome.webview.postMessage({type,id});
+                        });
+                      }
+                      window.navdeckDesktop = {
+                        getTelemetry() { return request('navdeck:getTelemetry', 3000); },
+                        getTraffic() { return request('navdeck:getTraffic', 16000); }
                       };
                       window.chrome.webview.addEventListener('message', event => {
-                        if (event.data?.type !== 'navdeck:telemetry') return;
+                        if (!['navdeck:telemetry','navdeck:traffic'].includes(event.data?.type)) return;
                         const resolve = pending.get(event.data.id);
                         if (resolve) {
                           pending.delete(event.data.id);
-                          resolve(event.data.telemetry ?? null);
+                          resolve(event.data.telemetry ?? event.data.aircraft ?? null);
                         }
                       });
                     })();
@@ -690,6 +693,44 @@ internal sealed class DesktopForm : Form
                     catch (Exception)
                     {
                         // Ignore malformed or unrelated web messages.
+                    }
+                };
+
+                // Public VATSIM flight-simulation traffic is fetched by the
+                // native app, so the locally bundled map needs no cross-origin
+                // network permission or access to the user's login session.
+                _browser.CoreWebView2.WebMessageReceived += async (_, args) =>
+                {
+                    if (!_authenticated ||
+                        !Uri.TryCreate(args.Source, UriKind.Absolute, out var sender) ||
+                        sender.GetLeftPart(UriPartial.Authority) != mapOrigin)
+                        return;
+                    try
+                    {
+                        using var message = System.Text.Json.JsonDocument.Parse(
+                            args.WebMessageAsJson);
+                        var root = message.RootElement;
+                        if (!root.TryGetProperty("type", out var type) ||
+                            type.GetString() != "navdeck:getTraffic" ||
+                            !root.TryGetProperty("id", out var id) ||
+                            !id.TryGetInt32(out var requestId))
+                            return;
+
+                        var traffic = await _vatsimTraffic.GetAsync();
+                        if (!_authenticated || _browser.IsDisposed ||
+                            _browser.CoreWebView2 is null) return;
+
+                        _browser.CoreWebView2.PostWebMessageAsJson(
+                            System.Text.Json.JsonSerializer.Serialize(new
+                            {
+                                type = "navdeck:traffic",
+                                id = requestId,
+                                aircraft = traffic
+                            }));
+                    }
+                    catch (Exception)
+                    {
+                        // Network availability and WebView2 shutdown are nonfatal.
                     }
                 };
 
