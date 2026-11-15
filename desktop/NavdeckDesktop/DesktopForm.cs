@@ -247,7 +247,14 @@ internal sealed class DesktopForm : Form
 
             try
             {
-                await _browser.EnsureCoreWebView2Async();
+                // Store WebView2 browser data in the user's profile, not Program Files.
+                var profile = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "NAVDECK", "Desktop", "WebView2");
+                Directory.CreateDirectory(profile);
+                var environment = await Microsoft.Web.WebView2.Core.CoreWebView2Environment
+                    .CreateAsync(userDataFolder: profile);
+                await _browser.EnsureCoreWebView2Async(environment);
                 _browser.CoreWebView2.Settings.AreDevToolsEnabled = false;
                 // Only the packaged desktop map may request simulator telemetry.
                 const string mapOrigin = "https://navdeck-desktop.local";
