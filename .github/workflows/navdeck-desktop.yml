@@ -35,6 +35,22 @@ jobs:
           --no-restore
           --output desktop-output
 
+      - name: Verify packaged live map
+        shell: pwsh
+        run: |
+          $map = "desktop-output/desktop-map/map.html"
+          if (-not (Test-Path $map)) {
+            throw "Desktop live map was not included in the published application."
+          }
+          $html = Get-Content $map -Raw
+          if ($html -notmatch 'navdeckDesktop.getTelemetry') {
+            throw "Packaged live map is missing native telemetry integration."
+          }
+          if (-not (Test-Path "desktop-output/NavdeckDesktop.exe")) {
+            throw "Published Windows executable was not found."
+          }
+          Write-Host "Desktop executable and live map are present."
+
       - name: Upload Windows application
         uses: actions/upload-artifact@v4
         with:
