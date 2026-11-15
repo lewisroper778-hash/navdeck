@@ -1,0 +1,40 @@
+name: NAVDECK Desktop Windows Build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout NAVDECK
+        uses: actions/checkout@v4
+
+      - name: Install .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore desktop/NavdeckDesktop/NavdeckDesktop.csproj -r win-x64
+
+      - name: Build Windows application
+        run: >
+          dotnet publish desktop/NavdeckDesktop/NavdeckDesktop.csproj
+          --configuration Release
+          --runtime win-x64
+          --self-contained true
+          --no-restore
+          --output desktop-output
+
+      - name: Upload Windows application
+        uses: actions/upload-artifact@v4
+        with:
+          name: NAVDECK-Desktop-Windows-x64
+          path: desktop-output/
+          if-no-files-found: error
+          retention-days: 7
