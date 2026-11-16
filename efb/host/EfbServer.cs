@@ -346,7 +346,12 @@ internal sealed class EfbServer : IAsyncDisposable
     {
         if (_app is not null)
         {
-            try { await _app.StopAsync(TimeSpan.FromSeconds(2)); } catch (Exception) { }
+            try
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                await _app.StopAsync(cts.Token);
+            }
+            catch (Exception) { }
             await _app.DisposeAsync();
         }
     }
