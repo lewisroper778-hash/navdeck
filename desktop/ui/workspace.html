@@ -86,7 +86,7 @@ async function renderFlights(force=false){
  });
 }
 async function renderSimbrief(){
- $('content').innerHTML=template('SimBrief connection','Link your SimBrief pilot identifier, save it to NAVDECK and import your latest operational flight plan.','Integration','API link',btn('importOFP','↻  Import latest OFP',true))+
+ $('content').innerHTML=template('SimBrief connection','Link your SimBrief pilot identifier, save it to NAVDECK and import your latest operational flight plan.','Integration','API link',btn('importOFP','↻  Import latest OFP',true)+' <button type="button" class="button ghost" id="previewOFP">Preview sample reporting</button>')+
  '<section class="panel">'+header('Create a flight plan','Enter the flight details and launch SimBrief dispatch in your browser. NAVDECK will import the completed OFP.')+
  '<form id="simbriefPlanForm"><div class="grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:12px;margin-bottom:15px">'+
  '<div class="setting-group"><label for="planOrig">Departure ICAO</label><input id="planOrig" required maxlength="4" placeholder="EGLL"></div>'+
@@ -117,6 +117,7 @@ async function renderSimbrief(){
     $('plannerNotice').innerHTML=notice('SimBrief opened. Generate your plan there, then return here and import it.','good');
   }catch(e){$('plannerNotice').innerHTML=notice('Could not open SimBrief: '+e.message,'error')}
  };
+ action('previewOFP',()=>{location.href='flight.html?demo=1#enroute';});
  action('importOFP',async()=>{
   const b=$('importOFP');b.disabled=true;let label=b.textContent;b.textContent='Importing…';
   try{const data=await call('importSimbrief');flightCache=null;$('profileNotice').innerHTML=notice('Imported '+String(data?.flight?.callsign||'the latest flight')+' successfully.','good');}
