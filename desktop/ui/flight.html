@@ -83,7 +83,7 @@ function draw(){
  document.querySelectorAll('[data-phase]').forEach(b=>b.onclick=()=>{section=b.dataset.phase;draw()});
  d('stage').innerHTML=({briefing,departure,enroute,arrival,closeFlight})[section]();
  bind();
- if(closed)document.querySelectorAll('[data-edit]').forEach(b=>b.disabled=true);
+ if(closed){document.querySelectorAll('[data-edit]').forEach(b=>b.disabled=true);document.querySelectorAll('#stage input, #stage textarea, #stage select').forEach(b=>b.disabled=true);}
 }
 function briefing(){
  const t=f.times||{},fuel=f.fuel||{},w=f.weights||{};
@@ -181,8 +181,10 @@ function bind(){
  }
  if(section==='arrival'){
   on('saveArrival',run(async()=>{
-   await act('saveTimes',validateTimes({landing:v('ldg'),on:v('on')}));
-   await act('saveArrival',{landing_rate:positive(v('rate').replace(/^-/,''),'Landing rate'),arrival_fob:positive(v('fob'),'Fuel')});
+   const times=validateTimes({landing:v('ldg'),on:v('on')});
+   const actuals={landing_rate:positive(v('rate').replace(/^-/,''),'Landing rate'),arrival_fob:positive(v('fob'),'Fuel')};
+   await act('saveTimes',times);
+   await act('saveArrival',actuals);
   }));
   on('saveNotes',()=>act('saveNotes',{metar:v('metar'),runway:v('runway'),notes:v('notes')}));
   on('metarFetch',run(async()=>{const a=await api('getMetar',{icao:f.destination});if(a?.metar){d('metar').value=a.metar;message('METAR loaded. Save notes to keep it.')}else message('No METAR available')}));
