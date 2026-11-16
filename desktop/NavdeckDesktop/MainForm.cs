@@ -636,7 +636,7 @@ internal sealed class MainForm : Form
         _latestTelemetryAt = DateTime.UtcNow;
         var nowUtc = DateTime.UtcNow;
         OnSimEvent(_tracker.Update(s, nowUtc));
-        if (_goAroundDetector.Update(s, nowUtc, _tracker.Stage == Stage.Airborne)
+        if (_goAroundDetector.Update(s, nowUtc, !s.OnGround)
             is { } detection)
         {
             Log($"Possible go-around detected at {detection.RadioAltFt:N0} ft AGL · review required");
@@ -755,6 +755,29 @@ internal sealed class MainForm : Form
             Log("Connected to MSFS through FSUIPC7");
         }
         if (_api is null && Config.IsValidCode(_config.Code) && _navStatus.ForeColor != Theme.Red) await Connect();
+        // A SimBrief import may happen while this window is hidden.
+        // Discover newly paired flight IDs without reloading the desktop UI.
+        if (_api is not null && !_routeRefreshing &&
+            DateTime.UtcNow - _lastRoute > TimeSpan.FromSeconds(40))
+        {
+            _lastRoute = DateTime.UtcNow;
+            try
+            {
+                var current = await _api.GetFlightAsync();
+                if (_pairedFlightId != current?.Id)
+                {
+                    _goAroundDetector.Reset();
+                    _pairedFlightId = current?.Id;
+                    if (current is not null) _watcher.SetRoute(current.Pending);
+                    else _watcher.Reset();
+                    Log(current is null
+                        ? "No active NAVDECK flight paired"
+                        : "Flight automatically paired for go-around reporting");
+                }
+            }
+            catch (Exception ex) when (ex is HttpRequestException or
+                                       TaskCanceledException or AuthException) { }
+        }
         await FlushGoAroundQueue();
 
         if (_api is not null && DateTime.UtcNow - _lastBeat > TimeSpan.FromSeconds(30))
