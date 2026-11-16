@@ -218,8 +218,12 @@ internal sealed class DesktopForm : Form
                     _browser.Source is { } currentFlight &&
                     currentFlight.Host == "navdeck-desktop.local" &&
                     currentFlight.AbsolutePath == "/flight.html" &&
-                    (route.Contains("demo=1", StringComparison.Ordinal) ==
-                     currentFlight.Query.Contains("demo=1", StringComparison.Ordinal));
+                    // Only hash-switch when the flight selection itself is
+                    // identical. An imported flight ID must never be reused
+                    // when the user selects the active reporting shortcut.
+                    string.Equals(currentFlight.Query,
+                        new Uri("https://navdeck-desktop.local/" + route).Query,
+                        StringComparison.Ordinal);
                 if (sameWorkspace || sameFlight)
                 {
                     int hashPos = route.IndexOf('#');
