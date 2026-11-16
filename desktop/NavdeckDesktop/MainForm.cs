@@ -39,6 +39,10 @@ internal sealed class MainForm : Form
     private Sample? _latestTelemetry;
     private DateTime _latestTelemetryAt = DateTime.MinValue;
     private bool _telemetrySending;
+    private bool _slowTickRunning;
+    private bool _connectInProgress;
+    private DateTime _nextConnectAttemptAt = DateTime.MinValue;
+    private DateTime _nextSimConnectAttemptAt = DateTime.MinValue;
     private bool _testFlight;
     private readonly WaypointWatcher _watcher = new();
     private DateTime _lastRoute = DateTime.MinValue;
@@ -589,13 +593,14 @@ internal sealed class MainForm : Form
     {
         if (_startMinimized) WindowState = FormWindowState.Minimized;
         if (!Config.IsValidCode(_config.Code)) AskCode();
-        else await Connect();
+        else _ = Connect();
         UpdateStartupButton();
         RefreshView();
         _poll.Start();
         _slow.Start();
-        // Flight plan refresh is manual only.
-        await SlowTick();
+        // Start simulator tracking without waiting up to 15 seconds for
+        // the cloud to wake. SlowTick has a re-entry guard.
+        _ = SlowTick();
     }
 
     private void AskCode()
@@ -604,29 +609,48 @@ internal sealed class MainForm : Form
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
         _config.Code = dlg.Code;
         _config.Save();
+        _api = null;
+        _nextConnectAttemptAt = DateTime.MinValue;
         _ = Connect();
     }
 
     private async Task Connect()
     {
-        _api = new NavdeckApi(_config.Code);
+        if (_connectInProgress || !Config.IsValidCode(_config.Code) ||
+            DateTime.UtcNow < _nextConnectAttemptAt)
+            return;
+
+        _connectInProgress = true;
         try
         {
-            var f = await _api.GetFlightAsync();
+            var candidate = new NavdeckApi(_config.Code);
+            var f = await candidate.GetFlightAsync();
+            _api = candidate;
+            _nextConnectAttemptAt = DateTime.MinValue;
             _pairedFlightId = f?.Id;
-            SetStatus(_navStatus, f is null ? "NAVDECK connected · import a flight before pushback" : $"Filling {f.Callsign} {f.Origin} → {f.Destination}", f is null ? Theme.Amber : Theme.Green);
+            SetStatus(_navStatus, f is null
+                ? "NAVDECK connected · import a flight before pushback"
+                : $"Filling {f.Callsign} {f.Origin} → {f.Destination}",
+                f is null ? Theme.Amber : Theme.Green);
             if (f is not null) _watcher.SetRoute(f.Pending);
             _lastRoute = DateTime.UtcNow;
         }
         catch (AuthException ex)
         {
             _api = null;
+            _nextConnectAttemptAt = DateTime.UtcNow.AddMinutes(2);
             SetStatus(_navStatus, "Connection code not accepted", Theme.Red);
             Log(ex.Message);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
+            _api = null;
+            _nextConnectAttemptAt = DateTime.UtcNow.AddSeconds(25);
             SetStatus(_navStatus, "Can't reach NAVDECK · retrying", Theme.Amber);
+        }
+        finally
+        {
+            _connectInProgress = false;
         }
     }
 
@@ -756,11 +780,22 @@ internal sealed class MainForm : Form
 
     private async Task SlowTick()
     {
-        if (!_testFlight && !_sim.IsOpen && _sim.TryOpen())
+        // A slow Render request must not start a second overlapping 5s tick.
+        if (_slowTickRunning) return;
+        _slowTickRunning = true;
+        try
         {
-            _sim.Read();
-            SetStatus(_simStatus, $"Sim connected · {_sim.AircraftTitle}", Theme.Green);
-            Log("Connected to MSFS through FSUIPC7");
+        if (!_testFlight && !_sim.IsOpen &&
+            DateTime.UtcNow >= _nextSimConnectAttemptAt)
+        {
+            // Repeated FSUIPC open attempts can briefly block the UI thread.
+            _nextSimConnectAttemptAt = DateTime.UtcNow.AddSeconds(15);
+            if (_sim.TryOpen())
+            {
+                _sim.Read();
+                SetStatus(_simStatus, $"Sim connected · {_sim.AircraftTitle}", Theme.Green);
+                Log("Connected to MSFS through FSUIPC7");
+            }
         }
         if (_api is null && Config.IsValidCode(_config.Code) && _navStatus.ForeColor != Theme.Red) await Connect();
         // A SimBrief import may happen while this window is hidden.
@@ -813,7 +848,14 @@ internal sealed class MainForm : Form
             }
         }
 
-        RefreshView();
+        // This bridge window is hidden in NAVDECK Desktop; updating its
+        // labels on every tick wastes WinForms layout and painting work.
+        if (Visible) RefreshView();
+        }
+        finally
+        {
+            _slowTickRunning = false;
+        }
     }
 
     private async void OnSimEvent(SimEvent? e)
