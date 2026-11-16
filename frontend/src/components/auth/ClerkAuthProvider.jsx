@@ -32,7 +32,10 @@ const CONFIG_CACHE_AGE_MS = 24 * 60 * 60 * 1000;
 // Only the PUBLIC Clerk publishable key and proxy path are cached. Never
 // store a Clerk JWT, secret key or desktop bridge token in browser storage.
 function validConfig(cfg) {
-  return !!cfg?.enabled && /^pk_(live|test)_[A-Za-z0-9_-]{10,}$/.test(cfg.publishable_key || "");
+  return !!cfg?.enabled && typeof cfg.publishable_key === "string" &&
+    cfg.publishable_key.length > 20 &&
+    (cfg.publishable_key.startsWith("pk_live_") ||
+      cfg.publishable_key.startsWith("pk_test_"));
 }
 function readCachedConfig() {
   try {
