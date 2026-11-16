@@ -144,9 +144,15 @@ internal sealed class NavdeckApi
             });
         }
 
-        using var response = await _http.SendAsync(request);
+        // Bound UI wait times: browsing the desktop workspace must not stall
+        // when a cloud endpoint is offline. SimBrief import takes longer.
+        using var timeout = new CancellationTokenSource(
+            action == "importSimbrief"
+                ? TimeSpan.FromSeconds(30) : TimeSpan.FromSeconds(9));
+        using var response = await _http.SendAsync(request, timeout.Token);
         await EnsureOk(response);
-        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        using var document = JsonDocument.Parse(
+            await response.Content.ReadAsStringAsync(timeout.Token));
         return document.RootElement.Clone();
     }
 
