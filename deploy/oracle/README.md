@@ -113,38 +113,44 @@ verified.
 NAVDECK EFB uploads each signed journey log (PDF) to `/api/efb/reports`. The backend emails it to
 `inflightreports@navdeck.online`. The mail login stays on this server only.
 
-1. Create `/opt/navdeck/email.env` with the SMTP details of the mailbox that sends the reports
-   (your email provider shows these as "SMTP" or "outgoing mail" settings):
+### Easy setup (recommended)
 
-   ```bash
-   sudo install -m 600 /dev/null /opt/navdeck/email.env
-   sudo nano /opt/navdeck/email.env
-   ```
+```bash
+ssh ubuntu@132.145.69.94
+cd /opt/navdeck/app
+git pull --ff-only origin main
+sudo bash deploy/oracle/setup-email.sh
+```
 
-   ```
-   EFB_SMTP_HOST=smtp.your-provider.com
-   EFB_SMTP_PORT=587
-   EFB_SMTP_SECURITY=starttls
-   EFB_SMTP_USER=inflightreports@navdeck.online
-   EFB_SMTP_PASSWORD=your-mailbox-or-app-password
-   EFB_REPORTS_TO=inflightreports@navdeck.online
-   ```
+The script:
+1. works out which company hosts the navdeck.online mailboxes and suggests its outgoing (SMTP) server,
+2. asks for the mailbox password (hidden as you type) and sends a **test email** to
+   inflightreports@navdeck.online, saving nothing unless that test succeeds,
+3. saves the settings in `/opt/navdeck/email.env`, readable by root only,
+4. lets the host Nginx accept journey-log uploads (`client_max_body_size 12m;`, with a backup and an
+   automatic undo if Nginx rejects it), and
+5. deploys NAVDECK the usual way and checks `https://test.navdeck.online/api/efb/reports/status`.
 
-   Use `EFB_SMTP_PORT=465` with `EFB_SMTP_SECURITY=ssl` if your provider asks for SSL instead.
+Run it again at any time to change the password or provider.
 
-2. Allow uploads of up to 12 MB in the host Nginx site for `test.navdeck.online` (inside its
-   `server { ... }` block), then reload Nginx:
+Tips: Google Workspace needs an **app password**; Microsoft 365 needs **Authenticated SMTP** switched on for the
+mailbox. Email-forwarding services (for example Cloudflare Email Routing) cannot send mail; use the SMTP details of
+a real mailbox or a sending service.
 
-   ```
-   client_max_body_size 12m;
-   ```
+### Manual setup
 
-   ```bash
-   sudo nginx -t && sudo systemctl reload nginx
-   ```
+`/opt/navdeck/email.env` (mode 600) holds:
 
-3. Deploy as usual (`git pull --ff-only origin main` then `sudo bash deploy/oracle/deploy.sh`).
-   Check it with `curl -s https://test.navdeck.online/api/efb/reports/status`, which should
-   show `{"configured":true}`.
+```
+EFB_SMTP_HOST=smtp.your-provider.com
+EFB_SMTP_PORT=587
+EFB_SMTP_SECURITY=starttls
+EFB_SMTP_USER=inflightreports@navdeck.online
+EFB_SMTP_PASSWORD=your-mailbox-or-app-password
+EFB_REPORTS_TO=inflightreports@navdeck.online
+```
+
+Use port 465 with `EFB_SMTP_SECURITY=ssl` if your provider asks for SSL. Add `client_max_body_size 12m;` to the host
+Nginx site for test.navdeck.online, reload Nginx, then run `sudo bash deploy/oracle/deploy.sh`.
 
 Until this is set up, the EFB keeps each journey log in its outbox and sends it once the server accepts it.
