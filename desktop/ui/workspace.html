@@ -113,7 +113,7 @@ async function renderFlights(force=false){
  });
 }
 async function renderSimbrief(){
- $('content').innerHTML=template('SimBrief connection','Link your SimBrief pilot identifier, save it to NAVDECK and import your latest operational flight plan.','Integration','API link',btn('importOFP','↻  Import latest OFP',true)+' <button type="button" class="button ghost" id="previewOFP">Preview sample reporting</button>')+
+ $('content').innerHTML=template('SimBrief connection','Link your SimBrief pilot identifier, save it to NAVDECK and import your latest operational flight plan.','Integration','API link',btn('importOFP','↻  Import latest OFP',true))+
  '<section class="panel">'+header('Create a flight plan','Enter the flight details and launch SimBrief dispatch in your browser. NAVDECK will import the completed OFP.')+
  '<form id="simbriefPlanForm"><div class="grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:12px;margin-bottom:15px">'+
  '<div class="setting-group"><label for="planOrig">Departure ICAO</label><input id="planOrig" required maxlength="4" placeholder="EGLL"></div>'+
@@ -144,7 +144,6 @@ async function renderSimbrief(){
     $('plannerNotice').innerHTML=notice('SimBrief opened. Generate your plan there, then return here and import it.','good');
   }catch(e){$('plannerNotice').innerHTML=notice('Could not open SimBrief: '+e.message,'error')}
  };
- action('previewOFP',()=>{location.href='flight.html?demo=1#enroute';});
  action('importOFP',async()=>{
   const b=$('importOFP'),pilotId=$('pilotId').value.trim();
   if(pilotId&&!/^[0-9]{1,16}$/.test(pilotId)){
@@ -154,10 +153,14 @@ async function renderSimbrief(){
   $('profileNotice').innerHTML=notice('Checking your latest SimBrief OFP. If the NAVDECK server was sleeping, its first request may take longer.');
   try{
     const data=await call('importSimbrief',{pilot_id:pilotId||null});
+    if(!data?.flight)throw Error('The import did not return a flight plan. Please retry.');
     flightCache=null;flightCacheAt=0;
-    $('profileNotice').innerHTML=notice('Imported '+String(data?.flight?.callsign||'the latest flight')+'. Opening In-Flight Reporting…','good');
-    if(data?.flight?.id&&/^[0-9a-fA-F-]{36}$/.test(data.flight.id))
-      location.href='flight.html?id='+encodeURIComponent(data.flight.id)+'#enroute';
+    // Always open live reporting after import, using the imported ID when
+    // available so another paired flight cannot accidentally be selected.
+    const flightId=String(data.flight.id||'');
+    location.href=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(flightId)
+      ? 'flight.html?id='+encodeURIComponent(flightId)+'#enroute'
+      : 'flight.html?active=1#enroute';
   }catch(e){
     const err=String(e.message||'');
     const extra=/Not Found|404/i.test(err)
@@ -358,10 +361,37 @@ async function renderSettings(){
  '<div class="two-col"><section class="panel">'+header('Connection diagnostics','Uses your existing revocable simulator pairing code')+'<div id="diagInfo" class="loader">Checking the connection…</div>'+
  '<div class="inline-callout">To change the connection code or simulator settings, use the <b>Simulator Connection</b> button in the permanent left sidebar. Your pairing token is handled by the Windows app and is never exposed to these pages.</div></section>'+
  '<section class="panel">'+header('About this application','NAVDECK Desktop · Native shell + local interface')+
- '<ul class="bullet-list"><li>All application pages are packaged locally.</li><li>NAVDECK is used as a data service, never as an embedded website.</li><li>The simulator runs through the existing FSUIPC7 bridge.</li><li>Map tiles and VATSIM traffic require internet access.</li><li>Cloud account features need the matching backend API deployed.</li></ul></section></div>';
- const test=async()=>{try{const x=await call('getFlight');$('diagInfo').innerHTML=notice('Paired NAVDECK cloud connection is working. '+(x?.flight?'Current flight: '+(x.flight.callsign||'available'):'No active flight.'),'good');setCloud(true,'NAVDECK bridge linked')}
- catch(e){$('diagInfo').innerHTML=notice('Pairing unsuccessful: '+e.message,'error');setCloud(false,'Pairing required')}};
- action('testConnection',test);test();
+ '<ul class="bullet-list"><li>All application pages are packaged locally.</li><li>NAVDECK is used as a data service, never as an embedded website.</li><li>The simulator runs through the existing FSUIPC7 bridge.</li><li>Map tiles and VATSIM traffic require internet access.</li><li>Cloud account features need the matching backend API deployed.</li></ul></section></div>'+
+ '<section class="panel" id="accountPanel">'+header('Account','Manage your NAVDECK Desktop account on this PC')+
+ '<p class="muted">Signing out removes the saved NAVDECK pairing code from this Windows PC. It does not sign you out of the website or delete your cloud flights.</p>'+
+ '<div id="accountActions" class="row">Checking account…</div><div id="signOutNotice" role="status" aria-live="polite"></div></section>';
+ const test=async()=>{try{const x=await call('getFlight');if(!$('diagInfo'))return;$('diagInfo').innerHTML=notice('Paired NAVDECK cloud connection is working. '+(x?.flight?'Current flight: '+(x.flight.callsign||'available'):'No active flight.'),'good');setCloud(true,'NAVDECK bridge linked')}
+ catch(e){if(!$('diagInfo'))return;$('diagInfo').innerHTML=notice('Pairing unsuccessful: '+e.message,'error');setCloud(false,'Pairing required')}};
+ action('testConnection',test);
+ try{
+  const session=await call('getSession');
+  if(!$('accountActions'))return;
+  if(session?.paired){
+   $('accountActions').innerHTML=btn('signOutAccount','Sign out of NAVDECK');
+   action('signOutAccount',async()=>{
+    if(!confirm('Sign out of NAVDECK on this PC? Your saved connection code will be removed, and cloud reporting will stop until you pair again.'))return;
+    const button=$('signOutAccount');button.disabled=true;
+    try{
+     await call('signOut');
+     flightCache=null;flightCacheAt=0;flightLoadPromise=null;lastFlight=null;lastFlights=[];
+     // Reload local pages so no account data remains in JavaScript memory.
+     location.reload();
+    }catch(e){
+     $('signOutNotice').innerHTML=notice('Could not sign out: '+e.message,'error');
+     button.disabled=false;
+    }
+   });
+  }else{
+   $('accountActions').innerHTML=notice('Signed out. Open Simulator Connection in the sidebar, then choose Connection Code to pair your account again.');
+   setCloud(false,'Signed out');
+  }
+ }catch(e){if($('accountActions'))$('accountActions').innerHTML=notice('Unable to check account: '+e.message,'error');}
+ test();
 }
 const pages={flights:renderFlights,simbrief:renderSimbrief,vatsim:()=>renderVatsim(false),community:renderCommunity,logbook:renderLogbook,settings:renderSettings};
 function showPage(){
