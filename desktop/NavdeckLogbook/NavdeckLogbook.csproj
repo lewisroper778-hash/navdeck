@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>NavdeckLogbook</AssemblyName>
+    <RootNamespace>NavdeckLogbook</RootNamespace>
+    <ApplicationIcon>navdeck.ico</ApplicationIcon>
+    <Version>2.0.0</Version>
+    <Product>NAVDECK Logbook</Product>
+    <Company>NAVDECK</Company>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <!-- Fast start: no web view, no single-file extraction, pre-compiled code. -->
+    <PublishSingleFile>false</PublishSingleFile>
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <TieredPGO>false</TieredPGO>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <DebugType>none</DebugType>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FSUIPCClientDLL" Version="3.3.16" />
+    <PackageReference Include="PDFsharp-GDI" Version="6.1.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Data/runways.csv" LogicalName="NavdeckLogbook.Data.runways.csv" />
+  </ItemGroup>
+
+</Project>

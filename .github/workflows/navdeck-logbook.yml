@@ -1,0 +1,89 @@
+name: NAVDECK Logbook Windows Build
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'desktop/NavdeckLogbook/**'
+      - '.github/workflows/navdeck-logbook.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'desktop/NavdeckLogbook/**'
+      - '.github/workflows/navdeck-logbook.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore desktop/NavdeckLogbook/NavdeckLogbook.csproj -r win-x64
+
+      - name: Build Windows application
+        run: >
+          dotnet publish desktop/NavdeckLogbook/NavdeckLogbook.csproj
+          --configuration Release
+          --runtime win-x64
+          --self-contained true
+          --no-restore
+          --output logbook-output
+
+      - name: Self-test (simulated flight, logbook storage and PDF export)
+        shell: pwsh
+        run: |
+          $out = Join-Path $PWD 'logbook-selftest'
+          $p = Start-Process -FilePath (Join-Path $PWD 'logbook-output\NavdeckLogbook.exe') -ArgumentList '--selftest', "`"$out`"" -Wait -PassThru
+          if (Test-Path "$out\selftest.txt") { Get-Content "$out\selftest.txt" } else { Write-Host 'No self-test report was written.' }
+          if ($p.ExitCode -ne 0) { throw "Self-test failed with exit code $($p.ExitCode)" }
+
+      - name: Upload self-test output (sample PDFs)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: NAVDECK-Logbook-SelfTest
+          path: logbook-selftest/
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Install Inno Setup
+        shell: powershell
+        run: choco install innosetup --yes --no-progress
+
+      - name: Package Windows installer
+        shell: powershell
+        run: |
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (!(Test-Path $iscc)) { $iscc = Join-Path $env:ProgramFiles 'Inno Setup 6\ISCC.exe' }
+          if (!(Test-Path $iscc)) { throw 'Inno Setup compiler not found' }
+          & $iscc desktop/NavdeckLogbook/installer.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: NAVDECK-Logbook-Installer-x64
+          path: logbook-installer/*.exe
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish installer to GitHub Releases
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "logbook-" + "${{ github.run_number }}"
+          gh release create $tag (Get-Item logbook-installer/*.exe).FullName --target $env:GITHUB_SHA --title "NAVDECK Logbook $tag" --notes "Standalone NAVDECK Logbook for Windows x64. Connects to the simulator through FSUIPC7 and records gate out, take-off, waypoints, fuel, landing rate and the touchdown point automatically. Flights are stored on your PC and can be saved as PDF. No account or internet connection is needed."
