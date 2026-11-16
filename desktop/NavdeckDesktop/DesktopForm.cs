@@ -69,104 +69,88 @@ internal sealed class DesktopForm : Form
         }
         navigation.SizeChanged += (_, _) => FitNavigation();
 
-        // Premium, self-contained NAVDECK brand header. The icon is painted
-        // directly at the current Windows DPI, so no external assets are needed.
+        // Use the exact NAVDECK website favicon, not a separately drawn logo.
+        // Table layout keeps the mark and wordmark inside the sidebar at any DPI.
         var brand = new Panel
         {
             Dock = DockStyle.Top,
-            Height = 132,
-            BackColor = Color.FromArgb(22, 24, 31)
+            Height = 105,
+            BackColor = Color.FromArgb(22, 24, 31),
+            Padding = new Padding(8, 17, 8, 13)
         };
-
-        var brandIcon = new Panel
+        var brandLayout = new TableLayoutPanel
         {
-            Size = new Size(52, 52),
-            Location = new Point(9, 20),
-            BackColor = Color.FromArgb(37, 35, 58)
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1,
+            Margin = Padding.Empty,
+            Padding = Padding.Empty
         };
-        brandIcon.Paint += (_, paint) =>
-        {
-            var g = paint.Graphics;
-            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-            var scale = Math.Min(brandIcon.ClientSize.Width,
-                                 brandIcon.ClientSize.Height) / 52f;
-            g.ScaleTransform(scale, scale);
-            using var border = new Pen(Color.FromArgb(112, 96, 177), 1.5f);
-            using var main = new Pen(Color.FromArgb(237, 240, 255), 4.5f)
-            {
-                StartCap = System.Drawing.Drawing2D.LineCap.Round,
-                EndCap = System.Drawing.Drawing2D.LineCap.Round,
-                LineJoin = System.Drawing.Drawing2D.LineJoin.Round
-            };
-            using var accent = new Pen(Color.FromArgb(125, 197, 255), 3.5f)
-            {
-                StartCap = System.Drawing.Drawing2D.LineCap.Round,
-                EndCap = System.Drawing.Drawing2D.LineCap.Round
-            };
-            using var dot = new SolidBrush(Color.FromArgb(160, 207, 255));
-            g.DrawRectangle(border, 2, 2, 48, 48);
-            // Geometric N: a navigation track between two vertical fixes.
-            g.DrawLines(main, new PointF[]
-            {
-                new(14, 36), new(14, 16), new(37, 36), new(37, 16)
-            });
-            g.DrawLine(accent, 31, 13, 40, 13);
-            g.FillEllipse(dot, 36.5f, 10.5f, 6, 6);
-        };
+        brandLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 58));
+        brandLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        brandLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
+        var brandIcon = new PictureBox
+        {
+            Dock = DockStyle.Fill,
+            Margin = new Padding(0, 0, 8, 0),
+            SizeMode = PictureBoxSizeMode.Zoom,
+            BackColor = Color.Transparent
+        };
+        var websiteLogoPath = Path.Combine(AppContext.BaseDirectory,
+            "desktop-map", "navdeck-website-logo.png");
+        if (File.Exists(websiteLogoPath))
+        {
+            using var stream = File.OpenRead(websiteLogoPath);
+            using var logo = Image.FromStream(stream);
+            brandIcon.Image = new Bitmap(logo);
+        }
+
+        var brandText = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Margin = Padding.Empty,
+            Padding = Padding.Empty
+        };
+        brandText.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        brandText.RowStyles.Add(new RowStyle(SizeType.Percent, 58));
+        brandText.RowStyles.Add(new RowStyle(SizeType.Percent, 42));
         var brandTitle = new Label
         {
             Text = "NAVDECK",
+            Dock = DockStyle.Fill,
             AutoSize = false,
-            Size = new Size(185, 34),
-            Location = new Point(72, 19),
-            TextAlign = ContentAlignment.MiddleLeft,
-            ForeColor = Color.FromArgb(245, 246, 252),
-            Font = new Font("Segoe UI Semibold", 18.5f, FontStyle.Bold)
+            AutoEllipsis = false,
+            Margin = Padding.Empty,
+            TextAlign = ContentAlignment.BottomLeft,
+            ForeColor = Color.FromArgb(248, 249, 254),
+            Font = new Font("Segoe UI Semibold", 14.5f, FontStyle.Bold)
         };
-
         var brandSubtitle = new Label
         {
-            Text = "FLIGHT OPERATIONS",
+            Text = "FLIGHT SIM EFB",
+            Dock = DockStyle.Fill,
             AutoSize = false,
-            Size = new Size(184, 21),
-            Location = new Point(74, 54),
-            TextAlign = ContentAlignment.MiddleLeft,
-            ForeColor = Color.FromArgb(153, 164, 186),
-            Font = new Font("Segoe UI", 8f, FontStyle.Bold)
+            AutoEllipsis = false,
+            Margin = Padding.Empty,
+            TextAlign = ContentAlignment.TopLeft,
+            ForeColor = Color.FromArgb(164, 171, 192),
+            Font = new Font("Segoe UI", 8.5f, FontStyle.Regular)
         };
-
-        var brandTagline = new Label
-        {
-            Text = "SIMULATOR  /  FLIGHT MANAGEMENT",
-            AutoSize = false,
-            Size = new Size(249, 20),
-            Location = new Point(10, 85),
-            TextAlign = ContentAlignment.MiddleLeft,
-            ForeColor = Color.FromArgb(116, 124, 147),
-            Font = new Font("Segoe UI", 7.5f, FontStyle.Regular)
-        };
-
+        brandText.Controls.Add(brandTitle, 0, 0);
+        brandText.Controls.Add(brandSubtitle, 0, 1);
+        brandLayout.Controls.Add(brandIcon, 0, 0);
+        brandLayout.Controls.Add(brandText, 1, 0);
         var brandLine = new Panel
         {
-            BackColor = Color.FromArgb(54, 57, 73),
-            Location = new Point(9, 113),
-            Size = new Size(244, 1)
+            Dock = DockStyle.Bottom,
+            Height = 1,
+            BackColor = Color.FromArgb(54, 57, 73)
         };
-        brand.Controls.Add(brandIcon);
-        brand.Controls.Add(brandTitle);
-        brand.Controls.Add(brandSubtitle);
-        brand.Controls.Add(brandTagline);
+        brand.Controls.Add(brandLayout);
         brand.Controls.Add(brandLine);
-        brand.Resize += (_, _) =>
-        {
-            // Keep the mark and type aligned if Windows applies DPI scaling.
-            var available = Math.Max(150, brand.ClientSize.Width - 84);
-            brandTitle.Width = available;
-            brandSubtitle.Width = available;
-            brandTagline.Width = Math.Max(170, brand.ClientSize.Width - 24);
-            brandLine.Width = Math.Max(170, brand.ClientSize.Width - 24);
-        };
 
         Button? activeNavigation = null;
 
