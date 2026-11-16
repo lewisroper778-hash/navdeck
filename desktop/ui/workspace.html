@@ -158,9 +158,9 @@ async function renderSimbrief(){
     // Always open live reporting after import, using the imported ID when
     // available so another paired flight cannot accidentally be selected.
     const flightId=String(data.flight.id||'');
-    location.href=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(flightId)
-      ? 'flight.html?id='+encodeURIComponent(flightId)+'#enroute'
-      : 'flight.html?active=1#enroute';
+    if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(flightId))
+      throw Error('Imported flight ID was missing. Open My Flights and select the imported flight.');
+    location.href='flight.html?id='+encodeURIComponent(flightId)+'#enroute';
   }catch(e){
     const err=String(e.message||'');
     const extra=/Not Found|404/i.test(err)
