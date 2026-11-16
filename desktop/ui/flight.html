@@ -59,6 +59,33 @@ details{background:#313039;border:1px solid #45414d;border-radius:7px;padding:10
 .mini-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:16px}.mini-actions .button{font-size:11px}
 @media(max-width:1170px){.pair{grid-template-columns:1fr}.fieldrow{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media print{header,.phasebar,.button,#statusMsg,.toolbar{display:none!important}main,.panel,body{color:black!important;background:white!important;box-shadow:none!important}.detail{background:white!important;border:1px solid #ccc}.detail small{color:#555!important}}
+
+/* Fit every reporting label and action without clipped text. */
+main{width:100%;min-width:0}
+.top,.toolbar,.hero,.panel,.pair,.details-grid,.fieldrow{min-width:0}
+.top{flex-wrap:wrap;row-gap:10px}
+.crumb{flex-wrap:wrap;min-width:0;overflow-wrap:anywhere}
+.hero{flex-wrap:wrap;min-height:150px}
+.hero h1{font-size:clamp(23px,3.2vw,35px);overflow-wrap:anywhere}
+.hero p,.panel p,.panel-head h2,.detail,.detail b,.detail small{overflow-wrap:anywhere}
+.details-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,170px),1fr))}
+.fieldrow{grid-template-columns:repeat(auto-fit,minmax(min(100%,185px),1fr))}
+.pair>*{min-width:0}
+.phasebar{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:8px}
+.phase{min-width:0;padding:10px 8px;white-space:normal;overflow-wrap:normal;line-height:1.35;min-height:44px}
+.button{white-space:normal;overflow-wrap:anywhere;max-width:100%;min-width:0}
+.live-indicator b{font-size:clamp(12px,1.8vw,17px);overflow-wrap:anywhere}
+.checkline{gap:12px;align-items:flex-start;flex-wrap:wrap}
+.checkline button{text-align:left;min-width:0;overflow-wrap:anywhere}
+.checkline b{flex-shrink:0}
+.ga-card .ga-title{flex-wrap:wrap}
+.ga-card .tag{white-space:normal;overflow-wrap:anywhere;max-width:100%}
+.ga-card,.ga-card textarea{min-width:0}
+.tab-table{width:max-content;min-width:100%}
+.scroll-table{max-width:100%;overflow-x:auto;overscroll-behavior-x:contain}
+@media(max-width:1000px){main{padding:22px 20px 60px}.pair{grid-template-columns:1fr}.details-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,145px),1fr))}}
+@media(max-width:650px){main{padding:16px 13px 44px}.topright{max-width:100%}.phasebar{grid-template-columns:repeat(2,minmax(0,1fr))}.live-report{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
 </style></head><body><main><header class="top"><div class="crumb">NAVDECK › MY FLIGHTS › <b>FLIGHT OPERATIONS</b></div><span class="status ok"><i></i><span id="cloudMode">Desktop cloud link</span></span></header><div class="toolbar"><button class="button ghost" id="back">← My Flights</button></div><section class="hero"><div><span class="eyebrow">OPERATIONAL FLIGHT DECK</span><h1 id="title">Loading flight…</h1><p id="route">— → —</p><p id="aircraft"></p></div></section><div id="statusMsg" hidden></div><div class="demo-banner" id="demoBanner" hidden><strong>Demonstration flight.</strong> All route, fuel and waypoint figures are illustrative. You can test the reporting and sign-off workflow; no flight is imported or saved to your NAVDECK account.</div><div class="panel" id="summary"></div><nav class="phasebar" id="phasebar"></nav><div id="stage"></div></main><script>
 (()=>{
 'use strict';
