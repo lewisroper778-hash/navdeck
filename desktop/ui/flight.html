@@ -54,7 +54,7 @@ details{background:#313039;border:1px solid #45414d;border-radius:7px;padding:10
 .mini-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:16px}.mini-actions .button{font-size:11px}
 @media(max-width:1170px){.pair{grid-template-columns:1fr}.fieldrow{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media print{header,.phasebar,.button,#statusMsg,.toolbar{display:none!important}main,.panel,body{color:black!important;background:white!important;box-shadow:none!important}.detail{background:white!important;border:1px solid #ccc}.detail small{color:#555!important}}
-</style></head><body><main><header class="top"><div class="crumb">NAVDECK › MY FLIGHTS › <b>FLIGHT OPERATIONS</b></div><span class="status ok"><i></i><span>Desktop cloud link</span></span></header><div class="toolbar"><button class="button ghost" id="back">← My Flights</button></div><section class="hero"><div><span class="eyebrow">OPERATIONAL FLIGHT DECK</span><h1 id="title">Loading flight…</h1><p id="route">— → —</p><p id="aircraft"></p></div></section><div id="statusMsg" hidden></div><div class="panel" id="summary"></div><nav class="phasebar" id="phasebar"></nav><div id="stage"></div></main><script>
+</style></head><body><main><header class="top"><div class="crumb">NAVDECK › MY FLIGHTS › <b>FLIGHT OPERATIONS</b></div><span class="status ok"><i></i><span>Desktop cloud link</span></span></header><div class="toolbar"><button class="button ghost" id="back">← My Flights</button></div><section class="hero"><div><span class="eyebrow">OPERATIONAL FLIGHT DECK</span><h1 id="title">Loading flight…</h1><p id="route">— → —</p><p id="aircraft"></p></div></section><div id="statusMsg" hidden></div><div class="demo-banner" id="demoBanner" hidden><strong>Demonstration flight.</strong> All route, fuel and waypoint figures are illustrative. You can test the reporting and sign-off workflow; no flight is imported or saved to your NAVDECK account.</div><div class="panel" id="summary"></div><nav class="phasebar" id="phasebar"></nav><div id="stage"></div></main><script>
 (()=>{
 'use strict';
 const d=id=>document.getElementById(id);
@@ -173,8 +173,66 @@ function clear(){d('statusMsg').hidden=true}
 function on(id,fn){if(d(id))d(id).onclick=fn}
 function validateTimes(obj){for(const [k,x]of Object.entries(obj)){if(x&&!time.test(x))throw Error(k+' must be HH:MM UTC')}return obj}
 function positive(x,name){if(x&&!/^\d+(\.\d+)?$/.test(x))throw Error(name+' must be a positive number');return x||''}
+function demoFlight(){
+ return {
+   id:'DEMO-ONLY',callsign:'NVD100 · SAMPLE FLIGHT',origin:'EGLL',destination:'EGCC',alternate:'EGNX',
+   aircraft:'Airbus A320',route:'SAMPLE01 SAMPLE02 SAMPLE03 SAMPLE04',
+   cruise_level:'FL320',distance:'155',ete:'01:10',
+   status:'open',signoff:{signed:false},arrival_notes:{},
+   fuel:{taxi:'220',trip:'2450',contingency:'180',alternate:'650',reserve:'1000',extra:'250',
+     block:'4750',min_takeoff:'4200',min_fuel:'1650',mayday_fuel:'1000',avg_burn_per_hour:'2100'},
+   weights:{ofp_units:'KG',units:'KG',pax_count:'134',cargo:'2200',
+     oew:'42600',zfw:'61300',tow:'65800',law:'63000',max_tow:'77000',max_law:'64500'},
+   times:{sched_off:'12:00',sched_takeoff:'12:15',sched_landing:'13:25',sched_on:'13:35',
+     off:'12:04',takeoff:'12:20',landing:'',on:''},
+   waypoints:[
+     {ident:'SAMPLE01',airway:'DCT',altitude:'12000',eta:'600',fob:'4150',ata:'12:30',actual_fob:'4100',actual_alt:'12000',passed:true},
+     {ident:'SAMPLE02',airway:'DCT',altitude:'26000',eta:'1500',fob:'3520',ata:'',actual_fob:'',actual_alt:'',passed:false},
+     {ident:'SAMPLE03',airway:'DCT',altitude:'32000',eta:'2800',fob:'2760',ata:'',actual_fob:'',actual_alt:'',passed:false},
+     {ident:'SAMPLE04',airway:'DCT',altitude:'7000',eta:'4200',fob:'1940',ata:'',actual_fob:'',actual_alt:'',passed:false}
+   ],notams:{},
+   landing_rate:'',arrival_fob:''
+ };
+}
+function demoAction(action,values){
+ if(action==='resetFlight'){f=demoFlight();return;}
+ if(action==='saveWaypoint'){
+   const w=f.waypoints[values.index];if(!w)throw Error('Sample waypoint missing');
+   for(const key of ['ata','actual_fob','actual_alt'])
+     if(Object.hasOwn(values,key))w[key]=values[key];
+   if(w.ata)w.passed=true;
+ }else if(action==='toggleWaypoint'){f.waypoints[values.index].passed=!!values.passed;
+ }else if(action==='skipWaypoint'){f.waypoints[values.index].skipped=!!values.skipped;
+ }else if(action==='directTo'){
+   for(let i=0;i<values.index;i++)if(!f.waypoints[i].passed)f.waypoints[i].skipped=true;
+ }else if(action==='undoDirect'){f.waypoints.forEach(w=>{w.skipped=false;w.direct_group=null});
+ }else if(action==='saveTimes'){Object.assign(f.times,values);
+ }else if(action==='saveActuals'){
+   for(const key of ['pax_count','cargo','units'])
+     if(Object.hasOwn(values,key))f.weights[key]=values[key];
+ }else if(action==='saveArrival'){
+   Object.assign(f,values);
+ }else if(action==='saveNotes'){
+   Object.assign(f.arrival_notes,values);
+ }else if(action==='signReport'){
+   const blockers=reportBlockers(f,true);
+   if(blockers.length)throw Error('Complete the required report items before signing');
+   f.signoff={...values,signed:true,signed_at:new Date().toISOString()};
+ }else if(action==='closeFlight'){
+   if(!f.signoff.signed||reportBlockers(f,true).length)throw Error('Complete and sign the report before closing');
+   f.status='closed';
+ }else if(action==='reopenFlight'){f.status='open';
+ }else throw Error('Unsupported sample action: '+action);
+}
 function act(action,values={}){
- if(pending)return Promise.resolve();pending=true;clear();
+ if(pending)return Promise.resolve();
+ pending=true;clear();
+ if(isDemo){
+   try{demoAction(action,values);draw();message('Sample updated locally · No NAVDECK cloud data was changed.');}
+   catch(err){message(err.message,true);}
+   finally{pending=false;}
+   return Promise.resolve();
+ }
  return api('flightAction',{flight_id:f.id,operation:action,values}).then(data=>{
    if(!data?.flight)throw Error('No updated flight returned');
    f=data.flight;draw();message('Saved to NAVDECK');
@@ -182,6 +240,11 @@ function act(action,values={}){
 }
 function run(fn){return ()=>{try{const out=fn();if(out&&typeof out.catch==='function')out.catch(x=>message(x.message,true))}catch(x){message(x.message,true)}}}
 async function init(){
+ if(isDemo){
+   f=demoFlight();
+   d('status').textContent='SAMPLE ONLY · OFFLINE PREVIEW';
+   draw();return;
+ }
  if(!id){
    // The reporting sidebar and dashboard button resolve the current flight,
    // so users don't have to pass through the flight library every time.
@@ -223,7 +286,8 @@ function draw(){
  const closed=f.status==='closed';
  d('title').textContent=f.callsign||'Flight';
  d('route').textContent=(f.origin||'—')+' → '+(f.destination||'—');
- d('aircraft').textContent=(f.aircraft||'Unknown aircraft')+' · '+(closed?'Closed flight':'Active flight');
+ d('aircraft').textContent=(f.aircraft||'Unknown aircraft')+' · '+(isDemo?'SAMPLE / NO CLOUD SAVE':closed?'Closed flight':'Active flight');
+ if(isDemo&&d('demoBanner'))d('demoBanner').hidden=false;
  const wp=f.waypoints||[], active=wp.filter(x=>!x.skipped),done=active.filter(x=>x.passed||x.ata).length;
  const next=active.find(x=>!x.passed&&!x.ata);
  d('summary').innerHTML=details([['Flight status',closed?'CLOSED':'OPEN'],['Progress',done+'/'+active.length+' fixes'],['Next waypoint',next?.ident],['Landing rate',f.landing_rate?'-'+Math.abs(Number(f.landing_rate))+' FPM':'—'],['Block fuel',f.fuel?.block],['OFP units',f.weights?.ofp_units||'KG']]);
@@ -328,6 +392,15 @@ function closeFlight(){
 }
 async function refreshLive(){
  if(!f||section!=='enroute'||!d('liveConnection'))return;
+ if(isDemo){
+   d('liveConnection').textContent='DEMO / NO SIM';
+   d('liveConnection').className='disconnected';
+   d('liveSpeed').textContent='— KT';
+   d('liveAltitude').textContent='— FT';
+   d('liveFuel').textContent='— LB';
+   d('liveUtc').textContent=new Date().toISOString().slice(11,19)+'Z';
+   return;
+ }
  const utc=new Date().toISOString().slice(11,19)+'Z';
  d('liveUtc').textContent=utc;
  try{
@@ -354,12 +427,14 @@ function bind(){
  if(section==='departure')on('saveDeparture',run(()=>act('saveTimes',validateTimes({off:v('off'),takeoff:v('to'),tsat:v('tsat2'),ctot:v('ctot2')}))));
  if(section==='enroute'){
   on('refreshReport',run(async()=>{
+    if(isDemo){draw();message('Sample data refreshed locally. No cloud connection used.');return;}
     const data=await api('getFlightDetails',{flight_id:f.id});
     if(!data?.flight)throw Error('Could not refresh report');
     f=data.flight;draw();message('In-flight report synced');
   }));
   document.querySelectorAll('[data-now]').forEach(button=>button.onclick=run(async()=>{
     const i=Number(button.dataset.now);
+    if(isDemo){message('Use manual ATA / FOB / altitude entries for the sample flight. Simulator auto-fill is disabled in demonstration mode.');return;}
     const row=f.waypoints?.[i];
     if(!row||row.skipped||f.status==='closed')return;
     // Manual press only: record UTC arrival and, when available,
@@ -408,7 +483,10 @@ function bind(){
   on('finish',()=>{if(confirm('Close this flight and store its report in NAVDECK?'))act('closeFlight')});
   on('reopen',()=>{if(confirm('Reopen this flight for editing?'))act('reopenFlight')});
   on('print',()=>window.print());
-  on('pdf',run(async()=>{const x=await api('downloadReport',{flight_id:f.id});if(x?.saved)message('Signed PDF saved')}));
+  on('pdf',run(async()=>{
+    if(isDemo){message('Demonstration reports are not stored in the NAVDECK cloud. Use Print for a sample preview.');return;}
+    const x=await api('downloadReport',{flight_id:f.id});if(x?.saved)message('Signed PDF saved')
+  }));
   if(f.signoff?.signed)return;
   const canvas=d('pad');if(!canvas)return;let ctx=canvas.getContext('2d'),drawing=false;ink=false;
   ctx.strokeStyle='#121212';ctx.lineWidth=2;ctx.lineCap='round';
