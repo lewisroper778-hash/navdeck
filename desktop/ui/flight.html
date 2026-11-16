@@ -327,7 +327,14 @@ function draw(){
  d('summary').innerHTML=details([['Flight status',closed?'CLOSED':'OPEN'],['Progress',done+'/'+active.length+' fixes'],['Next waypoint',next?.ident],['Landing rate',f.landing_rate?'-'+Math.abs(Number(f.landing_rate))+' FPM':'—'],['Block fuel',f.fuel?.block],['OFP units',f.weights?.ofp_units||'KG']]);
  d('phasebar').innerHTML=phases.map((x,i)=>'<button class="phase '+(section===x?'active':'')+'" data-phase="'+x+'">'+(i+1)+' · '+({briefing:'Briefing',departure:'Departure',enroute:'In-Flight Reporting',arrival:'Arrival',close:'Close & Sign'})[x]+'</button>').join('');
  document.querySelectorAll('[data-phase]').forEach(b=>b.onclick=()=>{section=b.dataset.phase;draw()});
- d('stage').innerHTML=({briefing,departure,enroute,arrival,closeFlight})[section]();
+ const pages={briefing,departure,enroute,arrival,close:closeFlight};
+ const render=pages[section]||briefing;
+ try{d('stage').innerHTML=render();}
+ catch(err){
+   d('stage').innerHTML=panel('Reporting page error','<p class="muted">The reporting panel could not open. Please retry or select a different phase.</p>');
+   message('Unable to open '+section+': '+(err?.message||err),true);
+   return;
+ }
  bind();
  if(section==='enroute')refreshLive();
  if(closed){document.querySelectorAll('[data-edit]').forEach(b=>b.disabled=true);document.querySelectorAll('#stage input, #stage textarea, #stage select').forEach(b=>b.disabled=true);}
