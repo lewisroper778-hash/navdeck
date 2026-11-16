@@ -136,7 +136,12 @@ async function renderSimbrief(){
 async function renderVatsim(isCommunity=false){
  const title=isCommunity?'Flight community':'VATSIM network',desc=isCommunity?'Explore active pilots on the public VATSIM network. NAVDECK social messages are not yet available in the desktop bridge.':'Live aviation network activity presented in your own NAVDECK desktop interface.';
  $('content').innerHTML=template(title,desc,'Network source','VATSIM',btn('refreshTraffic','↻  Refresh traffic',true))+
- '<div class="metric-grid" id="networkMetrics"></div><section class="panel tight">'+
+ '<div class="metric-grid" id="networkMetrics"></div>'+
+ '<section class="panel">'+header('File a flight plan','Prefill a VATSIM flight plan from a NAVDECK flight. Review and submit it on myVATSIM.')+
+ '<div class="row"><select id="vatsimFlight" class="search" style="max-width:380px" aria-label="Choose open flight"><option value="">Select an open NAVDECK flight</option></select>'+
+ '<button type="button" id="vatsimPrefile" class="button primary">Open VATSIM prefile</button></div>'+
+ '<div id="prefileNotice" style="margin-top:12px"></div></section>'+
+ '<section class="panel tight">'+
  '<div style="padding:21px 20px 14px">'+header(isCommunity?'Pilot activity':'Live pilots','Real flights from public VATSIM data — not simulated or invented traffic.')+
  '<input class="search" id="trafficSearch" placeholder="Search callsign, origin or destination" aria-label="Filter network traffic"></div>'+
  '<div id="trafficNotice" style="padding:0 20px"></div><div class="table-wrap"><table class="table"><thead><tr><th>Callsign</th><th>Departure</th><th>Destination</th><th>Altitude</th><th>Groundspeed</th><th>Aircraft</th></tr></thead><tbody id="trafficTable"><tr><td colspan="6">Loading VATSIM traffic…</td></tr></tbody></table></div></section>';
@@ -158,7 +163,43 @@ async function renderVatsim(isCommunity=false){
   }catch(e){$('trafficNotice').innerHTML=notice('Could not load VATSIM traffic. Check your connection. '+e.message,'error');$('trafficTable').innerHTML='<tr><td colspan="6">Network traffic unavailable.</td></tr>';}
   finally{b.disabled=false}
  };
+
  action('refreshTraffic',refresh);refresh();
+ try{
+   const [flightData,profileData]=await Promise.allSettled([call('getFlights'),call('getProfile')]);
+   const available=flightData.status==='fulfilled'?(flightData.value?.flights||[]):[];
+   const open=available.filter(x=>x.status!=='closed'&&x.id);
+   $('vatsimFlight').innerHTML='<option value="">Select an open NAVDECK flight</option>'+open.map(f=>'<option value="'+safe(f.id)+'">'+safe((f.callsign||'Flight')+' · '+(f.origin||'—')+' → '+(f.destination||'—'))+'</option>').join('');
+   const cid=profileData.status==='fulfilled'?String(profileData.value?.profile?.vatsim_cid||''):'';
+   action('vatsimPrefile',async()=>{
+     const id=$('vatsimFlight').value;
+     if(!id){$('prefileNotice').innerHTML=notice('Choose a flight first.','error');return;}
+     const button=$('vatsimPrefile');button.disabled=true;
+     try{
+       const data=await call('getFlightDetails',{flight_id:id});
+       const f=data?.flight;
+       if(!f)throw Error('Flight details unavailable');
+       const cruise=Math.round(Number(f.cruise_level||0)/100);
+       const route=String(f.route||'').slice(0,1200);
+       const depTime=String(f.times?.sched_off||'00:00').replace(':','');
+       const eteSeconds=Number(f.ete||0);
+       const toHHMM=n=>{n=Math.max(0,Math.round(n));return String(Math.floor(n/3600)).padStart(2,'0')+String(Math.floor((n%3600)/60)).padStart(2,'0')};
+       const firstCruise=(f.waypoints||[]).find(w=>Number(w.altitude)>=Number(f.cruise_level||0)-100)||{};
+       const speed='N'+String(firstCruise.tas||450).padStart(4,'0');
+       const raw='(FPL-'+String(f.callsign||'')+'-IS -'+String(f.aircraft||'')+'/M-SDE3FGHIRWY/LB1 -'+
+         String(f.origin||'')+depTime+' -'+speed+'F'+String(cruise).padStart(3,'0')+' '+route+
+         ' -'+String(f.destination||'')+toHHMM(eteSeconds)+' '+String(f.alternate||'')+
+         ' -PBN/A1B1C1D1O1S1 RMK/TCAS FILED VIA NAVDECK)';
+       const q=new URLSearchParams({raw,cid,callsign:String(f.callsign||''),aircraft:String(f.aircraft||''),
+         departure:String(f.origin||''),arrival:String(f.destination||''),alternate:String(f.alternate||''),
+         altitude:String(f.cruise_level||''),speed,route,deptime:depTime,enroute_time:toHHMM(eteSeconds),
+         fuel_time:toHHMM(eteSeconds+3600),flight_rules:'I',remarks:'TCAS FILED VIA NAVDECK'});
+       await call('openVatsim',{url:'https://my.vatsim.net/pilots/flightplan?'+q.toString()});
+       $('prefileNotice').innerHTML=notice('Prefiled form opened in your browser. Review the route and equipment before submitting.','good');
+     }catch(err){$('prefileNotice').innerHTML=notice('Could not prefile: '+err.message,'error')}
+     finally{button.disabled=false}
+   });
+ }catch(e){$('prefileNotice').innerHTML=notice('Flight selector unavailable; ensure the updated NAVDECK API is deployed.','error')}
 }
 
 async function renderCommunity(){
