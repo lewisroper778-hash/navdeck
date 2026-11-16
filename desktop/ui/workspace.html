@@ -68,7 +68,7 @@ const call=(name,args)=>window.navdeckDesktop&&typeof window.navdeckDesktop[name
 const format=n=>Number.isFinite(Number(n))?Number(n).toLocaleString('en-GB'):'—';
 const short=v=>{let x=String(v??'—');return x.length>28?x.slice(0,28)+'…':x};
 const statusEl=$('cloudStatus');
-let lastFlight=null,lastFlights=[],flightCache=null,flightCacheAt=0;
+let lastFlight=null,lastFlights=[],flightCache=null,flightCacheAt=0,flightLoadPromise=null;
 function notice(msg,kind=''){return '<div class="notice '+kind+'">'+safe(msg)+'</div>'}
 function setCloud(ok,text){statusEl.className='status '+(ok?'ok':'error');statusEl.querySelector('span').textContent=text}
 function action(id,fn){const node=$(id);if(node)node.onclick=fn}
@@ -83,17 +83,23 @@ function stripFlight(f){
 }
 async function loadFlights(force=false){
  if(!force&&flightCache&&Date.now()-flightCacheAt<45000)return flightCache;
- try{const data=await call('getFlights');if(!Array.isArray(data?.flights))throw Error('Missing cloud flight list');lastFlights=data.flights;setCloud(true,'NAVDECK cloud linked');flightCache={flights:data.flights,full:true};flightCacheAt=Date.now();return flightCache;}
- catch(err){
-  try{const data=await call('getFlight');setCloud(true,'NAVDECK bridge linked');const f=data?.flight;lastFlights=f?[{...f,status:'open'}]:[];flightCache={flights:lastFlights,full:false};flightCacheAt=Date.now();return flightCache;}
-  catch{setCloud(false,'Pairing required');return {flights:[],full:false,error:'Pair NAVDECK using Simulator Connection to sync your flight data.'};}
- }
+ // Reuse one in-flight request when users switch tabs or click Refresh quickly.
+ if(flightLoadPromise)return flightLoadPromise;
+ flightLoadPromise=(async()=>{
+  try{const data=await call('getFlights');if(!Array.isArray(data?.flights))throw Error('Missing cloud flight list');lastFlights=data.flights;setCloud(true,'NAVDECK cloud linked');flightCache={flights:data.flights,full:true};flightCacheAt=Date.now();return flightCache;}
+  catch(err){
+   try{const data=await call('getFlight');setCloud(true,'NAVDECK bridge linked');const f=data?.flight;lastFlights=f?[{...f,status:'open'}]:[];flightCache={flights:lastFlights,full:false};flightCacheAt=Date.now();return flightCache;}
+   catch{setCloud(false,'Pairing required');return {flights:[],full:false,error:'Pair NAVDECK using Simulator Connection to sync your flight data.'};}
+  }
+ })();
+ try{return await flightLoadPromise;}finally{flightLoadPromise=null;}
 }
 async function renderFlights(force=false){
  const top=template('My flights','A dedicated desktop flight centre. Flight data comes from your NAVDECK connection, not the website.','Flights on record','—',btn('reloadFlights','↻  Refresh flights',true));
  $('content').innerHTML=top+'<div class="metric-grid" id="flightMetrics"></div><div class="toolbar"><div class="section-kicker" style="margin:0">FLIGHT LIBRARY</div><input class="search" id="flightSearch" placeholder="Search flight number or airport" aria-label="Search flights"></div><div id="flightNotice"></div><div class="cards" id="flightCards"></div>';
  action('reloadFlights',()=>renderFlights(true));
  const result=await loadFlights(force),flights=result.flights;
+ if(!$('flightMetrics')||!$('flightCards'))return; // User navigated away while cloud was loading.
  $('flightMetrics').innerHTML=metric('Flights available',flights.length,'From paired NAVDECK')+metric('Flights in progress',flights.filter(x=>x.status!=='closed').length,'Open flight plans',true)+metric('Closed flights',flights.filter(x=>x.status==='closed').length,'Archived flights')+metric('Last import',flights[0]?.imported_at?.slice(0,10)||'—','Latest NAVDECK record');
  $('flightNotice').innerHTML=result.error?notice(result.error,'error'):(!result.full?notice('Showing the current paired flight only. Deploy the updated NAVDECK bridge server to list your full cloud flight history.'):'');
  const draw=()=>{const term=$('flightSearch').value.trim().toLowerCase();const found=flights.filter(f=>[f.callsign,f.origin,f.destination,f.aircraft].some(v=>String(v||'').toLowerCase().includes(term)));$('flightCards').innerHTML=found.length?found.map(stripFlight).join(''):empty('No matching flights','Import a flight from SimBrief or change your search terms.')};
@@ -183,6 +189,7 @@ async function renderSimbrief(){
  };
  try{
    const data=await call('getProfile'),p=data?.profile||{};
+   if(!$('pilotId')||!$('profileNotice'))return;
    $('pilotId').value=p.simbrief_pilot_id||'';
    $('displayName').value=p.display_name||'';
    if(data?.sync_status==='local_only'){
@@ -233,6 +240,7 @@ async function renderVatsim(isCommunity=false){
  action('refreshTraffic',refresh);refresh();
  try{
    const [flightData,profileData]=await Promise.allSettled([call('getFlights'),call('getProfile')]);
+   if(!$('vatsimFlight'))return;
    const available=flightData.status==='fulfilled'?(flightData.value?.flights||[]):[];
    const open=available.filter(x=>x.status!=='closed'&&x.id);
    $('vatsimFlight').innerHTML='<option value="">Select an open NAVDECK flight</option>'+open.map(f=>'<option value="'+safe(f.id)+'">'+safe((f.callsign||'Flight')+' · '+(f.origin||'—')+' → '+(f.destination||'—'))+'</option>').join('');
@@ -328,7 +336,7 @@ async function renderLogbook(){
  '<div class="metric-grid" id="logMetrics"></div><div id="logNotice"></div><section class="panel tight"><div style="padding:21px 20px 14px">'+header('Completed flights','Closed flights stored on your linked NAVDECK account')+'</div><div class="table-wrap"><table class="table"><thead><tr><th>Date</th><th>Callsign</th><th>Route</th><th>Block time</th><th>Air time</th><th>Landing rate</th></tr></thead><tbody id="logRows"><tr><td colspan="6">Loading logbook…</td></tr></tbody></table></div></section>';
  action('refreshLogbook',renderLogbook);
  try{
- const d=await call('getLogbook'),records=d?.flights||[];if(!Array.isArray(records))throw Error('Invalid logbook result');
+ const d=await call('getLogbook'),records=d?.flights||[];if(!$('logMetrics')||!$('logRows'))return;if(!Array.isArray(records))throw Error('Invalid logbook result');
  const block=records.reduce((n,f)=>n+hhmmDistance(f.times?.off,f.times?.on),0);
  const air=records.reduce((n,f)=>n+hhmmDistance(f.times?.takeoff,f.times?.landing),0);
  const rates=records.map(f=>Math.abs(Number(f.landing_rate))).filter(n=>Number.isFinite(n)&&n>0);
@@ -359,7 +367,12 @@ const pages={flights:renderFlights,simbrief:renderSimbrief,vatsim:()=>renderVats
 function showPage(){
   const page=location.hash.slice(1).toLowerCase()||'flights';
   $('breadcrumb').textContent=({flights:'My Flights',simbrief:'SimBrief',vatsim:'VATSIM Network',community:'Flight Community',logbook:'Pilot Logbook',settings:'Desktop Settings'})[page]||'My Flights';
-  (pages[page]||renderFlights)();
+  Promise.resolve().then(()=> (pages[page]||renderFlights)()).catch(err=>{
+    // A slow response from an old tab must not replace the current page.
+    if((location.hash.slice(1).toLowerCase()||'flights')!==page)return;
+    const content=$('content');
+    if(content)content.insertAdjacentHTML('afterbegin',notice('Unable to load this section: '+err.message,'error'));
+  });
 }
 window.addEventListener('hashchange',showPage);
 showPage();
