@@ -47,6 +47,53 @@ internal sealed class NavdeckApi
         return doc.RootElement.TryGetProperty("applied", out var a) ? a.EnumerateArray().Select(x => x.GetString() ?? "").ToArray() : [];
     }
 
+    // Desktop-only cloud requests use the same revocable pairing token as
+    // telemetry. Never forward the token to the local HTML interface.
+    public async Task<JsonElement> RequestDesktopAsync(
+        string action, JsonElement? payload = null)
+    {
+        string path = action switch
+        {
+            "getFlight" => "flight",
+            "getFlights" => "desktop/flights",
+            "getLogbook" => "desktop/logbook",
+            "getProfile" => "desktop/profile",
+            "saveProfile" => "desktop/profile",
+            "importSimbrief" => "desktop/import",
+            _ => throw new ArgumentException("Unsupported desktop request")
+        };
+
+        using var request = new HttpRequestMessage(
+            action == "saveProfile" ? HttpMethod.Put :
+            action == "importSimbrief" ? HttpMethod.Post : HttpMethod.Get,
+            path);
+
+        if (action == "saveProfile")
+        {
+            if (payload is not { } p || p.ValueKind != JsonValueKind.Object)
+                throw new ArgumentException("Missing profile update fields");
+
+            var update = new Dictionary<string, object?>();
+            foreach (var key in new[] { "simbrief_pilot_id", "display_name" })
+            {
+                if (!p.TryGetProperty(key, out var field))
+                    continue;
+                if (field.ValueKind == JsonValueKind.Null)
+                    update[key] = null;
+                else if (field.ValueKind == JsonValueKind.String)
+                    update[key] = field.GetString();
+                else
+                    throw new ArgumentException("Invalid profile update field");
+            }
+            request.Content = JsonContent.Create(update);
+        }
+
+        using var response = await _http.SendAsync(request);
+        await EnsureOk(response);
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        return document.RootElement.Clone();
+    }
+
     // Sends live aircraft data to the NAVDECK flight dashboard.
     public Task SendTelemetryAsync(Sample s)
     {
