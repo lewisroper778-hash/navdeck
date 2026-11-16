@@ -328,7 +328,11 @@ function enroute(){
  const rows=navlogRows(f),active=rows.filter(x=>!x.skipped),next=active.find(x=>!x.passed&&!x.ata);
  const completed=active.filter(x=>x.passed||x.ata).length;
  const fuel=fuelSummary(f,rows),units=f.weights?.ofp_units||'KG';
- const tbody=rows.map((r,i)=>{
+ const pageSize=40,totalPages=Math.max(1,Math.ceil(rows.length/pageSize));
+ wpPage=Math.min(Math.max(0,wpPage),totalPages-1);
+ const start=wpPage*pageSize;
+ const tbody=rows.slice(start,start+pageSize).map((r,offset)=>{
+ const i=start+offset;
  const done=r.passed||r.ata;
  return '<tr class="'+(r.skipped?'skip':done?'done':next===r?'nextfix':'')+'"><td><input type="checkbox" data-pass="'+i+'" '+(done?'checked':'')+(r.skipped||f.status==='closed'?' disabled':'')+'></td>'+
  '<td><b>'+e(r.ident)+'</b><small style="display:block;color:#999">'+e(r.airway||'DCT')+'</small></td>'+
@@ -353,6 +357,7 @@ function enroute(){
  '</div>'+forecast+fuelChart(rows,fuel)+
  '<div class="mini-actions"><button class="button ghost" id="refreshReport" type="button">↻ Sync report from NAVDECK</button></div>'+
  '<div class="rule"></div><div class="scroll-table"><table class="tab-table"><thead><tr><th>Passed</th><th>Fix</th><th>FL</th><th>ETO UTC</th><th>Plan FOB</th><th>ATA UTC</th><th>Actual FOB</th><th>ALT</th><th>ΔTime</th><th>ΔFuel</th><th>Actions</th></tr></thead><tbody>'+tbody+'</tbody></table></div>'+
+ (rows.length>pageSize?'<div class="mini-actions"><button class="button ghost" id="wpPrev" '+(!wpPage?'disabled':'')+'>← Previous fixes</button><span class="muted">Waypoints '+(start+1)+'–'+Math.min(rows.length,start+pageSize)+' of '+rows.length+'</span><button class="button ghost" id="wpNext" '+(wpPage>=totalPages-1?'disabled':'')+'>Next fixes →</button></div>':'')+
  '<div class="mini-actions">'+undos.map((g,i)=>'<button class="button ghost" data-undo="'+e(g)+'" data-edit>Undo direct '+(i+1)+'</button>').join('')+
  '<button class="button ghost" id="reset" data-edit>Reset tracker</button></div><p class="muted">ETOs and fuel forecasts use the imported OFP and actual entries. Review any ATC direct routing changes before using estimates.</p>');
 }
@@ -371,7 +376,8 @@ function arrival(){
 function closeFlight(){
  const t=f.times||{},sg=f.signoff||{},closed=f.status==='closed';
  const missing=reportBlockers(f,true);
- const checks=missing.map(([label,phase])=>[label,false,phase]);
+ const checks=missing.slice(0,12).map(([label,phase])=>[label,false,phase]);
+ if(missing.length>12)checks.push([String(missing.length-12)+' additional reporting entries',false,'enroute']);
  checks.push(['Commander sign-off',!!sg.signed,'close']);
  const good=checks.every(x=>x[1]);
  const readyToSign=missing.length===0;
@@ -427,6 +433,8 @@ function bind(){
  }
  if(section==='departure')on('saveDeparture',run(()=>act('saveTimes',validateTimes({off:v('off'),takeoff:v('to'),tsat:v('tsat2'),ctot:v('ctot2')}))));
  if(section==='enroute'){
+  on('wpPrev',()=>{wpPage=Math.max(0,wpPage-1);draw();});
+  on('wpNext',()=>{wpPage++;draw();});
   on('refreshReport',run(async()=>{
     if(isDemo){draw();message('Sample data refreshed locally. No cloud connection used.');return;}
     const data=await api('getFlightDetails',{flight_id:f.id});
