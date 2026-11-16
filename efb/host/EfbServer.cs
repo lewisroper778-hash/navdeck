@@ -129,6 +129,7 @@ internal sealed class EfbServer : IAsyncDisposable
                     {
                         ["version"] = Version,
                         ["outbox"] = Outbox?.Pending ?? 0,
+                        ["reportsAvailable"] = Outbox?.Available ?? false,
                         ["urls"] = new JsonArray(LanUrls().Select(u => (JsonNode?)JsonValue.Create(u)).ToArray()),
                     },
                 };
@@ -194,8 +195,7 @@ internal sealed class EfbServer : IAsyncDisposable
             {
                 JsonObject closed;
                 lock (_store.Gate) closed = (JsonObject)_store.Flight.DeepClone();
-                Outbox.Enqueue(closed);
-                sending = true;
+                sending = Outbox.Enqueue(closed);
             }
             if (error is null) await Json(ctx, new JsonObject { ["ok"] = true, ["sending"] = sending });
             else await Json(ctx, new JsonObject { ["error"] = error }, 400);

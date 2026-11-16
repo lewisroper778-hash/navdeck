@@ -167,7 +167,7 @@ export async function signAndClose() {
     title: 'Flight signed and closed',
     body: h('div', { class: 'stack' },
       h('p', { class: 'muted' }, 'The journey log is saved in the logbook. You can export it as a PDF now or later from the Report tab.'),
-      closing?.sending && h('p', null, 'It is also being emailed to NAVDECK (inflightreports@navdeck.online). If this PC is offline, it is sent automatically later.')),
+      closing?.sending && h('p', null, 'It is also being posted to the NAVDECK Discord. If this PC is offline, it is sent automatically later.')),
     buttons: [{ label: 'Done', value: null }, { label: 'Open report', value: 'report' }, { label: 'Export PDF', value: 'pdf', primary: true }],
   });
   if (next === 'pdf') exportPdf(f.id);

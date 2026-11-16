@@ -32,6 +32,15 @@
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3537.50" />
   </ItemGroup>
 
+  <!-- The Discord webhook for journey logs comes from the build environment (GitHub secret
+       EFB_DISCORD_WEBHOOK), so it never appears in the source code. -->
+  <ItemGroup Condition="'$(EFB_DISCORD_WEBHOOK)' != ''">
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>DiscordWebhook</_Parameter1>
+      <_Parameter2>$(EFB_DISCORD_WEBHOOK)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+
   <ItemGroup>
     <EmbeddedResource Include="Data/runways.csv" LogicalName="NavdeckEfb.Data.runways.csv" />
     <Content Include="../web/**/*" Link="web/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />

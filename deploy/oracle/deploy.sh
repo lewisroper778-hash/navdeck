@@ -51,16 +51,6 @@ if ! grep -q '^CLERK_SECRET_KEY=sk_' "$runtime_env" ||
   exit 1
 fi
 
-# Optional mail settings for EFB journey logs (kept on the server only, never in git).
-email_env=/opt/navdeck/email.env
-if [[ -f "$email_env" ]]; then
-  grep -v -E '^(EFB_SMTP_[A-Z_]+|EFB_REPORTS_TO)=' "$runtime_env" > "$runtime_env.tmp" || true
-  grep -E '^(EFB_SMTP_[A-Z_]+|EFB_REPORTS_TO)=' "$email_env" >> "$runtime_env.tmp" || true
-  mv "$runtime_env.tmp" "$runtime_env"
-  chmod 600 "$runtime_env"
-  echo "EFB journey-log email settings loaded from $email_env"
-fi
-
 version="$(git rev-parse --short=12 HEAD)"
 backend_image="navdeck-backend:oracle-${version}"
 frontend_image="navdeck-frontend:oracle-${version}"

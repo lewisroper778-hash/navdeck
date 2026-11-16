@@ -145,7 +145,7 @@ internal static class SelfTest
             Check(store.CloseFlight() is null, "closes once signed and the reason is entered");
             Check(store.History.Count == 1, "closed flight added to the logbook");
 
-            // journey log goes to the NAVDECK server (a stand-in here): first "not set up yet", then accepted
+            // journey log is posted to the Discord webhook (a stand-in here): first Discord is busy, then it accepts
             {
                 var port = 18700 + Environment.ProcessId % 200;
                 using var listener = new System.Net.HttpListener();
@@ -160,27 +160,35 @@ internal static class SelfTest
                         System.Net.HttpListenerContext ctx;
                         try { ctx = await listener.GetContextAsync(); } catch (Exception) { return; }
                         using (var reader = new StreamReader(ctx.Request.InputStream, Encoding.Latin1))
-                            lock (bodies) bodies.Add(ctx.Request.Url?.AbsolutePath + "\n" + reader.ReadToEnd());
+                            lock (bodies) bodies.Add(ctx.Request.Url?.PathAndQuery + "\n" + reader.ReadToEnd());
                         ctx.Response.StatusCode = answers.Count > 0 ? answers.Dequeue() : 200;
                         ctx.Response.Close();
                     }
                 });
-                using var outbox = new ReportOutbox(store, $"http://localhost:{port}")
+                using var noWebhook = new ReportOutbox(store, "not a link", useBuiltIn: false);
+                JsonObject probe;
+                lock (store.Gate) probe = (JsonObject)store.Flight.DeepClone();
+                Check(!noWebhook.Available && !noWebhook.Enqueue(probe), "an app built without the Discord link does not queue reports");
+                foreach (var f in Directory.EnumerateFiles(Path.Combine(dataDir, "outbox"), "*.json")) File.Delete(f);
+
+                using var outbox = new ReportOutbox(store, $"http://localhost:{port}/api/webhooks/123/token")
                 {
                     PdfRenderer = _ => Task.FromResult(Encoding.ASCII.GetBytes("%PDF-1.7 selftest journey log")),
                 };
                 JsonObject closedFlight;
                 lock (store.Gate) closedFlight = (JsonObject)store.Flight.DeepClone();
                 outbox.Enqueue(closedFlight);
-                Check(outbox.Pending == 1, "closed flight's journey log queued for NAVDECK");
+                Check(outbox.Pending == 1, "closed flight's journey log queued for the NAVDECK Discord");
                 var first = outbox.SendDueAsync().GetAwaiter().GetResult();
-                Check(first == 0 && outbox.Pending == 1, "kept in the outbox while the server is not ready");
+                Check(first == 0 && outbox.Pending == 1, "kept in the outbox while Discord is busy");
                 var second = outbox.SendDueAsync(ignoreSchedule: true).GetAwaiter().GetResult();
-                Check(second == 1 && outbox.Pending == 0, "sent once the server accepts it");
+                Check(second == 1 && outbox.Pending == 0, "posted once Discord accepts it");
                 string last;
                 lock (bodies) last = bodies.Count > 0 ? bodies[^1] : "";
-                Check(last.StartsWith("/api/efb/reports") && last.Contains("%PDF-1.7 selftest journey log") && last.Contains("BAW123") && last.Contains("EGKK-EGLL"),
-                    "upload carries the PDF, flight and route");
+                Check(last.StartsWith("/api/webhooks/123/token?wait=true") && last.Contains("payload_json") && last.Contains("files[0]") &&
+                      last.Contains("%PDF-1.7 selftest journey log") && last.Contains("BAW123") && last.Contains("EGKK-EGLL"),
+                    "Discord message carries the PDF, flight and route");
+                Check(last.Contains("\"allowed_mentions\":{\"parse\":[]}"), "the message can never ping anyone");
                 listener.Stop();
                 serving.Wait(2000);
             }

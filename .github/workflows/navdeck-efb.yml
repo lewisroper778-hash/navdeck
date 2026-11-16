@@ -68,6 +68,8 @@ jobs:
         run: dotnet restore efb/host/NavdeckEFB.csproj -r win-x64
 
       - name: Build Windows application
+        env:
+          EFB_DISCORD_WEBHOOK: ${{ secrets.EFB_DISCORD_WEBHOOK }}
         run: >
           dotnet publish efb/host/NavdeckEFB.csproj
           --configuration Release
