@@ -32,6 +32,30 @@ internal sealed class DesktopForm : Form
         BackColor = Color.Transparent
     };
 
+    // Free-tier cloud hosts put an idle backend to sleep, and the first request
+    // after that can take a long time. Waking it as soon as the app opens means
+    // it is usually ready by the time the first screen asks for data.
+    private static void WarmUpBackend()
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var code = Config.Load().Code;
+                if (!Config.IsValidCode(code))
+                    return;
+
+                var baseUrl = code.Trim().Split('#', 2)[0].TrimEnd('/');
+                using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(90) };
+                using var response = await http.GetAsync(baseUrl + "/health");
+            }
+            catch (Exception)
+            {
+                // Best effort only; normal requests report any real connection problem.
+            }
+        });
+    }
+
     public DesktopForm()
     {
         Text = "NAVDECK Desktop";
@@ -361,6 +385,7 @@ internal sealed class DesktopForm : Form
 
         Shown += async (_, _) =>
         {
+            WarmUpBackend();
             try
             {
                 await _browser.EnsureCoreWebView2Async();
