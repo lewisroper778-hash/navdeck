@@ -28,7 +28,9 @@ internal sealed class MainForm : Form
     private readonly RunwayVisualizer _runwayVisualizer = new();
     private RunwayMatch? _lastRunway;
 
-    private readonly System.Windows.Forms.Timer _poll = new() { Interval = 100 };
+    // 4 Hz is responsive for simulator state and go-around detection without
+    // occupying the WinForms UI thread with ten synchronous FSUIPC reads/sec.
+    private readonly System.Windows.Forms.Timer _poll = new() { Interval = 250 };
     private readonly System.Windows.Forms.Timer _slow = new() { Interval = 5000 };
     private readonly System.Windows.Forms.Timer _routeRefreshTimer = new() { Interval = 5000 };
     private readonly bool _startMinimized;
