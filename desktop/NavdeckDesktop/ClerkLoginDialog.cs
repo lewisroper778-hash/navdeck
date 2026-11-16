@@ -45,6 +45,22 @@ internal sealed class ClerkLoginDialog : Form
         };
         cancel.FlatAppearance.BorderSize = 0;
         cancel.Click += (_, _) => { DialogResult = DialogResult.Cancel; Close(); };
+        var reload = new Button
+        {
+            Text = "Retry sign-in",
+            Dock = DockStyle.Right,
+            Width = 125,
+            FlatStyle = FlatStyle.Flat,
+            ForeColor = Color.White,
+            BackColor = Color.FromArgb(38, 91, 139)
+        };
+        reload.FlatAppearance.BorderSize = 0;
+        reload.Click += (_, _) =>
+        {
+            if (_web.CoreWebView2 is null) return;
+            _status.Text = "Retrying NAVDECK sign-in…";
+            _web.CoreWebView2.Navigate(FrontendOrigin + HandoffPath);
+        };
         var top = new Panel { Dock = DockStyle.Top, Height = 43, BackColor = Color.FromArgb(21, 25, 36) };
         var heading = new Label
         {
@@ -55,6 +71,7 @@ internal sealed class ClerkLoginDialog : Form
             Font = new Font("Segoe UI", 10, FontStyle.Bold)
         };
         top.Controls.Add(heading);
+        top.Controls.Add(reload);
         top.Controls.Add(cancel);
         Controls.Add(_web);
         Controls.Add(_status);
@@ -67,6 +84,12 @@ internal sealed class ClerkLoginDialog : Form
                 await _web.EnsureCoreWebView2Async();
                 _web.CoreWebView2.Settings.AreDevToolsEnabled = false;
                 _web.CoreWebView2.Settings.AreHostObjectsAllowed = false;
+                _web.CoreWebView2.NavigationCompleted += (_, args) =>
+                {
+                    if (!args.IsSuccess)
+                        _status.Text = "Sign-in page couldn't load (" +
+                            args.WebErrorStatus + "). Check your connection and select Retry sign-in.";
+                };
                 _web.CoreWebView2.NavigationStarting += (_, args) =>
                 {
                     // The sign-in widget can redirect to Clerk / identity
