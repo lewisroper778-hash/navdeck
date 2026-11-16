@@ -18,6 +18,8 @@ internal sealed class FsuipcLink : IDisposable
     private readonly Offset<long> _lon = new("navdeck", 0x0568);
     private readonly Offset<uint> _heading = new("navdeck", 0x0580);
     private readonly Offset<long> _alt = new("navdeck", 0x0570);           // metres * 65536 * 65536
+    private readonly Offset<int> _radioAlt = new("navdeck", 0x31E4);       // metres * 65536 (height above terrain)
+    private readonly Offset<int> _verticalSpeed = new("navdeck", 0x02C8); // metres/sec * 256
 
     public bool IsOpen => FSUIPCConnection.IsOpen;
     public string? AircraftTitle { get; private set; }
@@ -51,7 +53,9 @@ internal sealed class FsuipcLink : IDisposable
                 Lat: _lat.Value * 90.0 / (10001750.0 * 65536.0 * 65536.0),
                 Lon: _lon.Value * 360.0 / (65536.0 * 65536.0 * 65536.0 * 65536.0),
                 AltFt: _alt.Value / (65536.0 * 65536.0) * 3.28084,
-                HeadingDeg: _heading.Value * 360.0 / 4294967296.0);
+                HeadingDeg: _heading.Value * 360.0 / 4294967296.0,
+                RadioAltFt: _radioAlt.Value / 65536.0 * 3.28084,
+                VerticalSpeedFpm: _verticalSpeed.Value / 256.0 * MpsToFpm);
         }
         catch (FSUIPCException)
         {
