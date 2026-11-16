@@ -32,6 +32,7 @@
     <Content Include="../ui/map.html" Link="desktop-map/map.html" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
     <Content Include="../ui/workspace.html" Link="desktop-map/workspace.html" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
     <Content Include="../ui/flight.html" Link="desktop-map/flight.html" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
+    <Content Include="../../frontend/public/favicon.png" Link="desktop-map/navdeck-website-logo.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
   </ItemGroup>
 
 </Project>
