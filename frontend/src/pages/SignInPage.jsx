@@ -41,7 +41,7 @@ export default function SignInPage() {
   const desktop = new URLSearchParams(search).get("desktop") === "1";
   return (
     <AuthShell mode="in">
-      <SignIn routing="path" path="/sign-in" signUpUrl="/sign-up"
+      <SignIn routing="path" path="/sign-in" signUpUrl={desktop ? "/sign-up?desktop=1" : "/sign-up"}
         forceRedirectUrl={desktop ? "/desktop/connect" : undefined} />
     </AuthShell>
   );
