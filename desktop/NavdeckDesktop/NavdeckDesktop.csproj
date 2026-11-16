@@ -11,7 +11,7 @@
     <AssemblyName>NavdeckDesktop</AssemblyName>
     <RootNamespace>NavdeckLink</RootNamespace>
     <ApplicationIcon>navdeck.ico</ApplicationIcon>
-    <Version>1.0.0</Version>
+    <Version>1.2.0</Version>
     <Product>NAVDECK Desktop</Product>
     <Company>NAVDECK</Company>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
