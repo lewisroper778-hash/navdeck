@@ -14,7 +14,7 @@
 .panel{min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:21px;margin-bottom:18px;box-shadow:0 6px 22px #00000010}.panel.tight{padding:0;overflow:hidden}.panel-head{display:flex;align-items:start;justify-content:space-between;gap:15px;margin-bottom:16px}.panel-head h2{margin:0;font-size:14px;font-weight:700;letter-spacing:.1px}.panel-head p{margin:5px 0 0;font-size:12px;color:var(--muted)}.toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px;flex-wrap:wrap}
 .search{min-width:260px;max-width:360px;flex:1;border:1px solid #4e4d56;background:#232329;color:#fff;border-radius:8px;padding:10px 13px;outline:none}.search::placeholder{color:#8a8794}.search:focus{border-color:#975bfa}
 .metric-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:23px}.metric{background:var(--panel);border:1px solid var(--line);padding:18px 20px;border-radius:11px}.metric .label{font-size:11px;color:var(--muted);letter-spacing:.3px}.metric strong{display:block;font-size:26px;font-weight:710;margin:9px 0 2px;font-variant-numeric:tabular-nums}.metric small{display:block;color:var(--dim);font-size:11px}.metric.purple{border-color:#71539a;background:linear-gradient(135deg,#3a2f52,#2b2934)}
-.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:15px}.flight{padding:17px 17px 14px;border:1px solid #474451;border-radius:11px;background:linear-gradient(115deg,#303038,#28282f);text-align:left;min-width:0;color:var(--text)}button.flight:hover{border-color:#a070eb;background:#383142}.flight-head{display:flex;justify-content:space-between;align-items:center;gap:10px}.flight-head b{font-size:14px}.chip{padding:4px 9px;border:1px solid #5a4a75;background:#3f3552;border-radius:20px;color:#d7bffc;font-size:10px;white-space:nowrap}.chip.closed{background:#324839;border-color:#45634d;color:#9be9af}.flight-route{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:19px 0 13px}.flight-route b{font-size:27px;font-weight:670;letter-spacing:1px}.flight-route span{color:#ab78f6;font-size:22px}.flight-footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid #494752;padding-top:10px;color:#aeadb8;font-size:11px}
+.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:15px}.flight{width:100%;padding:17px 17px 14px;border:1px solid #474451;border-radius:11px;background:linear-gradient(115deg,#303038,#28282f);text-align:left;min-width:0;color:var(--text)}button.flight:hover{border-color:#a070eb;background:#383142}.flight-head{display:flex;justify-content:space-between;align-items:center;gap:10px}.flight-head b{font-size:14px}.chip{padding:4px 9px;border:1px solid #5a4a75;background:#3f3552;border-radius:20px;color:#d7bffc;font-size:10px;white-space:nowrap}.chip.closed{background:#324839;border-color:#45634d;color:#9be9af}.flight-route{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:19px 0 13px}.flight-route b{font-size:27px;font-weight:670;letter-spacing:1px}.flight-route span{color:#ab78f6;font-size:22px}.flight-footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid #494752;padding-top:10px;color:#aeadb8;font-size:11px}
 .two-col{display:grid;grid-template-columns:1.18fr .82fr;gap:17px}.setting-group{margin-bottom:18px}.setting-group label{display:block;margin-bottom:8px;color:#c9c5d1;font-weight:650;font-size:12px}.setting-group input{width:100%;padding:11px 13px;background:#1d1e23;border:1px solid #514e5d;border-radius:7px;color:#fff}.setting-group small{display:block;margin-top:7px;color:var(--dim)}.setting-group input:focus{border-color:#9257ed}.inline-callout{border:1px solid #514866;background:#312c3b;border-radius:9px;padding:13px 14px;color:#c4b4d8;font-size:12px;margin:15px 0}
 .empty{padding:45px 20px;text-align:center;color:#afabb9;line-height:1.65}.empty .symbol{font-size:26px;color:#af8af3;margin-bottom:8px}.empty strong{display:block;font-size:15px;color:#efedf5}.empty p{max-width:480px;margin:6px auto;font-size:12px}
 .table-wrap{overflow:auto}.table{width:100%;border-collapse:collapse;white-space:nowrap}.table thead{color:#9896a4;background:#222228;text-align:left;font-size:10px;letter-spacing:1px;text-transform:uppercase}.table th,.table td{padding:15px 19px;border-bottom:1px solid #35353e}.table tbody tr:hover{background:#2e2e37}.table td{font-size:12px;color:#d8d6df}.table td:first-child{font-weight:700;color:#fff}.table .muted{color:#a09eaa}
@@ -58,7 +58,7 @@ function metric(label,value,sub='',special=false){return '<div class="metric '+(
 function header(label,description,actionMarkup=''){return '<div class="panel-head"><div><h2>'+safe(label)+'</h2><p>'+safe(description)+'</p></div>'+actionMarkup+'</div>'}
 function stripFlight(f){
  const closed=f.status==='closed';
- return '<article class="flight"><div class="flight-head"><b>'+safe(short(f.callsign||'Flight'))+'</b><span class="chip '+(closed?'closed':'')+'">'+safe(closed?'Closed':f.status||'Open')+'</span></div><div class="flight-route"><b>'+safe(f.origin||'—')+'</b><span>✈</span><b>'+safe(f.destination||'—')+'</b></div><div class="flight-footer"><span>'+safe(short(f.aircraft||'Aircraft unavailable'))+'</span><span>'+safe(f.distance?String(f.distance)+' NM':f.imported_at?.slice(0,10)||'No distance')+'</span></div></article>'
+ return '<button type="button" data-flight-id="'+safe(f.id||'')+'" aria-label="Open flight '+safe(f.callsign||'')+'" class="flight"><div class="flight-head"><b>'+safe(short(f.callsign||'Flight'))+'</b><span class="chip '+(closed?'closed':'')+'">'+safe(closed?'Closed':f.status||'Open')+'</span></div><div class="flight-route"><b>'+safe(f.origin||'—')+'</b><span>✈</span><b>'+safe(f.destination||'—')+'</b></div><div class="flight-footer"><span>'+safe(short(f.aircraft||'Aircraft unavailable'))+'</span><span>'+safe(f.distance?String(f.distance)+' NM':f.imported_at?.slice(0,10)||'No distance')+'</span></div><div class="flight-footer"><span>Open flight operations</span><span>↗</span></div></button>'
 }
 async function loadFlights(){
  try{const data=await call('getFlights');if(!Array.isArray(data?.flights))throw Error('Missing cloud flight list');lastFlights=data.flights;setCloud(true,'NAVDECK cloud linked');return {flights:data.flights,full:true};}
@@ -76,6 +76,13 @@ async function renderFlights(){
  $('flightNotice').innerHTML=result.error?notice(result.error,'error'):(!result.full?notice('Showing the current paired flight only. Deploy the updated NAVDECK bridge server to list your full cloud flight history.'):'');
  const draw=()=>{const term=$('flightSearch').value.trim().toLowerCase();const found=flights.filter(f=>[f.callsign,f.origin,f.destination,f.aircraft].some(v=>String(v||'').toLowerCase().includes(term)));$('flightCards').innerHTML=found.length?found.map(stripFlight).join(''):empty('No matching flights','Import a flight from SimBrief or change your search terms.')};
  $('flightSearch').oninput=draw;draw();
+ $('flightCards').addEventListener('click',event=>{
+   const target=event.target.closest('[data-flight-id]');
+   if(!target)return;
+   const id=target.dataset.flightId;
+   if(!/^[0-9a-fA-F-]{36}$/.test(id))return;
+   location.href='flight.html?id='+encodeURIComponent(id);
+ });
 }
 async function renderSimbrief(){
  $('content').innerHTML=template('SimBrief connection','Link your SimBrief pilot identifier, save it to NAVDECK and import your latest operational flight plan.','Integration','API link',btn('importOFP','↻  Import latest OFP',true))+
@@ -159,9 +166,13 @@ async function renderSettings(){
  action('testConnection',test);test();
 }
 const pages={flights:renderFlights,simbrief:renderSimbrief,vatsim:()=>renderVatsim(false),community:()=>renderVatsim(true),logbook:renderLogbook,settings:renderSettings};
-const page=(location.hash.slice(1).toLowerCase()||'flights');
-$('breadcrumb').textContent=({flights:'My Flights',simbrief:'SimBrief',vatsim:'VATSIM Network',community:'Flight Community',logbook:'Pilot Logbook',settings:'Desktop Settings'})[page]||'My Flights';
-(pages[page]||renderFlights)();
+function showPage(){
+  const page=location.hash.slice(1).toLowerCase()||'flights';
+  $('breadcrumb').textContent=({flights:'My Flights',simbrief:'SimBrief',vatsim:'VATSIM Network',community:'Flight Community',logbook:'Pilot Logbook',settings:'Desktop Settings'})[page]||'My Flights';
+  (pages[page]||renderFlights)();
+}
+window.addEventListener('hashchange',showPage);
+showPage();
 })();
 </script>
 </body>
