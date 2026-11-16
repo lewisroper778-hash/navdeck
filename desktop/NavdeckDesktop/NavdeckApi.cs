@@ -103,7 +103,7 @@ internal sealed class NavdeckApi
                 throw new ArgumentException("Missing profile update fields");
 
             var update = new Dictionary<string, object?>();
-            foreach (var key in new[] { "simbrief_pilot_id", "display_name" })
+            foreach (var key in new[] { "simbrief_pilot_id", "display_name", "vatsim_cid" })
             {
                 if (!p.TryGetProperty(key, out var field))
                     continue;
@@ -113,6 +113,26 @@ internal sealed class NavdeckApi
                     update[key] = field.GetString();
                 else
                     throw new ArgumentException("Invalid profile update field");
+            }
+            if (p.TryGetProperty("vatsim_friends", out var friends))
+            {
+                if (friends.ValueKind != JsonValueKind.Array)
+                    throw new ArgumentException("Invalid VATSIM friends list");
+                var names = new List<string>();
+                foreach (var item in friends.EnumerateArray())
+                {
+                    if (item.ValueKind != JsonValueKind.String)
+                        throw new ArgumentException("Invalid VATSIM friend identifier");
+                    var value = (item.GetString() ?? "").Trim().ToUpperInvariant();
+                    if (value.Length < 2 || value.Length > 12 ||
+                        value.Any(c => !char.IsLetterOrDigit(c) && c != '_' && c != '-'))
+                        throw new ArgumentException("Invalid VATSIM friend identifier");
+                    if (!names.Contains(value))
+                        names.Add(value);
+                }
+                if (names.Count > 50)
+                    throw new ArgumentException("Limit of 50 VATSIM friends");
+                update["vatsim_friends"] = names;
             }
             request.Content = JsonContent.Create(update);
         }
