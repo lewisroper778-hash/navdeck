@@ -147,7 +147,11 @@ async function renderLogbook(){
  const air=records.reduce((n,f)=>n+hhmmDistance(f.times?.takeoff,f.times?.landing),0);
  const rates=records.map(f=>Math.abs(Number(f.landing_rate))).filter(n=>Number.isFinite(n)&&n>0);
  $('logMetrics').innerHTML=metric('Flights logged',records.length,'Closed flights on NAVDECK',true)+metric('Total block time',hours(block),'Gate to gate')+metric('Total air time',hours(air),'Wheels off to touchdown')+metric('Average landing rate',rates.length?'-'+Math.round(rates.reduce((a,b)=>a+b,0)/rates.length)+' FPM':'—','Recorded landings');
- $('logRows').innerHTML=records.length?records.map(f=>'<tr><td>'+safe(f.closed_at?.slice(0,10)||'—')+'</td><td>'+safe(f.callsign||'—')+'</td><td>'+safe((f.origin||'—')+' → '+(f.destination||'—'))+'</td><td class="muted">'+safe(hours(hhmmDistance(f.times?.off,f.times?.on)))+'</td><td class="muted">'+safe(hours(hhmmDistance(f.times?.takeoff,f.times?.landing)))+'</td><td>'+safe(f.landing_rate?'-'+Math.abs(Number(f.landing_rate))+' FPM':'—')+'</td></tr>').join(''):'<tr><td colspan="6">No closed flights yet.</td></tr>';
+ $('logRows').innerHTML=records.length?records.map(f=>'<tr><td>'+safe(f.closed_at?.slice(0,10)||'—')+'</td><td><button class="button small ghost" data-log-flight="'+safe(f.id||'')+'">'+safe(f.callsign||'—')+' ↗</button></td><td>'+safe((f.origin||'—')+' → '+(f.destination||'—'))+'</td><td class="muted">'+safe(hours(hhmmDistance(f.times?.off,f.times?.on)))+'</td><td class="muted">'+safe(hours(hhmmDistance(f.times?.takeoff,f.times?.landing)))+'</td><td>'+safe(f.landing_rate?'-'+Math.abs(Number(f.landing_rate))+' FPM':'—')+'</td></tr>').join(''):'<tr><td colspan="6">No closed flights yet.</td></tr>';
+ $('logRows').querySelectorAll('[data-log-flight]').forEach(x=>x.onclick=()=>{
+    if(/^[a-f0-9-]{36}$/i.test(x.dataset.logFlight))
+       location.href='flight.html?id='+encodeURIComponent(x.dataset.logFlight);
+ });
  setCloud(true,'NAVDECK cloud linked');
  }catch(e){
  $('logMetrics').innerHTML=metric('Flights logged','—')+metric('Block time','—')+metric('Air time','—')+metric('Landings','—');
