@@ -124,14 +124,43 @@ async function renderSimbrief(){
   finally{b.disabled=false;b.textContent=label}
  });
  $('profileForm').onsubmit=async e=>{
-  e.preventDefault();const btn=e.submitter;btn.disabled=true;
-  try{const payload={simbrief_pilot_id:$('pilotId').value.trim()||null,display_name:$('displayName').value.trim()||null};
-    await call('saveProfile',payload);$('profileNotice').innerHTML=notice('Settings saved to your NAVDECK account.','good');
-  }catch(err){$('profileNotice').innerHTML=notice('Could not save: '+err.message,'error')}
-  finally{btn.disabled=false}
+  e.preventDefault();
+  const btn=e.submitter;
+  btn.disabled=true;
+  try{
+    const pilotId=$('pilotId').value.trim();
+    if(pilotId&&!/^[0-9]{1,16}$/.test(pilotId))
+      throw Error('SimBrief Pilot ID must be 1–16 digits.');
+    const payload={simbrief_pilot_id:pilotId||null,display_name:$('displayName').value.trim()||null};
+    const saved=await call('saveProfile',payload);
+    if(saved?.sync_status==='local_only'){
+      setCloud(false,'SimBrief settings saved locally');
+      $('profileNotice').innerHTML=notice('Saved on this PC only. The NAVDECK server does not yet support desktop profile saving. Your settings will be synced when the desktop API is available and you next open this page.');
+    }else{
+      setCloud(true,'NAVDECK cloud linked');
+      $('profileNotice').innerHTML=notice('SimBrief Pilot ID and display name saved to your NAVDECK account.','good');
+    }
+  }catch(err){
+    $('profileNotice').innerHTML=notice('Could not save your SimBrief settings: '+err.message,'error');
+  }finally{btn.disabled=false}
  };
- try{const data=await call('getProfile');const p=data?.profile||{};$('pilotId').value=p.simbrief_pilot_id||'';$('displayName').value=p.display_name||'';setCloud(true,'NAVDECK cloud linked')}
- catch(e){$('profileNotice').innerHTML=notice('Profile sync is unavailable. Make sure the new bridge API is deployed and your simulator connection code is paired.','error')}
+ try{
+   const data=await call('getProfile'),p=data?.profile||{};
+   $('pilotId').value=p.simbrief_pilot_id||'';
+   $('displayName').value=p.display_name||'';
+   if(data?.sync_status==='local_only'){
+     setCloud(false,'SimBrief profile pending cloud sync');
+     $('profileNotice').innerHTML=notice('Your SimBrief settings are stored on this PC and are waiting to sync. Importing an OFP into NAVDECK still requires the updated cloud backend.');
+   }else if(data?.sync_status==='server_upgrade_required'){
+     setCloud(false,'Desktop cloud API needs updating');
+     $('profileNotice').innerHTML=notice('This NAVDECK server does not yet offer desktop profile saving. You can save your Pilot ID here locally, or use the online NAVDECK SimBrief settings until the server is updated.');
+   }else{
+     setCloud(true,'NAVDECK cloud linked');
+   }
+ }catch(e){
+   setCloud(false,'SimBrief profile unavailable');
+   $('profileNotice').innerHTML=notice('Unable to read cloud settings: '+e.message+'. Check your simulator pairing code and backend connection.','error');
+ }
 }
 async function renderVatsim(isCommunity=false){
  const title=isCommunity?'Flight community':'VATSIM network',desc=isCommunity?'Explore active pilots on the public VATSIM network. NAVDECK social messages are not yet available in the desktop bridge.':'Live aviation network activity presented in your own NAVDECK desktop interface.';
