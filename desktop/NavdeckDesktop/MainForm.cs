@@ -1,7 +1,16 @@
 namespace NavdeckLink;
 
+internal sealed record TouchdownSnapshot(
+    DateTime TimeUtc, string? Airport, string? Runway,
+    double? DistanceFromThresholdM, double? OffsetFromCentrelineM,
+    double? RunwayLengthM, double? RunwayWidthM,
+    int? LandingRateFpm, double? Latitude, double? Longitude);
+
 internal sealed class MainForm : Form
 {
+    public event Action? SignInRequested;
+    public TouchdownSnapshot? LastTouchdown { get; private set; }
+
     public bool SimulatorConnected => _sim.IsOpen;
 
     // Do not permit a signed/closed report to bypass detections still awaiting
@@ -27,8 +36,10 @@ internal sealed class MainForm : Form
 
         var previousCode = _config.Code;
         _config.Code = "";
+        var previousAuth = _config.SignedInWithClerk;
+        _config.SignedInWithClerk = false;
         try { _config.Save(); }
-        catch { _config.Code = previousCode; throw; }
+        catch { _config.Code = previousCode; _config.SignedInWithClerk = previousAuth; throw; }
 
         DesktopProfileCache.Clear(previousCode);
         _api = null;
@@ -43,8 +54,30 @@ internal sealed class MainForm : Form
         _flightRoute.Text = "Departure —  →  Destination —";
         _waypointCount.Text = "0 remaining waypoints";
         _routeStatus.Text = "Signed out · no flight paired";
-        SetStatus(_navStatus, "Signed out · enter a connection code to pair", Theme.Amber);
+        SetStatus(_navStatus, "Signed out · sign in with Clerk in Settings", Theme.Amber);
         Log("NAVDECK account signed out on this PC");
+    }
+
+    public void ApplyClerkConnection(string backendUrlAndToken)
+    {
+        if (!Config.IsValidCode(backendUrlAndToken))
+            throw new ArgumentException("Invalid NAVDECK desktop session");
+        if (_goAroundQueue.Count > 0 || _goAroundSending)
+            throw new InvalidOperationException(
+                "A go-around is still syncing. Sign in after it has been saved.");
+        var oldCode = _config.Code;
+        _config.Code = backendUrlAndToken;
+        _config.SignedInWithClerk = true;
+        try { _config.Save(); }
+        catch { _config.Code = oldCode; _config.SignedInWithClerk = false; throw; }
+        DesktopProfileCache.Clear(oldCode);
+        _api = null;
+        _pairedFlightId = null;
+        _watcher.Reset();
+        _goAroundDetector.Reset();
+        _nextConnectAttemptAt = DateTime.MinValue;
+        SetStatus(_navStatus, "Clerk account connected · loading flights", Theme.Green);
+        _ = Connect();
     }
 
     private readonly Config _config = Config.Load();
@@ -347,8 +380,8 @@ internal sealed class MainForm : Form
         
 
         controls.Controls.Add(Theme.Button(
-            "CONNECTION CODE", Theme.Accent,
-            (_, _) => AskCode()));
+            "SIGN IN TO NAVDECK", Theme.Accent,
+            (_, _) => SignInRequested?.Invoke()));
 
         _startup.MinimumSize = new Size(280, 42);
         controls.Controls.Add(_startup);
@@ -622,7 +655,8 @@ internal sealed class MainForm : Form
     private async Task Start()
     {
         if (_startMinimized) WindowState = FormWindowState.Minimized;
-        if (!Config.IsValidCode(_config.Code)) AskCode();
+        if (!Config.IsValidCode(_config.Code))
+            SetStatus(_navStatus, "Sign in with Clerk from NAVDECK Settings", Theme.Amber);
         else _ = Connect();
         UpdateStartupButton();
         RefreshView();
@@ -638,6 +672,7 @@ internal sealed class MainForm : Form
         using var dlg = new CodeDialog(_config.Code);
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
         _config.Code = dlg.Code;
+        _config.SignedInWithClerk = false;
         _config.Save();
         _api = null;
         _pairedFlightId = null;
@@ -912,6 +947,13 @@ internal sealed class MainForm : Form
                 : null;
 
             _runwayVisualizer.UpdateTouchdown(_lastRunway);
+            LastTouchdown = new TouchdownSnapshot(
+                DateTime.UtcNow,
+                _lastRunway?.Airport, _lastRunway?.Runway,
+                _lastRunway?.DistanceFromThresholdM,
+                _lastRunway?.OffsetFromCentrelineM,
+                _lastRunway?.RunwayLengthM, _lastRunway?.RunwayWidthM,
+                e.LandingRate, lat, lon);
 
             if (_lastRunway is { } runway)
                 Log($"Touchdown: {runway.Airport} RWY {runway.Runway}, " +
