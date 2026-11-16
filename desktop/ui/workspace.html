@@ -131,6 +131,56 @@ async function renderVatsim(isCommunity=false){
  };
  action('refreshTraffic',refresh);refresh();
 }
+
+async function renderCommunity(){
+ $('content').innerHTML=template('Pilot community','Follow your VATSIM friends and see who is flying, without loading another map.','Network friends','Linked',btn('reloadFriends','↻  Refresh network',true))+
+ '<div class="two-col"><section class="panel">'+header('Friends list','Save friends by VATSIM callsign or CID')+
+ '<div id="friendNotice"></div><form id="addFriend" class="row"><input id="friendIdent" maxlength="12" class="search" placeholder="Callsign or VATSIM CID" aria-label="Friend callsign or CID"><button type="submit" class="button primary">Add friend</button></form>'+
+ '<div id="friendList" style="margin-top:17px"></div></section>'+
+ '<section class="panel">'+header('My VATSIM identity','Pair your VATSIM CID to NAVDECK')+
+ '<form id="saveCid"><div class="setting-group"><label for="vatsimCID">VATSIM CID</label><input id="vatsimCID" inputmode="numeric" maxlength="8" placeholder="6–8 digits" pattern="[0-9]{6,8}"></div><div class="row right"><button type="submit" class="button primary">Save CID</button></div></form>'+
+ '<div class="inline-callout">Friends are saved to your NAVDECK pilot profile. The VATSIM feed is public, but it only indicates pilots currently online.</div></section></div>'+
+ '<section class="panel tight"><div style="padding:21px 20px 14px">'+header('Friends online','Live VATSIM positions, shown as a list')+'</div><div class="table-wrap">'+
+ '<table class="table"><thead><tr><th>Callsign</th><th>Departure</th><th>Destination</th><th>Altitude</th><th>Ground speed</th></tr></thead><tbody id="friendOnline"><tr><td colspan="5">Loading friends…</td></tr></tbody></table></div></section>';
+ let friends=[],cid='',feed=[];
+ const normalize=v=>String(v||'').trim().toUpperCase();
+ const renderFriends=()=>{
+  $('friendList').innerHTML=friends.length?friends.map((f,i)=>'<div style="display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #41404a;padding:10px 0"><b>'+safe(f)+'</b><button class="button small ghost" data-remove-friend="'+i+'">Remove</button></div>').join(''):empty('No friends added','Add a VATSIM callsign or CID to follow pilots on the network.');
+  $('friendList').querySelectorAll('[data-remove-friend]').forEach(x=>x.onclick=async()=>{
+    const next=friends.filter((_,index)=>index!==Number(x.dataset.removeFriend));
+    try{await call('saveProfile',{vatsim_friends:next});friends=next;renderFriends();renderOnline();}
+    catch(err){$('friendNotice').innerHTML=notice('Could not update friends: '+err.message,'error');}
+  });
+ };
+ const renderOnline=()=>{
+  const online=feed.filter(p=>friends.includes(normalize(p.callsign))||friends.includes(String(p.cid||'')));
+  $('friendOnline').innerHTML=online.length?online.slice(0,70).map(p=>'<tr><td>'+safe(p.callsign)+'</td><td>'+safe(p.flight_plan?.departure||'—')+'</td><td>'+safe(p.flight_plan?.arrival||'—')+'</td><td>'+safe(format(p.altitude))+' FT</td><td>'+safe(format(p.groundspeed))+' KT</td></tr>').join(''):'<tr><td colspan="5">No saved friends currently online.</td></tr>';
+ };
+ $('addFriend').onsubmit=async event=>{
+  event.preventDefault();const value=normalize($('friendIdent').value);
+  if(!/^[A-Z0-9_-]{2,12}$/.test(value)){$('friendNotice').innerHTML=notice('Enter a valid VATSIM callsign or CID.','error');return;}
+  if(friends.includes(value))return;
+  if(friends.length>=50){$('friendNotice').innerHTML=notice('The friends list supports up to 50 entries.','error');return;}
+  try{const next=[...friends,value];await call('saveProfile',{vatsim_friends:next});friends=next;$('friendIdent').value='';renderFriends();renderOnline();$('friendNotice').innerHTML=notice('Friend saved to NAVDECK.','good')}
+  catch(err){$('friendNotice').innerHTML=notice('Could not add friend: '+err.message,'error')}
+ };
+ $('saveCid').onsubmit=async event=>{
+  event.preventDefault();cid=$('vatsimCID').value.trim();
+  if(!/^\d{6,8}$/.test(cid)){$('friendNotice').innerHTML=notice('VATSIM CID must be 6–8 digits.','error');return;}
+  try{await call('saveProfile',{vatsim_cid:cid});$('friendNotice').innerHTML=notice('VATSIM CID saved to NAVDECK.','good')}
+  catch(err){$('friendNotice').innerHTML=notice('Could not save CID: '+err.message,'error')}
+ };
+ const refresh=async()=>{
+  const button=$('reloadFriends');button.disabled=true;
+  try{const response=await fetch('https://data.vatsim.net/v3/vatsim-data.json',{cache:'no-store'});if(!response.ok)throw Error('Network unavailable');const info=await response.json();feed=Array.isArray(info.pilots)?info.pilots:[];renderOnline()}
+  catch(err){$('friendOnline').innerHTML='<tr><td colspan="5">VATSIM network data unavailable.</td></tr>'}
+  finally{button.disabled=false}
+ };
+ action('reloadFriends',refresh);
+ try{const data=await call('getProfile');let p=data?.profile||{};friends=Array.isArray(p.vatsim_friends)?p.vatsim_friends.map(normalize):[];cid=p.vatsim_cid||'';$('vatsimCID').value=cid;setCloud(true,'NAVDECK cloud linked');}
+ catch(err){$('friendNotice').innerHTML=notice('Cloud profile not available. The desktop API must be deployed and paired.','error')}
+ renderFriends();refresh();
+}
 function hhmmDistance(a,b){
  if(!a||!b)return 0;
  const t=x=>{let m=String(x).match(/^(\d\d):(\d\d)$/);return m?Number(m[1])*60+Number(m[2]):NaN};
@@ -169,7 +219,7 @@ async function renderSettings(){
  catch(e){$('diagInfo').innerHTML=notice('Pairing unsuccessful: '+e.message,'error');setCloud(false,'Pairing required')}};
  action('testConnection',test);test();
 }
-const pages={flights:renderFlights,simbrief:renderSimbrief,vatsim:()=>renderVatsim(false),community:()=>renderVatsim(true),logbook:renderLogbook,settings:renderSettings};
+const pages={flights:renderFlights,simbrief:renderSimbrief,vatsim:()=>renderVatsim(false),community:renderCommunity,logbook:renderLogbook,settings:renderSettings};
 function showPage(){
   const page=location.hash.slice(1).toLowerCase()||'flights';
   $('breadcrumb').textContent=({flights:'My Flights',simbrief:'SimBrief',vatsim:'VATSIM Network',community:'Flight Community',logbook:'Pilot Logbook',settings:'Desktop Settings'})[page]||'My Flights';
