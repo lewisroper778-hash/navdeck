@@ -40,6 +40,13 @@ class BridgeTarget(BaseModel):
     flight_id: str
 
 
+class DesktopFlightAction(BaseModel):
+    action: Literal["toggleWaypoint", "skipWaypoint", "directTo", "undoDirect",
+                    "saveWaypoint", "saveTimes", "saveActuals", "saveArrival",
+                    "signReport", "closeFlight", "reopenFlight", "resetFlight"]
+    payload: dict = Field(default_factory=dict)
+
+
 class DesktopPilotUpdate(BaseModel):
     simbrief_pilot_id: Optional[str] = Field(default=None, pattern=r"^\d{1,16}$")
     display_name: Optional[str] = Field(default=None, max_length=80)
@@ -49,7 +56,7 @@ def _hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def build_bridge_router(db, simbrief_import=None) -> APIRouter:
+def build_bridge_router(db, simbrief_import=None, flight_ops=None) -> APIRouter:
     r = APIRouter(prefix="/api/bridge")
 
     async def bridge_user(x_bridge_token: str = Header(default="")) -> dict:
@@ -58,7 +65,28 @@ def build_bridge_router(db, simbrief_import=None) -> APIRouter:
         rec = await db.bridge_links.find_one({"token_hash": _hash(x_bridge_token)}, {"_id": 0})
         if not rec:
             raise HTTPException(status_code=401, detail="Connection code not recognised; create a new one in NAVDECK")
-        # Read-only desktop clients use the existing revocable pairing token. All
+        @r.get("/desktop/flights/{flight_id}")
+    async def desktop_flight_detail(flight_id: str, link: dict = Depends(bridge_user)):
+        f = await db.flights.find_one(
+            {"id": flight_id, "user_id": link["user_id"]}, {"_id": 0})
+        if not f:
+            raise HTTPException(status_code=404, detail="Flight not found")
+        return {"flight": f}
+
+    @r.post("/desktop/flights/{flight_id}/action")
+    async def desktop_flight_action(
+        flight_id: str, body: DesktopFlightAction,
+        link: dict = Depends(bridge_user)
+    ):
+        if flight_ops is None:
+            raise HTTPException(status_code=503, detail="Desktop operations unavailable")
+        # The shared flight operations enforce existing ownership, edit locks,
+        # close-flight validation and Pydantic field validators.
+        result = await flight_ops(
+            link["user_id"], flight_id, body.action, body.payload)
+        return {"flight": result.model_dump()}
+
+    # Read-only desktop clients use the existing revocable pairing token. All
     # queries are scoped to the user who created the token. The desktop never
     # receives Clerk credentials or a direct database connection.
     @r.get("/desktop/flights")
