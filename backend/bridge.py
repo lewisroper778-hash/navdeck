@@ -54,6 +54,8 @@ class DesktopFlightAction(BaseModel):
 class DesktopPilotUpdate(BaseModel):
     simbrief_pilot_id: Optional[str] = Field(default=None, pattern=r"^\d{1,16}$")
     display_name: Optional[str] = Field(default=None, max_length=80)
+    vatsim_cid: Optional[str] = Field(default=None, pattern=r"^\d{6,8}$")
+    vatsim_friends: Optional[list[str]] = Field(default=None, max_length=50)
 
 
 def _hash(token: str) -> str:
@@ -69,7 +71,17 @@ def build_bridge_router(db, simbrief_import=None, flight_ops=None) -> APIRouter:
         rec = await db.bridge_links.find_one({"token_hash": _hash(x_bridge_token)}, {"_id": 0})
         if not rec:
             raise HTTPException(status_code=401, detail="Connection code not recognised; create a new one in NAVDECK")
-        @r.get("/desktop/flights/{flight_id}")
+        return rec
+
+    async def target_flight(link: dict) -> Optional[dict]:
+        q = {"user_id": link["user_id"], "status": {"$ne": "closed"}}
+        if link.get("flight_id"):
+            f = await db.flights.find_one(q | {"id": link["flight_id"]}, {"_id": 0})
+            if f:
+                return f
+        return await db.flights.find_one(q, {"_id": 0}, sort=[("imported_at", -1)])
+
+    @r.get("/desktop/flights/{flight_id}")
     async def desktop_flight_detail(flight_id: str, link: dict = Depends(bridge_user)):
         f = await db.flights.find_one(
             {"id": flight_id, "user_id": link["user_id"]}, {"_id": 0})
@@ -146,7 +158,8 @@ def build_bridge_router(db, simbrief_import=None, flight_ops=None) -> APIRouter:
     @r.get("/desktop/profile")
     async def desktop_profile(link: dict = Depends(bridge_user)):
         p = await db.pilots.find_one({"user_id": link["user_id"]}, {"_id": 0,
-            "simbrief_pilot_id": 1, "display_name": 1})
+            "simbrief_pilot_id": 1, "display_name": 1,
+            "vatsim_cid": 1, "vatsim_friends": 1})
         return {"profile": p or {}}
 
     @r.put("/desktop/profile")
@@ -157,6 +170,12 @@ def build_bridge_router(db, simbrief_import=None, flight_ops=None) -> APIRouter:
             update["display_name"] = update["display_name"].strip() or None
         if "simbrief_pilot_id" in update and update["simbrief_pilot_id"] == "":
             update["simbrief_pilot_id"] = None
+        if "vatsim_friends" in update and update["vatsim_friends"] is not None:
+            friends = list(dict.fromkeys(
+                str(x).strip().upper() for x in update["vatsim_friends"]))
+            if any(not re.fullmatch(r"[A-Z0-9_-]{2,12}", x) for x in friends):
+                raise HTTPException(status_code=400, detail="Invalid VATSIM friend identifier")
+            update["vatsim_friends"] = friends
         if update:
             update["updated_at"] = datetime.now(timezone.utc).isoformat()
             await db.pilots.update_one({"user_id": link["user_id"]},
@@ -170,16 +189,6 @@ def build_bridge_router(db, simbrief_import=None, flight_ops=None) -> APIRouter:
         flight = await simbrief_import(link["user_id"])
         return {"flight": {k: getattr(flight, k, None) for k in
             ("id", "callsign", "origin", "destination", "aircraft")}}
-
-    return rec
-
-    async def target_flight(link: dict) -> Optional[dict]:
-        q = {"user_id": link["user_id"], "status": {"$ne": "closed"}}
-        if link.get("flight_id"):
-            f = await db.flights.find_one(q | {"id": link["flight_id"]}, {"_id": 0})
-            if f:
-                return f
-        return await db.flights.find_one(q, {"_id": 0}, sort=[("imported_at", -1)])
 
     @r.post("/link")
     async def create_link(user: dict = Depends(require_user)):
