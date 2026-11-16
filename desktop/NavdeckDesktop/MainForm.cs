@@ -1,7 +1,17 @@
 namespace NavdeckLink;
 
+internal sealed record TouchdownSnapshot(
+    DateTime TimeUtc, string? Airport, string? Runway,
+    double? DistanceFromThresholdM, double? OffsetFromCentrelineM,
+    double? RunwayLengthM, double? RunwayWidthM,
+    int? LandingRateFpm, double? Latitude, double? Longitude);
+
 internal sealed class MainForm : Form
 {
+    public event Action? SignInRequested;
+    public bool HasPendingGoArounds => _goAroundQueue.Count > 0 || _goAroundSending;
+    public TouchdownSnapshot? LastTouchdown { get; private set; }
+
     public bool SimulatorConnected => _sim.IsOpen;
 
     // Do not permit a signed/closed report to bypass detections still awaiting
@@ -27,8 +37,10 @@ internal sealed class MainForm : Form
 
         var previousCode = _config.Code;
         _config.Code = "";
+        var previousAuth = _config.SignedInWithClerk;
+        _config.SignedInWithClerk = false;
         try { _config.Save(); }
-        catch { _config.Code = previousCode; throw; }
+        catch { _config.Code = previousCode; _config.SignedInWithClerk = previousAuth; throw; }
 
         DesktopProfileCache.Clear(previousCode);
         _api = null;
@@ -43,12 +55,34 @@ internal sealed class MainForm : Form
         _flightRoute.Text = "Departure —  →  Destination —";
         _waypointCount.Text = "0 remaining waypoints";
         _routeStatus.Text = "Signed out · no flight paired";
-        SetStatus(_navStatus, "Signed out · enter a connection code to pair", Theme.Amber);
+        SetStatus(_navStatus, "Signed out · sign in with Clerk in Settings", Theme.Amber);
         Log("NAVDECK account signed out on this PC");
     }
 
+    public void ApplyClerkConnection(string backendUrlAndToken)
+    {
+        if (!Config.IsValidCode(backendUrlAndToken))
+            throw new ArgumentException("Invalid NAVDECK desktop session");
+        if (_goAroundQueue.Count > 0 || _goAroundSending)
+            throw new InvalidOperationException(
+                "A go-around is still syncing. Sign in after it has been saved.");
+        var oldCode = _config.Code;
+        _config.Code = backendUrlAndToken;
+        _config.SignedInWithClerk = true;
+        try { _config.Save(); }
+        catch { _config.Code = oldCode; _config.SignedInWithClerk = false; throw; }
+        DesktopProfileCache.Clear(oldCode);
+        _api = null;
+        _pairedFlightId = null;
+        _watcher.Reset();
+        _goAroundDetector.Reset();
+        _nextConnectAttemptAt = DateTime.MinValue;
+        SetStatus(_navStatus, "Clerk account connected · loading flights", Theme.Green);
+        _ = Connect();
+    }
+
     private readonly Config _config = Config.Load();
-    private readonly FsuipcLink _sim = new();
+    private readonly SimDataLink _sim = new();
     private readonly FlightTracker _tracker = new();
     private readonly GoAroundDetector _goAroundDetector = new();
     private readonly Queue<(string FlightId, DetectedGoAround Event)> _goAroundQueue = new();
@@ -78,7 +112,7 @@ internal sealed class MainForm : Form
     private DateTime _lastRoute = DateTime.MinValue;
     private readonly Label _nextFix = Theme.Label("", 10f, Theme.Muted);
 
-    private readonly Label _simStatus = Theme.Label("Waiting for FSUIPC7…", 10, Theme.Amber, true);
+    private readonly Label _simStatus = Theme.Label("Waiting for SimConnect / MSFS…", 10, Theme.Amber, true);
     private readonly Label _navStatus = Theme.Label("Not connected to NAVDECK", 10, Theme.Amber, true);
     private readonly Label _stage = Theme.Label("Parked", 18, bold: true);
     private readonly Label _times = Theme.Label("", 10.5f);
@@ -172,7 +206,7 @@ internal sealed class MainForm : Form
 
         connections.Controls.Add(
             CreateCard("SIMULATOR CONNECTION",
-                Theme.Label("FSUIPC7 / MICROSOFT FLIGHT SIMULATOR",
+                Theme.Label("SIMCONNECT / MICROSOFT FLIGHT SIMULATOR",
                     9, Theme.Muted, true), _simStatus), 0, 0);
 
         connections.Controls.Add(
@@ -347,8 +381,8 @@ internal sealed class MainForm : Form
         
 
         controls.Controls.Add(Theme.Button(
-            "CONNECTION CODE", Theme.Accent,
-            (_, _) => AskCode()));
+            "SIGN IN TO NAVDECK", Theme.Accent,
+            (_, _) => SignInRequested?.Invoke()));
 
         _startup.MinimumSize = new Size(280, 42);
         controls.Controls.Add(_startup);
@@ -622,7 +656,8 @@ internal sealed class MainForm : Form
     private async Task Start()
     {
         if (_startMinimized) WindowState = FormWindowState.Minimized;
-        if (!Config.IsValidCode(_config.Code)) AskCode();
+        if (!Config.IsValidCode(_config.Code))
+            SetStatus(_navStatus, "Sign in with Clerk from NAVDECK Settings", Theme.Amber);
         else _ = Connect();
         UpdateStartupButton();
         RefreshView();
@@ -638,6 +673,7 @@ internal sealed class MainForm : Form
         using var dlg = new CodeDialog(_config.Code);
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
         _config.Code = dlg.Code;
+        _config.SignedInWithClerk = false;
         _config.Save();
         _api = null;
         _pairedFlightId = null;
@@ -700,7 +736,7 @@ internal sealed class MainForm : Form
         {
             _latestTelemetry = null;
             _goAroundDetector.Reset();
-            SetStatus(_simStatus, "Sim disconnected · waiting for FSUIPC7…", Theme.Amber);
+            SetStatus(_simStatus, "Simulator disconnected · retrying SimConnect…", Theme.Amber);
             return;
         }
         _latestTelemetry = s;
@@ -833,7 +869,7 @@ internal sealed class MainForm : Form
             {
                 _sim.Read();
                 SetStatus(_simStatus, $"Sim connected · {_sim.AircraftTitle}", Theme.Green);
-                Log("Connected to MSFS through FSUIPC7");
+                Log("Connected to MSFS through " + _sim.ConnectionName);
             }
         }
         if (_api is null && Config.IsValidCode(_config.Code) && _navStatus.ForeColor != Theme.Red) await Connect();
@@ -912,6 +948,13 @@ internal sealed class MainForm : Form
                 : null;
 
             _runwayVisualizer.UpdateTouchdown(_lastRunway);
+            LastTouchdown = new TouchdownSnapshot(
+                DateTime.UtcNow,
+                _lastRunway?.Airport, _lastRunway?.Runway,
+                _lastRunway?.DistanceFromThresholdM,
+                _lastRunway?.OffsetFromCentrelineM,
+                _lastRunway?.RunwayLengthM, _lastRunway?.RunwayWidthM,
+                e.LandingRate, lat, lon);
 
             if (_lastRunway is { } runway)
                 Log($"Touchdown: {runway.Airport} RWY {runway.Runway}, " +
@@ -967,40 +1010,30 @@ internal sealed class MainForm : Form
 
     private void ToggleStartup()
     {
-        var ini = Fsuipc7Setup.FindIni();
-        if (ini is null)
-        {
-            using var pick = new OpenFileDialog { Title = "Find FSUIPC7.ini (in your FSUIPC7 folder)", Filter = "FSUIPC7.ini|FSUIPC7.ini" };
-            if (pick.ShowDialog(this) != DialogResult.OK) return;
-            ini = pick.FileName;
-        }
         try
         {
-            if (Fsuipc7Setup.IsInstalled(ini))
-            {
-                Fsuipc7Setup.Uninstall(ini);
-                Log("Removed from FSUIPC7 start-up");
-            }
-            else
-            {
-                Fsuipc7Setup.Install(ini, Application.ExecutablePath);
-                Log("Added to FSUIPC7: opens when MSFS is ready, closes with the sim");
-                MessageBox.Show(this, "Done. Restart FSUIPC7 (or MSFS) once so it picks this up.\n\nKeep NavdeckLink.exe where it is now; if you move it, click this button again.", "NAVDECK Link", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            }
+            var enabled = SimulatorAutostart.Toggle();
+            Log(enabled
+                ? "NAVDECK will open automatically when MSFS 2020/2024 starts"
+                : "Automatic simulator launch disabled");
+            MessageBox.Show(this, enabled
+                ? "NAVDECK will now start quietly with Windows and open automatically when MSFS 2020 or 2024 is running. No FSUIPC startup configuration or administrator access is required. The setting takes effect at your next Windows sign-in."
+                : "NAVDECK will no longer start automatically with the simulator.",
+                "NAVDECK Desktop", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
-            MessageBox.Show(this, $"Couldn't update FSUIPC7.ini: {ex.Message}\n\nIf FSUIPC7 is installed under Program Files, run NAVDECK Link as administrator once.", "NAVDECK Link", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, "Unable to update Windows startup settings: " + ex.Message,
+                "NAVDECK Desktop", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
         UpdateStartupButton();
     }
 
     private void UpdateStartupButton()
     {
-        var ini = Fsuipc7Setup.FindIni();
-        var on = ini is not null && Fsuipc7Setup.IsInstalled(ini);
-        _startup.Text = on ? "Opens with sim ✓" : "Open with simulator";
-        _startup.BackColor = on ? Theme.Green : Theme.Line;
+        var enabled = SimulatorAutostart.IsEnabled();
+        _startup.Text = enabled ? "Opens with MSFS ✓" : "Open with simulator";
+        _startup.BackColor = enabled ? Theme.Green : Theme.Line;
     }
 
     private void RefreshView()

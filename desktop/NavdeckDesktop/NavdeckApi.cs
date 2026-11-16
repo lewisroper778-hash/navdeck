@@ -23,6 +23,13 @@ internal sealed class NavdeckApi
         _http.DefaultRequestHeaders.UserAgent.ParseAdd("NavdeckLink/1.0");
     }
 
+    public async Task RevokeDesktopSessionAsync()
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(6));
+        using var response = await _http.DeleteAsync("desktop/session", timeout.Token);
+        await EnsureOk(response);
+    }
+
     public async Task<FlightInfo?> GetFlightAsync()
     {
         using var res = await _http.GetAsync("flight");

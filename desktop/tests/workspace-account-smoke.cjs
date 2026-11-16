@@ -82,7 +82,8 @@ function createWorkspace({paired = true, flightId = '1b2f7b1b-1b2f-4c31-93cb-b94
 
   const signedOut=createWorkspace({paired:false});
   await signedOut.settle();
-  assert.match(signedOut.element('accountActions').innerHTML,/Signed out/);
+  assert.match(signedOut.element('accountActions').innerHTML,/Sign in with Clerk/);
+  assert.equal(typeof signedOut.element('signInAccount').onclick,'function');
   assert.doesNotMatch(signedOut.element('accountActions').innerHTML,/id="signOutAccount"/);
 
   const badImport=createWorkspace({flightId:''});

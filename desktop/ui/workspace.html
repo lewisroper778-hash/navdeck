@@ -89,7 +89,7 @@ async function loadFlights(force=false){
   try{const data=await call('getFlights');if(!Array.isArray(data?.flights))throw Error('Missing cloud flight list');lastFlights=data.flights;setCloud(true,'NAVDECK cloud linked');flightCache={flights:data.flights,full:true};flightCacheAt=Date.now();return flightCache;}
   catch(err){
    try{const data=await call('getFlight');setCloud(true,'NAVDECK bridge linked');const f=data?.flight;lastFlights=f?[{...f,status:'open'}]:[];flightCache={flights:lastFlights,full:false};flightCacheAt=Date.now();return flightCache;}
-   catch{setCloud(false,'Pairing required');return {flights:[],full:false,error:'Pair NAVDECK using Simulator Connection to sync your flight data.'};}
+   catch{setCloud(false,'Pairing required');return {flights:[],full:false,error:'Sign in to NAVDECK from Settings to sync your flight data.'};}
   }
  })();
  try{return await flightLoadPromise;}finally{flightLoadPromise=null;}
@@ -124,7 +124,7 @@ async function renderSimbrief(){
  '<div class="setting-group"><label for="planHour">Departure UTC hour</label><input id="planHour" maxlength="2" placeholder="14" inputmode="numeric"></div>'+
  '<div class="setting-group"><label for="planMinute">Departure minute</label><input id="planMinute" maxlength="2" placeholder="30" inputmode="numeric"></div></div>'+
  '<div class="row"><button type="submit" class="button primary">Generate on SimBrief</button><span class="muted">SimBrief opens externally; NAVDECK stays in its own app window.</span></div></form><div id="plannerNotice"></div></section>'+
- '<div class="two-col"><section class="panel">'+header('SimBrief integration','Connect using your existing NAVDECK pairing code')+'<div id="profileNotice"></div><form id="profileForm"><div class="setting-group"><label for="pilotId">SimBrief Pilot ID</label><input id="pilotId" inputmode="numeric" maxlength="16" placeholder="Your numeric SimBrief Pilot ID" pattern="[0-9]{1,16}"><small>The pilot identifier from your SimBrief account settings.</small></div><div class="setting-group"><label for="displayName">Pilot display name</label><input id="displayName" maxlength="80" placeholder="Your display name"></div><div class="row right"><button class="button primary" type="submit">Save NAVDECK settings</button></div></form></section>'+
+ '<div class="two-col"><section class="panel">'+header('SimBrief integration','Uses the account you signed into in NAVDECK Desktop')+'<div id="profileNotice"></div><form id="profileForm"><div class="setting-group"><label for="pilotId">SimBrief Pilot ID</label><input id="pilotId" inputmode="numeric" maxlength="16" placeholder="Your numeric SimBrief Pilot ID" pattern="[0-9]{1,16}"><small>The pilot identifier from your SimBrief account settings.</small></div><div class="setting-group"><label for="displayName">Pilot display name</label><input id="displayName" maxlength="80" placeholder="Your display name"></div><div class="row right"><button class="button primary" type="submit">Save NAVDECK settings</button></div></form></section>'+
  '<section class="panel">'+header('How it connects','A true desktop integration instead of an embedded website')+'<div class="inline-callout">NAVDECK Desktop talks directly to the cloud API using your simulator pairing token. No website screen or browser login is displayed here.</div><ul class="bullet-list"><li>Pair once through Simulator Connection.</li><li>Enter your SimBrief Pilot ID.</li><li>Save, then import your latest OFP.</li><li>Open My Flights to view your records.</li></ul><p style="color:var(--dim);font-size:11px;margin-top:18px">The new cloud import endpoints must be deployed to your NAVDECK server first.</p></section></div>';
  $('simbriefPlanForm').onsubmit=async event=>{
   event.preventDefault();
@@ -206,7 +206,7 @@ async function renderSimbrief(){
    }
  }catch(e){
    setCloud(false,'SimBrief profile unavailable');
-   $('profileNotice').innerHTML=notice('Unable to read cloud settings: '+e.message+'. Check your simulator pairing code and backend connection.','error');
+   $('profileNotice').innerHTML=notice('Unable to read cloud settings: '+e.message+'. Check your NAVDECK account and backend connection.','error');
  }
 }
 async function renderVatsim(isCommunity=false){
@@ -358,13 +358,16 @@ async function renderLogbook(){
 }
 async function renderSettings(){
  $('content').innerHTML=template('Desktop settings','Configure your dedicated NAVDECK workspace and check its cloud connection.','Client','Windows',btn('testConnection','↻  Test connection',true))+
- '<div class="two-col"><section class="panel">'+header('Connection diagnostics','Uses your existing revocable simulator pairing code')+'<div id="diagInfo" class="loader">Checking the connection…</div>'+
- '<div class="inline-callout">To change the connection code or simulator settings, use the <b>Simulator Connection</b> button in the permanent left sidebar. Your pairing token is handled by the Windows app and is never exposed to these pages.</div></section>'+
+ '<div class="two-col"><section class="panel">'+header('Connection diagnostics','Uses your secure NAVDECK desktop session')+'<div id="diagInfo" class="loader">Checking the connection…</div>'+
+ '<div class="inline-callout">Sign in with your Clerk website account using the button below. No connection code is needed. The simulator controls remain available from <b>Simulator Connection</b> in the sidebar. Desktop credentials are never exposed to these pages.</div></section>'+
  '<section class="panel">'+header('About this application','NAVDECK Desktop · Native shell + local interface')+
- '<ul class="bullet-list"><li>All application pages are packaged locally.</li><li>NAVDECK is used as a data service, never as an embedded website.</li><li>The simulator runs through the existing FSUIPC7 bridge.</li><li>Map tiles and VATSIM traffic require internet access.</li><li>Cloud account features need the matching backend API deployed.</li></ul></section></div>'+
+ '<ul class="bullet-list"><li>All application pages are packaged locally.</li><li>NAVDECK is used as a data service, never as an embedded website.</li><li>The simulator uses SimConnect when available, with FSUIPC7 as a fallback.</li><li>Map tiles and VATSIM traffic require internet access.</li><li>Cloud account features need the matching backend API deployed.</li></ul></section></div>'+
  '<section class="panel" id="accountPanel">'+header('Account','Manage your NAVDECK Desktop account on this PC')+
- '<p class="muted">Signing out removes the saved NAVDECK pairing code from this Windows PC. It does not sign you out of the website or delete your cloud flights.</p>'+
- '<div id="accountActions" class="row">Checking account…</div><div id="signOutNotice" role="status" aria-live="polite"></div></section>';
+ '<p class="muted">Signing out clears the saved desktop session and Clerk sign-in cookies. It does not delete your flights or sign you out of a separate web browser.</p>'+
+ '<div id="accountActions" class="row">Checking account…</div><div id="signOutNotice" role="status" aria-live="polite"></div></section>'+
+ '<section class="panel">'+header('Open with simulator','Launch NAVDECK automatically when MSFS 2020 or 2024 starts')+
+ '<p class="muted">When enabled, a lightweight NAVDECK watcher starts with Windows and waits quietly for the simulator. It opens this app as soon as MSFS starts. No administrator access or FSUIPC startup setting is required.</p>'+
+ '<div id="autoStartActions" class="row">Checking Windows startup…</div><div id="autoStartNotice" role="status" aria-live="polite"></div></section>';
  const test=async()=>{try{const x=await call('getFlight');if(!$('diagInfo'))return;$('diagInfo').innerHTML=notice('Paired NAVDECK cloud connection is working. '+(x?.flight?'Current flight: '+(x.flight.callsign||'available'):'No active flight.'),'good');setCloud(true,'NAVDECK bridge linked')}
  catch(e){if(!$('diagInfo'))return;$('diagInfo').innerHTML=notice('Pairing unsuccessful: '+e.message,'error');setCloud(false,'Pairing required')}};
  action('testConnection',test);
@@ -372,9 +375,9 @@ async function renderSettings(){
   const session=await call('getSession');
   if(!$('accountActions'))return;
   if(session?.paired){
-   $('accountActions').innerHTML=btn('signOutAccount','Sign out of NAVDECK');
+   $('accountActions').innerHTML='<p class="muted">'+(session.auth_mode==='clerk'?'Signed in with Clerk':'Connected using a legacy code')+'</p>'+btn('signOutAccount','Sign out of NAVDECK');
    action('signOutAccount',async()=>{
-    if(!confirm('Sign out of NAVDECK on this PC? Your saved connection code will be removed, and cloud reporting will stop until you pair again.'))return;
+    if(!confirm('Sign out of NAVDECK on this PC? Cloud reporting will stop until you sign in again.'))return;
     const button=$('signOutAccount');button.disabled=true;
     try{
      await call('signOut');
@@ -387,10 +390,36 @@ async function renderSettings(){
     }
    });
   }else{
-   $('accountActions').innerHTML=notice('Signed out. Open Simulator Connection in the sidebar, then choose Connection Code to pair your account again.');
+   $('accountActions').innerHTML=btn('signInAccount','Sign in with Clerk');
+   action('signInAccount',async()=>{
+    const button=$('signInAccount');button.disabled=true;
+    try{
+     const result=await call('signIn');
+     if(result?.signed_in){flightCache=null;flightCacheAt=0;location.reload();}
+     else button.disabled=false;
+    }catch(e){$('signOutNotice').innerHTML=notice('Could not sign in: '+e.message,'error');button.disabled=false;}
+   });
    setCloud(false,'Signed out');
   }
  }catch(e){if($('accountActions'))$('accountActions').innerHTML=notice('Unable to check account: '+e.message,'error');}
+ try{
+  const state=await call('getAutoStart');
+  const draw=enabled=>{
+   if(!$('autoStartActions'))return;
+   $('autoStartActions').innerHTML=btn('toggleAutoStart',enabled?'Disable automatic launch':'Enable automatic launch');
+   action('toggleAutoStart',async()=>{
+    const button=$('toggleAutoStart');button.disabled=true;
+    try{
+     const changed=await call('toggleAutoStart');
+     draw(!!changed?.enabled);
+     $('autoStartNotice').innerHTML=notice(changed?.enabled
+      ?'Enabled. NAVDECK will open when MSFS starts after your next Windows sign-in.'
+      :'Automatic simulator launch disabled.','good');
+    }catch(e){$('autoStartNotice').innerHTML=notice('Unable to update startup: '+e.message,'error');button.disabled=false;}
+   });
+  };
+  draw(!!state?.enabled);
+ }catch(e){if($('autoStartActions'))$('autoStartActions').innerHTML=notice('Unable to check Windows startup: '+e.message,'error');}
  test();
 }
 const pages={flights:renderFlights,simbrief:renderSimbrief,vatsim:()=>renderVatsim(false),community:renderCommunity,logbook:renderLogbook,settings:renderSettings};

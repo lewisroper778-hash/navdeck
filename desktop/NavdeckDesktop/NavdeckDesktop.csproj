@@ -11,7 +11,7 @@
     <AssemblyName>NavdeckDesktop</AssemblyName>
     <RootNamespace>NavdeckLink</RootNamespace>
     <ApplicationIcon>navdeck.ico</ApplicationIcon>
-    <Version>1.2.1</Version>
+    <Version>1.3.0</Version>
     <Product>NAVDECK Desktop</Product>
     <Company>NAVDECK</Company>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
@@ -32,6 +32,7 @@
     <Content Include="../ui/map.html" Link="desktop-map/map.html" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
     <Content Include="../ui/workspace.html" Link="desktop-map/workspace.html" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
     <Content Include="../ui/flight.html" Link="desktop-map/flight.html" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
+    <Content Include="../ui/touchdown.html" Link="desktop-map/touchdown.html" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
     <Content Include="../../frontend/public/favicon.png" Link="desktop-map/navdeck-website-logo.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
     <Content Include="../ui/vendor/**/*" Link="desktop-map/vendor/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
   </ItemGroup>

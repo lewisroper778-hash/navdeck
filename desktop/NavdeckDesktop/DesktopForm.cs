@@ -8,6 +8,41 @@ internal sealed class DesktopForm : Form
     private MainForm? _bridge;
     private NavdeckApi? _cloudApi;
     private string? _cloudCode;
+    private bool _clerkDialogOpen;
+
+    private bool SignInWithClerk()
+    {
+        if (_clerkDialogOpen) return false;
+        if (_bridge?.HasPendingGoArounds == true)
+            throw new InvalidOperationException(
+                "A go-around is still syncing. Wait until it is saved before changing accounts.");
+        _clerkDialogOpen = true;
+        try
+        {
+            using var login = new ClerkLoginDialog();
+            if (login.ShowDialog(this) != DialogResult.OK ||
+                string.IsNullOrWhiteSpace(login.DesktopToken))
+                return false;
+            // The backend has already validated the Clerk JWT and issued
+            // this revocable desktop credential. No manual code is required.
+            var code = "https://navdeck-backend.onrender.com#" + login.DesktopToken;
+            if (_bridge is { IsDisposed: false })
+                _bridge.ApplyClerkConnection(code);
+            else
+            {
+                var saved = Config.Load();
+                var previousCode = saved.Code;
+                saved.Code = code;
+                saved.SignedInWithClerk = true;
+                saved.Save();
+                DesktopProfileCache.Clear(previousCode);
+            }
+            _cloudApi = null;
+            _cloudCode = null;
+            return true;
+        }
+        finally { _clerkDialogOpen = false; }
+    }
 
     private readonly Label _simStatus = new()
     {
@@ -258,6 +293,7 @@ internal sealed class DesktopForm : Form
         // Primary operation: open the live in-flight report in one click.
         // Resolves the currently paired active flight before loading its details.
         AddNavigation("In-Flight Reporting", "▤", "flight.html?active=1#enroute");
+        AddNavigation("Touchdown Plotter", "⊙", "touchdown.html");
         AddNavigation("My Flights", "✈", "workspace.html#flights");
         AddNavigation("SimBrief", "≋", "workspace.html#simbrief");
         AddNavigation("VATSIM", "◎", "workspace.html#vatsim");
@@ -387,6 +423,9 @@ internal sealed class DesktopForm : Form
                       });
                       window.navdeckDesktop = Object.freeze({
                         getTelemetry: () => request('getTelemetry').catch(() => null),
+                        getTouchdown: () => request('getTouchdown'),
+                        getAutoStart: () => request('getAutoStart'),
+                        toggleAutoStart: () => request('toggleAutoStart'),
                         getFlight: () => request('getFlight'),
                         getActiveFlightDetails: () => request('getActiveFlightDetails'),
                         getFlights: () => request('getFlights'),
@@ -401,6 +440,7 @@ internal sealed class DesktopForm : Form
                         openSimbrief: (payload) => request('openSimbrief', payload),
                         openVatsim: (payload) => request('openVatsim', payload),
                         getSession: () => request('getSession'),
+                        signIn: () => request('signIn'),
                         signOut: () => request('signOut')
                       });
                       window.chrome.webview.addEventListener('message', event => {
@@ -439,14 +479,50 @@ internal sealed class DesktopForm : Form
                         var action = act.GetString() ?? "";
                         object? data;
 
-                        if (action == "getSession")
+                        if (action == "getAutoStart")
                         {
-                            // Only expose pairing status, never the connection token.
-                            data = new { paired = Config.IsValidCode(Config.Load().Code) };
+                            data = new { enabled = SimulatorAutostart.IsEnabled() };
+                        }
+                        else if (action == "toggleAutoStart")
+                        {
+                            data = new { enabled = SimulatorAutostart.Toggle() };
+                        }
+                        else if (action == "getSession")
+                        {
+                            // Only expose session state, never the desktop token.
+                            var session = Config.Load();
+                            data = new {
+                                paired = Config.IsValidCode(session.Code),
+                                auth_mode = session.SignedInWithClerk ? "clerk" : "legacy"
+                            };
+                        }
+                        else if (action == "signIn")
+                        {
+                            data = new { signed_in = SignInWithClerk() };
                         }
                         else if (action == "signOut")
                         {
-                            // Remove local account pairing without touching website sessions.
+                            if (_bridge?.HasPendingGoArounds == true)
+                                throw new InvalidOperationException(
+                                    "A go-around is still syncing. Wait for it to save before signing out.");
+                            var active = Config.Load();
+                            bool remoteRevoked = false;
+                            if (Config.IsValidCode(active.Code))
+                            {
+                                try
+                                {
+                                    await new NavdeckApi(active.Code)
+                                        .RevokeDesktopSessionAsync();
+                                    remoteRevoked = true;
+                                }
+                                catch (Exception ex) when (ex is HttpRequestException or
+                                    TaskCanceledException or AuthException)
+                                {
+                                    // Still clear local credentials if the cloud
+                                    // is offline. The remote session can be
+                                    // revoked from website simulator settings.
+                                }
+                            }
                             if (_bridge is { IsDisposed: false })
                                 _bridge.SignOut();
                             else
@@ -454,12 +530,38 @@ internal sealed class DesktopForm : Form
                                 var saved = Config.Load();
                                 var oldCode = saved.Code;
                                 saved.Code = "";
+                                saved.SignedInWithClerk = false;
                                 saved.Save();
                                 DesktopProfileCache.Clear(oldCode);
                             }
                             _cloudApi = null;
                             _cloudCode = null;
-                            data = new { signed_out = true };
+                            // Clear Clerk cookies so signing back in cannot
+                            // silently restore the previous account.
+                            _browser.CoreWebView2?.CookieManager.DeleteAllCookies();
+                            data = new { signed_out = true, remote_revoked = remoteRevoked };
+                        }
+                        else if (action == "getTouchdown")
+                        {
+                            var t = _bridge?.LastTouchdown;
+                            data = new
+                            {
+                                connected = _bridge?.SimulatorConnected ?? false,
+                                aircraft = _bridge?.SimulatorAircraft,
+                                touchdown = t is null ? null : new
+                                {
+                                    time_utc = t.TimeUtc.ToString("O"),
+                                    airport = t.Airport,
+                                    runway = t.Runway,
+                                    distance_from_threshold_m = t.DistanceFromThresholdM,
+                                    offset_from_centreline_m = t.OffsetFromCentrelineM,
+                                    runway_length_m = t.RunwayLengthM,
+                                    runway_width_m = t.RunwayWidthM,
+                                    landing_rate_fpm = t.LandingRateFpm,
+                                    latitude = t.Latitude,
+                                    longitude = t.Longitude
+                                }
+                            };
                         }
                         else if (action == "getTelemetry")
                         {
@@ -524,7 +626,7 @@ internal sealed class DesktopForm : Form
                             var config = Config.Load();
                             if (!Config.IsValidCode(config.Code))
                                 throw new InvalidOperationException(
-                                    "Pair the simulator connection first.");
+                                    "Sign in to NAVDECK from Settings first.");
                             if (!root.TryGetProperty("payload", out var input) ||
                                 !input.TryGetProperty("flight_id", out var flight) ||
                                 flight.ValueKind != System.Text.Json.JsonValueKind.String ||
@@ -587,7 +689,7 @@ internal sealed class DesktopForm : Form
                                     data = DesktopProfileCache.ReadFallback(config.Code);
                                 else
                                     throw new InvalidOperationException(
-                                        "No valid connection code. Open Simulator Connection to pair.");
+                                        "Sign in to NAVDECK with Clerk from Settings.");
                             }
                             else
                             {
@@ -685,7 +787,37 @@ internal sealed class DesktopForm : Form
                         _bridge.Show(this);
                         _bridge.Hide();
                         _bridge.Opacity = 1;
+                        _bridge.SignInRequested += () =>
+                        {
+                            try
+                            {
+                                if (SignInWithClerk())
+                                    _browser.CoreWebView2?.Navigate(
+                                        "https://navdeck-desktop.local/workspace.html#settings");
+                            }
+                            catch (Exception error)
+                            {
+                                MessageBox.Show(this, error.Message, "NAVDECK sign-in",
+                                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            }
+                        };
                         _statusTimer.Start();
+                        if (!Config.IsValidCode(Config.Load().Code))
+                            BeginInvoke(new Action(() =>
+                            {
+                                if (IsDisposed) return;
+                                try
+                                {
+                                    if (SignInWithClerk())
+                                        _browser.CoreWebView2?.Navigate(
+                                            "https://navdeck-desktop.local/workspace.html#settings");
+                                }
+                                catch (Exception error)
+                                {
+                                    MessageBox.Show(this, error.Message, "NAVDECK sign-in",
+                                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                                }
+                            }));
                     }
                     catch (Exception bridgeError)
                     {

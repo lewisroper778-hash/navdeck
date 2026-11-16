@@ -6,6 +6,7 @@ import { Toaster } from "sonner";
 import ClerkAuthProvider from "@/components/auth/ClerkAuthProvider";
 import SignInPage from "@/pages/SignInPage";
 import SignUpPage from "@/pages/SignUpPage";
+import DesktopConnectPage from "@/pages/DesktopConnectPage";
 import FlightsPage from "@/pages/FlightsPage";
 import HomePage from "@/pages/HomePage";
 import { ThemeProvider, cache, useTheme } from "@/lib/utils-app";
@@ -60,6 +61,7 @@ function App() {
             <Routes>
               <Route path="/sign-in/*" element={<SignInPage />} />
               <Route path="/sign-up/*" element={<SignUpPage />} />
+              <Route path="/desktop/connect" element={<DesktopConnectPage />} />
               <Route path="/" element={<Protected><HomePage /></Protected>} />
               <Route path="/flights" element={<Protected><FlightsPage /></Protected>} />
               <Route path="/vatsim" element={<Protected><VatsimPage /></Protected>} />

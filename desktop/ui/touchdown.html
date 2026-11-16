@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>NAVDECK · Touchdown Plotter</title>
+<style>
+:root{color-scheme:dark;font-family:"Segoe UI",system-ui,sans-serif;background:#10131d;color:#f3f6fc}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 85% -20%,#25264a 0,transparent 60%),#10131d}
+main{max-width:1300px;margin:auto;padding:clamp(20px,3vw,42px)}
+h1{font-size:clamp(27px,3vw,39px);letter-spacing:-1px;margin:6px 0 6px}
+h2{font-size:16px;margin:0 0 12px}p{line-height:1.5}
+.muted{color:#9aa6bd}.eyebrow{color:#8dbdff;font-weight:700;font-size:11px;letter-spacing:2px}
+.header{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:26px}
+.status{display:inline-flex;align-items:center;gap:9px;border:1px solid #303a4d;border-radius:99px;padding:10px 16px;font-size:12px;color:#aebdd2}
+.dot{width:8px;height:8px;background:#f4ac70;border-radius:50%}
+.status.connected .dot{background:#5fdca3}.status.connected{color:#c7f4dc}
+.panel{background:#1b2130;border:1px solid #303a4d;border-radius:18px;padding:clamp(16px,2.5vw,28px);box-shadow:0 12px 45px #0002}
+.top{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+.runway-wrap{margin:22px 0 12px;background:#141a27;border:1px solid #2c3547;border-radius:14px;padding:16px}
+svg{width:100%;height:auto;display:block}
+.legend{display:flex;gap:16px;flex-wrap:wrap;color:#aebdd2;font-size:12px}
+.legend span{display:flex;align-items:center;gap:7px}.mark{width:10px;height:10px;border-radius:50%;background:#fb7185}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-top:16px}
+.metric{background:#1b2130;border:1px solid #303a4d;border-radius:15px;padding:20px;min-width:0}
+.metric label{display:block;color:#aab6c8;font-size:12px;margin-bottom:10px}
+.metric strong{font-size:clamp(20px,2.5vw,30px);overflow-wrap:anywhere}
+.metric small{display:block;color:#7e8ba1;margin-top:5px}
+#note{font-size:13px;color:#aab6c8;margin-top:20px}
+@media(max-width:900px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:500px){.stats{grid-template-columns:1fr}}
+</style></head><body><main>
+<header class="header"><div><div class="eyebrow">SIMULATOR / LIVE LANDING DATA</div><h1>Touchdown Plotter</h1>
+<p class="muted">Runway position and touchdown rate, detected automatically from your simulator.</p></div>
+<div class="status" id="status"><span class="dot"></span><span id="simStatus">Waiting for simulator</span></div></header>
+<section class="panel"><div class="top"><div><div class="eyebrow">LATEST LANDING</div>
+<h2 id="landingTitle">Waiting for first touchdown</h2><p class="muted" id="landingTime">Start a flight and land to see your touchdown plot.</p></div>
+<div class="eyebrow" id="airportLabel">NO LANDING RECORDED</div></div>
+<div class="runway-wrap">
+<svg id="plot" viewBox="0 0 1000 330" role="img" aria-label="Runway touchdown location">
+<defs><pattern id="stripes" width="32" height="32" patternUnits="userSpaceOnUse"><path d="M0 0H32" stroke="#ffffff" opacity=".018"/></pattern></defs>
+<rect x="28" y="35" width="944" height="260" rx="16" fill="#0e1420"/>
+<rect x="80" y="86" width="840" height="158" rx="4" fill="#333b4b" stroke="#8693a9" stroke-width="2"/>
+<rect x="80" y="86" width="840" height="158" fill="url(#stripes)"/>
+<g stroke="#e4eaf4" stroke-width="7"><path d="M104 96V125 M119 96V125 M134 96V125 M149 96V125 M164 96V125 M179 96V125 M194 96V125 M209 96V125 M104 205V234 M119 205V234 M134 205V234 M149 205V234 M164 205V234 M179 205V234 M194 205V234 M209 205V234"/></g>
+<line x1="80" y1="165" x2="920" y2="165" stroke="#f3f5fb" stroke-width="3" stroke-dasharray="28 25" opacity=".8"/>
+<path d="M80 79V63M80 63H920M920 63V79" stroke="#8291a9" fill="none" stroke-width="1.5"/>
+<text x="500" y="53" fill="#aebdd2" text-anchor="middle" font-size="15" id="runwayLength">Runway length unavailable</text>
+<text x="80" y="274" fill="#aebdd2" font-size="14">THRESHOLD</text>
+<text x="920" y="274" fill="#aebdd2" font-size="14" text-anchor="end">END</text>
+<g id="touchdownMarker" visibility="hidden"><circle cx="0" cy="0" r="19" fill="#fb7185" opacity=".22"/><circle cx="0" cy="0" r="8" fill="#fb7185" stroke="white" stroke-width="3"/></g>
+<text x="500" y="316" text-anchor="middle" fill="#9aa6bd" font-size="15" id="plotMessage">No touchdown to plot yet</text>
+</svg></div>
+<div class="legend"><span><i class="mark"></i>Actual touchdown point</span><span>Scale based on identified runway dimensions</span></div>
+</section>
+<section class="stats">
+<div class="metric"><label>Landing rate</label><strong id="rate">—</strong><small>feet per minute</small></div>
+<div class="metric"><label>Distance from threshold</label><strong id="distance">—</strong><small>feet along runway</small></div>
+<div class="metric"><label>Offset from centreline</label><strong id="offset">—</strong><small>feet · left/right</small></div>
+<div class="metric"><label>Runway</label><strong id="runway">—</strong><small id="airport">Awaiting detection</small></div>
+</section>
+<p id="note">NAVDECK shows your most recent detected landing in this app session. A runway match requires valid position and approach track; no location is invented when the runway cannot be identified.</p>
+</main><script>
+const $=id=>document.getElementById(id);
+const ft=m=>Math.round(m/0.3048).toLocaleString();
+const valid=n=>typeof n==='number'&&Number.isFinite(n);
+let lastKey='';
+function render(result){
+ const connected=!!result?.connected;
+ $('status').classList.toggle('connected',connected);
+ $('simStatus').textContent=connected?'Simulator connected · '+(result.aircraft||'MSFS'):'Simulator disconnected';
+ const t=result?.touchdown;
+ if(!t){
+   $('landingTitle').textContent='Waiting for first touchdown';
+   return;
+ }
+ const key=t.time_utc+'|'+t.runway;
+ if(key===lastKey)return;
+ lastKey=key;
+ $('landingTitle').textContent=t.runway?'Runway '+t.runway+' touchdown':'Landing detected · runway unknown';
+ $('landingTime').textContent=t.time_utc?new Date(t.time_utc).toLocaleString():'Time unavailable';
+ $('airportLabel').textContent=t.airport||'RUNWAY NOT IDENTIFIED';
+ $('rate').textContent=valid(t.landing_rate_fpm)?Math.round(Math.abs(t.landing_rate_fpm)).toLocaleString():'—';
+ $('distance').textContent=valid(t.distance_from_threshold_m)?ft(t.distance_from_threshold_m):'—';
+ $('offset').textContent=valid(t.offset_from_centreline_m)?ft(Math.abs(t.offset_from_centreline_m)):'—';
+ $('offset').nextElementSibling.textContent=valid(t.offset_from_centreline_m)
+   ?'feet · '+(t.offset_from_centreline_m<0?'left':'right')+' of centreline':'feet · position unknown';
+ $('runway').textContent=t.runway||'Unknown';
+ $('airport').textContent=t.airport||'Position unavailable';
+ const canPlot=valid(t.distance_from_threshold_m)&&valid(t.offset_from_centreline_m)
+   &&valid(t.runway_length_m)&&t.runway_length_m>0
+   &&valid(t.runway_width_m)&&t.runway_width_m>0;
+ $('touchdownMarker').setAttribute('visibility',canPlot?'visible':'hidden');
+ if(canPlot){
+   const x=80+840*Math.max(0,Math.min(1,t.distance_from_threshold_m/t.runway_length_m));
+   const y=165-79*Math.max(-1,Math.min(1,2*t.offset_from_centreline_m/t.runway_width_m));
+   $('touchdownMarker').setAttribute('transform',`translate(${x} ${y})`);
+   $('runwayLength').textContent=ft(t.runway_length_m)+' ft runway';
+   $('plotMessage').textContent='Touchdown position · '+ft(t.distance_from_threshold_m)+' ft from threshold';
+ }else{
+   $('runwayLength').textContent='Runway length unavailable';
+   $('plotMessage').textContent='Runway position not available for this landing';
+ }
+}
+async function update(){
+ try{
+  const result=await window.navdeckDesktop.getTouchdown();
+  render(result);
+ }catch(err){$('simStatus').textContent='Simulator data unavailable';}
+}
+update();
+setInterval(()=>{if(!document.hidden)update();},1500);
+</script></body></html>

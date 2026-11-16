@@ -206,6 +206,14 @@ def build_bridge_router(db, simbrief_import=None, flight_ops=None) -> APIRouter:
         return {"flight": {k: getattr(flight, k, None) for k in
             ("id", "callsign", "origin", "destination", "aircraft")}}
 
+    @r.delete("/desktop/session")
+    async def revoke_desktop_session(link: dict = Depends(bridge_user)):
+        # Revoke only the credential held by this Windows app, not every
+        # simulator linked to the Clerk account. A deleted token cannot be
+        # reused after the desktop user signs out.
+        await db.bridge_links.delete_one({"token_hash": link["token_hash"]})
+        return {"ok": True}
+
     @r.post("/link")
     async def create_link(user: dict = Depends(require_user)):
         token = secrets.token_urlsafe(32)
