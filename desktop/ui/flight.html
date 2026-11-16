@@ -1,0 +1,213 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NAVDECK Flight Operations</title><style>
+:root{--bg:#18191d;--panel:#25262b;--panel2:#2d2d33;--line:#3b3b46;--text:#f5f4fa;--muted:#a19fad;--dim:#787583;--accent:#985cff;--accent2:#b991ff;--green:#87dfa3;--amber:#fac879;--red:#f39898}
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font:14px/1.45 'Segoe UI',Arial,sans-serif}body{min-width:560px}button,input{font:inherit}button{cursor:pointer}button:focus-visible,input:focus-visible{outline:2px solid var(--accent2);outline-offset:2px}button:disabled{cursor:wait;opacity:.5}main{max-width:1600px;margin:auto;padding:33px 42px 70px}
+.top{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:32px}.crumb{display:flex;align-items:center;gap:8px;color:var(--dim);font-size:12px;letter-spacing:1px;text-transform:uppercase}.crumb b{color:var(--accent2);font-weight:650}.topright{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:12px}.status{border:1px solid var(--line);border-radius:30px;background:var(--panel);padding:8px 13px;color:#d3d1db;display:flex;align-items:center;gap:7px}.status i{display:block;width:7px;height:7px;background:#92909a;border-radius:50%}.status.ok i{background:var(--green);box-shadow:0 0 6px #87dfa3bb}.status.error i{background:var(--red)}.avatar{display:grid;place-items:center;width:34px;height:34px;border-radius:50%;background:#59438c;color:#fff;font-weight:800}
+.hero{position:relative;display:flex;align-items:end;justify-content:space-between;min-height:196px;gap:28px;overflow:hidden;padding:31px 34px;background:radial-gradient(ellipse at 92% 20%,#553b81a0,transparent 46%),linear-gradient(125deg,#2b253e,#272630 70%);border:1px solid #50435d;border-radius:15px;box-shadow:0 16px 30px #0002;margin-bottom:24px}.hero:before{content:"";position:absolute;border:1px solid #a58de01c;border-radius:50%;width:490px;height:490px;top:-290px;right:-95px}.hero>div{z-index:1}.eyebrow{font-size:10px;font-weight:750;letter-spacing:2px;color:#c7b4eb;text-transform:uppercase}.hero h1{font-size:35px;line-height:1.12;letter-spacing:-1px;margin:12px 0 8px;font-weight:720}.hero p{color:#bdb5c9;max-width:660px;margin:0;font-size:13px}.hero-stat{display:grid;gap:2px;min-width:175px;background:#1e1b267a;padding:16px 18px;border:1px solid #67577978;border-radius:11px}.hero-stat b{font-size:25px}.hero-stat span{font-size:11px;color:#b9adc9}
+.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.row.right{justify-content:flex-end}.button{border:1px solid #595369;background:#352c44;color:#eae1ff;border-radius:8px;padding:10px 16px;font-size:12px;font-weight:650;transition:background .14s}.button:hover{background:#49375f}.button.primary{background:#8745eb;border-color:#9a5cf5;color:#fff}.button.primary:hover{background:#9b63f7}.button.ghost{background:#28282e;border-color:#464550;color:#dfdde5}.button.ghost:hover{background:#35353f}.button.small{padding:7px 11px}
+.panel{min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:21px;margin-bottom:18px;box-shadow:0 6px 22px #00000010}.panel.tight{padding:0;overflow:hidden}.panel-head{display:flex;align-items:start;justify-content:space-between;gap:15px;margin-bottom:16px}.panel-head h2{margin:0;font-size:14px;font-weight:700;letter-spacing:.1px}.panel-head p{margin:5px 0 0;font-size:12px;color:var(--muted)}.toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px;flex-wrap:wrap}
+.search{min-width:260px;max-width:360px;flex:1;border:1px solid #4e4d56;background:#232329;color:#fff;border-radius:8px;padding:10px 13px;outline:none}.search::placeholder{color:#8a8794}.search:focus{border-color:#975bfa}
+.metric-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:23px}.metric{background:var(--panel);border:1px solid var(--line);padding:18px 20px;border-radius:11px}.metric .label{font-size:11px;color:var(--muted);letter-spacing:.3px}.metric strong{display:block;font-size:26px;font-weight:710;margin:9px 0 2px;font-variant-numeric:tabular-nums}.metric small{display:block;color:var(--dim);font-size:11px}.metric.purple{border-color:#71539a;background:linear-gradient(135deg,#3a2f52,#2b2934)}
+.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:15px}.flight{padding:17px 17px 14px;border:1px solid #474451;border-radius:11px;background:linear-gradient(115deg,#303038,#28282f);text-align:left;min-width:0;color:var(--text)}button.flight:hover{border-color:#a070eb;background:#383142}.flight-head{display:flex;justify-content:space-between;align-items:center;gap:10px}.flight-head b{font-size:14px}.chip{padding:4px 9px;border:1px solid #5a4a75;background:#3f3552;border-radius:20px;color:#d7bffc;font-size:10px;white-space:nowrap}.chip.closed{background:#324839;border-color:#45634d;color:#9be9af}.flight-route{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:19px 0 13px}.flight-route b{font-size:27px;font-weight:670;letter-spacing:1px}.flight-route span{color:#ab78f6;font-size:22px}.flight-footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid #494752;padding-top:10px;color:#aeadb8;font-size:11px}
+.two-col{display:grid;grid-template-columns:1.18fr .82fr;gap:17px}.setting-group{margin-bottom:18px}.setting-group label{display:block;margin-bottom:8px;color:#c9c5d1;font-weight:650;font-size:12px}.setting-group input{width:100%;padding:11px 13px;background:#1d1e23;border:1px solid #514e5d;border-radius:7px;color:#fff}.setting-group small{display:block;margin-top:7px;color:var(--dim)}.setting-group input:focus{border-color:#9257ed}.inline-callout{border:1px solid #514866;background:#312c3b;border-radius:9px;padding:13px 14px;color:#c4b4d8;font-size:12px;margin:15px 0}
+.empty{padding:45px 20px;text-align:center;color:#afabb9;line-height:1.65}.empty .symbol{font-size:26px;color:#af8af3;margin-bottom:8px}.empty strong{display:block;font-size:15px;color:#efedf5}.empty p{max-width:480px;margin:6px auto;font-size:12px}
+.table-wrap{overflow:auto}.table{width:100%;border-collapse:collapse;white-space:nowrap}.table thead{color:#9896a4;background:#222228;text-align:left;font-size:10px;letter-spacing:1px;text-transform:uppercase}.table th,.table td{padding:15px 19px;border-bottom:1px solid #35353e}.table tbody tr:hover{background:#2e2e37}.table td{font-size:12px;color:#d8d6df}.table td:first-child{font-weight:700;color:#fff}.table .muted{color:#a09eaa}
+.mini-icon{display:inline-grid;place-items:center;background:#50397d;color:#d5bbff;border-radius:9px;width:36px;height:36px;font-size:17px;margin-right:10px}.bullet-list{margin:12px 0 0;padding-left:20px;color:#b7b3c1;font-size:12px;line-height:2}
+.notice{border:1px solid #705e48;background:#372d25;color:#f2c886;border-radius:9px;padding:14px 16px;font-size:12px;margin-bottom:15px}.notice.error{border-color:#754950;background:#3c292f;color:#f4a9b0}.notice.good{border-color:#457051;background:#253b2d;color:#aadcb5}
+.section-kicker{font-size:11px;letter-spacing:1.5px;color:#b5a6ce;font-weight:800;text-transform:uppercase;margin:23px 0 12px}
+.loader{color:#aba8b5;font-size:12px;padding:26px 0}
+@media(max-width:1250px){main{padding:26px 25px}.cards{grid-template-columns:repeat(2,minmax(0,1fr))}.two-col{grid-template-columns:1fr}.hero h1{font-size:30px}}
+@media(max-width:960px){.metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.cards{grid-template-columns:1fr}.hero-stat{display:none}.hero{padding:26px}}
+@media(max-width:720px){main{padding:20px 17px}.top{margin-bottom:19px}.topright .label{display:none}.metric-grid{grid-template-columns:1fr 1fr}.hero h1{font-size:26px}}
+
+.phasebar{display:flex;gap:9px;flex-wrap:wrap;padding:0 0 16px;margin:0 0 19px;border-bottom:1px solid var(--line)}
+.phase{border:1px solid #555161;background:#302e38;color:#d5d0df;border-radius:8px;padding:10px 14px;font-weight:650}.phase.active{background:#8243d5;color:#fff;border-color:#a86cf2}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:17px}
+.fieldrow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.field{margin:9px 0}.field label{display:block;color:#bbb5c8;font-size:12px;margin-bottom:5px}.field input,.field textarea,.field select{width:100%;background:#1d1d23;color:#f5f3f9;border:1px solid #53515e;padding:10px 12px;border-radius:7px}.field textarea{resize:vertical}
+.field input:focus,.field textarea:focus{border-color:#b286f2;outline:none}.field input:disabled{opacity:.5}
+.details-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.detail{padding:11px 12px;background:#323139;border-radius:7px}.detail small{color:#a9a5b3;display:block}.detail b{display:block;margin-top:4px;overflow-wrap:anywhere}
+.rule{border-top:1px solid #43404c;margin:19px 0}
+.tab-table{width:100%;border-collapse:collapse;min-width:940px}.tab-table td,.tab-table th{padding:10px;border-bottom:1px solid #42404b;text-align:left;font-size:11px}.tab-table th{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#aba6b5;background:#212127}
+.tab-table input{background:#19191e;color:white;border:1px solid #54505e;border-radius:5px;padding:8px;width:74px}.tab-table input[type=checkbox]{width:auto}
+.tab-table .ops button{font-size:10px;border:1px solid #5c4b74;border-radius:5px;background:#3f3651;color:#e0d1fd;padding:6px;margin-right:3px}.tab-table .ops button:disabled{opacity:.3}
+.tab-table tr.done{background:#283a30}.tab-table tr.skip{opacity:.4}.tab-table tr.nextfix{background:#40334f}
+.scroll-table{overflow:auto;max-height:650px;border:1px solid #413e48;border-radius:8px}
+.message{border:1px solid #716080;background:#352b40;color:#e4d3fc;padding:13px 15px;border-radius:8px;margin:13px 0}.message.err{border-color:#8d4b53;background:#3e2b30;color:#fbb8c2}.message.good{border-color:#497f57;background:#293c2e;color:#b7ecc7}
+.signpad{display:block;width:100%;height:130px;background:white;touch-action:none;border-radius:7px;border:1px solid #a09aa9}
+.checkline{display:flex;align-items:center;justify-content:space-between;background:#303037;border:1px solid #46434e;border-radius:7px;padding:10px 12px;margin-bottom:8px}.checkline strong{font-size:12px}
+.green{color:#9ce9ad}.red{color:#efa5ae}
+dl{margin:0}.report-list{color:#beb8c7;font-size:12px;white-space:pre-wrap}
+details{background:#313039;border:1px solid #45414d;border-radius:7px;padding:10px;margin:7px 0}summary{cursor:pointer;font-size:12px;font-weight:650}details p{white-space:pre-wrap;color:#bbb5c6;font-size:12px}
+.mini-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:16px}.mini-actions .button{font-size:11px}
+@media(max-width:1170px){.pair{grid-template-columns:1fr}.fieldrow{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media print{header,.phasebar,.button,#statusMsg,.toolbar{display:none!important}main,.panel,body{color:black!important;background:white!important;box-shadow:none!important}.detail{background:white!important;border:1px solid #ccc}.detail small{color:#555!important}}
+</style></head><body><main><header class="top"><div class="crumb">NAVDECK › MY FLIGHTS › <b>FLIGHT OPERATIONS</b></div><span class="status ok"><i></i><span>Desktop cloud link</span></span></header><div class="toolbar"><button class="button ghost" id="back">← My Flights</button></div><section class="hero"><div><span class="eyebrow">OPERATIONAL FLIGHT DECK</span><h1 id="title">Loading flight…</h1><p id="route">— → —</p><p id="aircraft"></p></div></section><div id="statusMsg" hidden></div><div class="panel" id="summary"></div><nav class="phasebar" id="phasebar"></nav><div id="stage"></div></main><script>
+(()=>{
+'use strict';
+const d=id=>document.getElementById(id);
+const e=v=>String(v??'').replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const v=id=>d(id)?.value.trim()||'';
+const api=(name,arg)=>window.navdeckDesktop?.[name]?.(arg)||Promise.reject(Error('Native bridge unavailable'));
+const info=(k,x)=>'<div class="detail"><small>'+e(k)+'</small><b>'+e(x??'—')+'</b></div>';
+const details=(items)=>'<div class="details-grid">'+items.map(([k,x])=>info(k,x)).join('')+'</div>';
+const panel=(title,body)=>'<section class="panel"><div class="panel-head"><h2>'+e(title)+'</h2></div>'+body+'</section>';
+const field=(id,label,value,ph='',type='text')=>'<div class="field"><label for="'+id+'">'+e(label)+'</label><input id="'+id+'" type="'+type+'" value="'+e(value??'')+'" placeholder="'+e(ph)+'"></div>';
+const button=(id,title)=>'<button class="button primary" id="'+id+'" data-edit>'+e(title)+'</button>';
+const time=/^([01]\d|2[0-3]):[0-5]\d$/;
+const phases=['briefing','departure','enroute','arrival','close'];
+let id=new URL(location.href).searchParams.get('id'),f=null,section='briefing',pending=false,ink=false;
+function message(text,error=false){let x=d('statusMsg');x.hidden=false;x.className='message '+(error?'err':'good');x.textContent=text}
+function clear(){d('statusMsg').hidden=true}
+function on(id,fn){if(d(id))d(id).onclick=fn}
+function validateTimes(obj){for(const [k,x]of Object.entries(obj)){if(x&&!time.test(x))throw Error(k+' must be HH:MM UTC')}return obj}
+function positive(x,name){if(x&&!/^\d+(\.\d+)?$/.test(x))throw Error(name+' must be a positive number');return x||''}
+function act(action,values={}){
+ if(pending)return Promise.resolve();pending=true;clear();
+ return api('flightAction',{flight_id:f.id,operation:action,values}).then(data=>{
+   if(!data?.flight)throw Error('No updated flight returned');
+   f=data.flight;draw();message('Saved to NAVDECK');
+ }).catch(err=>message(err.message,true)).finally(()=>{pending=false});
+}
+function run(fn){return ()=>{try{const out=fn();if(out&&typeof out.catch==='function')out.catch(x=>message(x.message,true))}catch(x){message(x.message,true)}}}
+function init(){if(!id){message('No flight selected',true);return}
+ api('getFlightDetails',{flight_id:id}).then(x=>{if(!x?.flight)throw Error('Flight not found');f=x.flight;draw()})
+ .catch(x=>message('Cloud flight unavailable: '+x.message+'. The updated NAVDECK server API must be deployed.',true))}
+function draw(){
+ const closed=f.status==='closed';
+ d('title').textContent=f.callsign||'Flight';
+ d('route').textContent=(f.origin||'—')+' → '+(f.destination||'—');
+ d('aircraft').textContent=(f.aircraft||'Unknown aircraft')+' · '+(closed?'Closed flight':'Active flight');
+ const wp=f.waypoints||[], active=wp.filter(x=>!x.skipped),done=active.filter(x=>x.passed||x.ata).length;
+ const next=active.find(x=>!x.passed&&!x.ata);
+ d('summary').innerHTML=details([['Flight status',closed?'CLOSED':'OPEN'],['Progress',done+'/'+active.length+' fixes'],['Next waypoint',next?.ident],['Landing rate',f.landing_rate?'-'+Math.abs(Number(f.landing_rate))+' FPM':'—'],['Block fuel',f.fuel?.block],['OFP units',f.weights?.ofp_units||'KG']]);
+ d('phasebar').innerHTML=phases.map((x,i)=>'<button class="phase '+(section===x?'active':'')+'" data-phase="'+x+'">'+(i+1)+' · '+({briefing:'Briefing',departure:'Departure',enroute:'Enroute',arrival:'Arrival',close:'Close & Sign'})[x]+'</button>').join('');
+ document.querySelectorAll('[data-phase]').forEach(b=>b.onclick=()=>{section=b.dataset.phase;draw()});
+ d('stage').innerHTML=({briefing,departure,enroute,arrival,closeFlight})[section]();
+ bind();
+ if(closed)document.querySelectorAll('[data-edit]').forEach(b=>b.disabled=true);
+}
+function briefing(){
+ const t=f.times||{},fuel=f.fuel||{},w=f.weights||{};
+ const notams=Object.entries(f.notams||{}).flatMap(([cat,items])=>(Array.isArray(items)?items:[]).map(x=>({cat,...x})));
+ return '<div class="pair">'+panel('Operational flight plan',
+ '<div class="report-list">'+e(f.route||'No route imported')+'</div><div class="rule"></div>'+
+ details([['Departure',f.origin],['Destination',f.destination],['Alternate',f.alternate],['Cruise level',f.cruise_level],['Distance NM',f.distance],['ETE',f.ete]])+
+ '<div class="rule"></div><h3 class="section-kicker">Scheduled UTC</h3>'+
+ details([['OFF',t.sched_off],['T-O',t.sched_takeoff],['LDG',t.sched_landing],['ON',t.sched_on]])+
+ '<div class="rule"></div><div class="fieldrow">'+field('tsat','TSAT UTC',t.tsat,'HH:MM')+field('ctot','CTOT UTC',t.ctot,'HH:MM')+'</div>'+button('saveSlots','Save slot times'))+
+ panel('Fuel & loadsheet','<span class="tag">OFP: '+e(w.ofp_units||'KG')+'</span><h3 class="section-kicker">Fuel plan</h3>'+
+ details(Object.entries(fuel).filter(([k])=>['taxi','trip','contingency','alternate','reserve','extra','block','min_takeoff','min_fuel','mayday_fuel'].includes(k)).map(([k,v])=>[k.replaceAll('_',' ').toUpperCase(),v]))+
+ '<h3 class="section-kicker">Weights</h3>'+
+ details([['OEW',w.oew],['ZFW',w.zfw],['TOW',w.tow],['LAW',w.law],['Max TOW',w.max_tow],['Max LAW',w.max_law]])+
+ '<div class="rule"></div><div class="fieldrow">'+field('pax','Passenger count',w.pax_count,'0')+field('cargo','Cargo ('+(w.ofp_units||'KG')+')',w.cargo,'0')+'</div>'+
+ '<div class="field" style="max-width:150px"><label>Display units</label><select id="units"><option value="KG" '+(w.units==='KG'?'selected':'')+'>KG</option><option value="LB" '+(w.units==='LB'?'selected':'')+'>LB</option></select></div>'+button('saveLoad','Save loadsheet'))+'</div>'+
+ panel('Flight NOTAMs',notams.length?notams.slice(0,100).map(n=>'<details><summary>'+e(n.id||'NOTAM')+' · '+e(n.cat)+' · '+e(n.category||'Notice')+'</summary><p>'+e(n.text||n.raw||'No text')+'</p></details>').join(''):'<p class="muted">No NOTAMs imported with the flight plan.</p>');
+}
+function departure(){
+ const t=f.times||{};
+ return panel('Departure operations','<p class="muted">Manual UTC event entries are synchronised with the existing MSFS simulator bridge.</p><div class="fieldrow">'+
+ field('off','OFF · Gate departure',t.off,'HH:MM')+field('to','T-O · Takeoff',t.takeoff,'HH:MM')+
+ field('tsat2','TSAT · Start-up',t.tsat,'HH:MM')+field('ctot2','CTOT · Takeoff slot',t.ctot,'HH:MM')+
+ '</div>'+button('saveDeparture','Save departure events'))+
+ panel('Planned departure',details([['Scheduled OFF',t.sched_off],['Scheduled T-O',t.sched_takeoff],['Taxi fuel',f.fuel?.taxi],['Airport',f.origin]]));
+}
+function enroute(){
+ const rows=f.waypoints||[],active=rows.filter(x=>!x.skipped),next=active.find(x=>!x.passed&&!x.ata);
+ const tbody=rows.map((r,i)=>{
+ const done=r.passed||r.ata;
+ return '<tr class="'+(r.skipped?'skip':done?'done':next===r?'nextfix':'')+'"><td><input type="checkbox" data-pass="'+i+'" '+(done?'checked':'')+(r.skipped||f.status==='closed'?' disabled':'')+'></td><td><b>'+e(r.ident)+'</b><small style="display:block;color:#999">'+e(r.airway||'DCT')+'</small></td>'+
+ '<td>'+e(r.altitude||'—')+'</td><td>'+e(r.eta||'—')+'</td><td>'+e(r.fob||'—')+'</td>'+
+ '<td><input data-ata="'+i+'" value="'+e(r.ata||'')+'" placeholder="HH:MM"></td><td><input data-fob="'+i+'" value="'+e(r.actual_fob||'')+'" placeholder="FOB"></td><td><input data-alt="'+i+'" value="'+e(r.actual_alt||'')+'" placeholder="FT"></td>'+
+ '<td class="ops"><button data-wsave="'+i+'" data-edit>Save</button>'+(r.skipped?'<button data-restore="'+i+'" data-edit>Restore</button>':'<button data-skip="'+i+'" data-edit>Skip</button><button data-direct="'+i+'" data-edit>DCT</button>')+'</td></tr>';
+ }).join('');
+ const undos=[...new Set(rows.map(x=>x.direct_group).filter(Boolean))];
+ return panel('Enroute navigation','<p class="muted">Full waypoint tracking with actual time, fuel, altitude, skip, direct-to and undo. Dates and times remain in the original NAVDECK flight record.</p>'+
+ '<div class="scroll-table"><table class="tab-table"><thead><tr><th>Passed</th><th>Fix</th><th>FL</th><th>ETA</th><th>Plan FOB</th><th>ATA</th><th>Actual FOB</th><th>ALT</th><th>Actions</th></tr></thead><tbody>'+tbody+'</tbody></table></div>'+
+ '<div class="mini-actions">'+undos.map((g,i)=>'<button class="button ghost" data-undo="'+e(g)+'" data-edit>Undo direct '+(i+1)+'</button>').join('')+
+ '<button class="button ghost" id="reset" data-edit>Reset tracker</button></div>');
+}
+function arrival(){
+ const t=f.times||{},n=f.arrival_notes||{};
+ return '<div class="pair">'+panel('Arrival actuals','<div class="fieldrow">'+field('ldg','LDG · Touchdown',t.landing,'HH:MM')+field('on','ON · At gate',t.on,'HH:MM')+
+ field('rate','Landing rate FPM',f.landing_rate,'e.g. 180')+field('fob','Fuel at gate ('+(f.weights?.ofp_units||'KG')+')',f.arrival_fob,'0')+
+ '</div>'+button('saveArrival','Save arrival actuals'))+
+ panel('Weather and arrival notes','<button class="button ghost" id="metarFetch" style="margin-bottom:13px">Fetch '+e(f.destination||'arrival')+' METAR</button>'+
+ '<div class="field"><label>METAR / ATIS</label><textarea id="metar" rows="3">'+e(n.metar||'')+'</textarea></div>'+
+ field('runway','Runway / taxi exit',n.runway,'25R / B5')+
+ '<div class="field"><label>Flight remarks</label><textarea id="notes" rows="4">'+e(n.notes||'')+'</textarea></div>'+
+ button('saveNotes','Save arrival notes'))+'</div>'+
+ panel('Arrival summary',details([['Scheduled LDG',t.sched_landing],['Actual LDG',t.landing],['Scheduled ON',t.sched_on],['Actual ON',t.on],['Landing rate',f.landing_rate],['Arrival fuel',f.arrival_fob]]));
+}
+function closeFlight(){
+ const t=f.times||{},sg=f.signoff||{},closed=f.status==='closed';
+ const checks=[['Gate-out time',!!t.off],['Takeoff time',!!t.takeoff],['Landing time',!!t.landing],['Gate-in time',!!t.on],['Landing rate',!!f.landing_rate],['Commander sign-off',!!sg.signed]];
+ const good=checks.every(x=>x[1]);
+ const signature=sg.signed?
+ '<div class="message good">Signed by '+e(sg.signed_by||'')+' · '+e(sg.signed_at?.slice(0,16)||'')+' UTC</div><p>'+e(sg.remarks||'No remarks')+'</p>'+
+ (sg.signature?'<img src="'+e(sg.signature)+'" alt="Commander signature" style="background:white;max-height:110px;max-width:100%">':''):
+ field('pilotName','Commander name','','Name')+
+ '<div class="field"><label>Remarks</label><textarea id="remarks" rows="3"></textarea></div>'+
+ '<div class="field"><label>Draw signature</label><canvas id="pad" class="signpad" width="640" height="130"></canvas></div>'+
+ '<div class="row"><button class="button ghost" id="clearPad">Clear</button></div>'+
+ '<label class="muted" style="display:block;margin:12px 0"><input type="checkbox" id="agree"> I confirm this flight record is accurate.</label>'+
+ button('sign','Sign flight report');
+ return '<div class="pair">'+panel('Completion checklist',checks.map(([name,ok])=>'<div class="checkline"><strong>'+e(name)+'</strong><b class="'+(ok?'green':'red')+'">'+(ok?'✓ Complete':'Required')+'</b></div>').join('')+
+ '<div class="mini-actions">'+(closed?'<button class="button primary" id="reopen">Reopen flight</button>':'<button class="button primary" id="finish" '+(!good?'disabled':'')+'>Close flight</button>')+'</div>')+
+ panel('Signed operational report',signature)+'</div>'+
+ panel('Archive and export','<p class="muted">Closed flights are saved to NAVDECK Logbook. A signed PDF report can be saved directly to your PC.</p><div class="mini-actions"><button class="button ghost" id="print">Print flight summary</button>'+
+ (closed?'<button class="button primary" id="pdf">Download signed PDF</button>':'')+'</div>');
+}
+function bind(){
+ if(section==='briefing'){
+  on('saveSlots',run(()=>act('saveTimes',validateTimes({tsat:v('tsat'),ctot:v('ctot')}))));
+  on('saveLoad',run(()=>act('saveActuals',{pax_count:positive(v('pax'),'Passenger count'),cargo:positive(v('cargo'),'Cargo'),units:v('units')})));
+ }
+ if(section==='departure')on('saveDeparture',run(()=>act('saveTimes',validateTimes({off:v('off'),takeoff:v('to'),tsat:v('tsat2'),ctot:v('ctot2')}))));
+ if(section==='enroute'){
+  const row=i=>f.waypoints[i];
+  document.querySelectorAll('[data-pass]').forEach(b=>b.onchange=()=>act('toggleWaypoint',{index:Number(b.dataset.pass),ident:row(Number(b.dataset.pass)).ident,passed:b.checked}));
+  document.querySelectorAll('[data-wsave]').forEach(b=>b.onclick=run(()=>{
+    const i=Number(b.dataset.wsave),r=row(i);
+    const ata=document.querySelector('[data-ata="'+i+'"]').value.trim();
+    if(ata&&!time.test(ata))throw Error('ATA must be HH:MM UTC');
+    let actual_alt=positive(document.querySelector('[data-alt="'+i+'"]').value,'Altitude');
+    if(actual_alt&&Number(actual_alt)>60000)throw Error('Altitude exceeds 60000 ft');
+    return act('saveWaypoint',{index:i,ident:r.ident,ata,actual_fob:positive(document.querySelector('[data-fob="'+i+'"]').value,'Fuel'),actual_alt});
+  }));
+  document.querySelectorAll('[data-skip]').forEach(b=>b.onclick=()=>{const i=Number(b.dataset.skip);if(confirm('Skip '+row(i).ident+'?'))act('skipWaypoint',{index:i,ident:row(i).ident,skipped:true})});
+  document.querySelectorAll('[data-restore]').forEach(b=>b.onclick=()=>{const i=Number(b.dataset.restore);act('skipWaypoint',{index:i,ident:row(i).ident,skipped:false})});
+  document.querySelectorAll('[data-direct]').forEach(b=>b.onclick=()=>{const i=Number(b.dataset.direct);if(confirm('Direct to '+row(i).ident+'? Earlier unpassed fixes will be skipped.'))act('directTo',{index:i,ident:row(i).ident})});
+  document.querySelectorAll('[data-undo]').forEach(b=>b.onclick=()=>act('undoDirect',{group:b.dataset.undo}));
+  on('reset',()=>{if(confirm('Reset tracked waypoints, flight times and signatures?'))act('resetFlight')});
+ }
+ if(section==='arrival'){
+  on('saveArrival',run(async()=>{
+   await act('saveTimes',validateTimes({landing:v('ldg'),on:v('on')}));
+   await act('saveArrival',{landing_rate:positive(v('rate').replace(/^-/,''),'Landing rate'),arrival_fob:positive(v('fob'),'Fuel')});
+  }));
+  on('saveNotes',()=>act('saveNotes',{metar:v('metar'),runway:v('runway'),notes:v('notes')}));
+  on('metarFetch',run(async()=>{const a=await api('getMetar',{icao:f.destination});if(a?.metar){d('metar').value=a.metar;message('METAR loaded. Save notes to keep it.')}else message('No METAR available')}));
+ }
+ if(section==='close'){
+  on('finish',()=>{if(confirm('Close this flight and store its report in NAVDECK?'))act('closeFlight')});
+  on('reopen',()=>{if(confirm('Reopen this flight for editing?'))act('reopenFlight')});
+  on('print',()=>window.print());
+  on('pdf',run(async()=>{const x=await api('downloadReport',{flight_id:f.id});if(x?.saved)message('Signed PDF saved')}));
+  if(f.signoff?.signed)return;
+  const canvas=d('pad');if(!canvas)return;let ctx=canvas.getContext('2d'),drawing=false;ink=false;
+  ctx.strokeStyle='#121212';ctx.lineWidth=2;ctx.lineCap='round';
+  const point=x=>{const r=canvas.getBoundingClientRect();return [(x.clientX-r.left)*canvas.width/r.width,(x.clientY-r.top)*canvas.height/r.height]};
+  canvas.onpointerdown=x=>{drawing=true;ink=true;canvas.setPointerCapture(x.pointerId);let [a,b]=point(x);ctx.beginPath();ctx.moveTo(a,b);ctx.lineTo(a+.1,b+.1);ctx.stroke()};
+  canvas.onpointermove=x=>{if(!drawing)return;let [a,b]=point(x);ctx.lineTo(a,b);ctx.stroke()};
+  canvas.onpointerup=()=>{drawing=false};
+  on('clearPad',()=>{ctx.clearRect(0,0,canvas.width,canvas.height);ink=false});
+  on('sign',run(()=>{
+    if(v('pilotName').length<2)throw Error('Enter commander name');
+    if(!d('agree').checked)throw Error('Confirm the flight record');
+    if(!ink)throw Error('Draw your signature');
+    return act('signReport',{signed_by:v('pilotName'),remarks:v('remarks')||null,signature:canvas.toDataURL('image/png')});
+  }));
+ }
+}
+on('back',()=>location.href='workspace.html#flights');
+init();
+})();</script></body></html>
