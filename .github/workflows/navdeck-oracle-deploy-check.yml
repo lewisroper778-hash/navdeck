@@ -1,0 +1,33 @@
+name: NAVDECK Oracle deployment checks
+
+on:
+  push:
+    branches: [main, 'feature/**']
+    paths:
+      - 'deploy/oracle/**'
+      - 'desktop/NavdeckDesktop/CloudEndpoint.cs'
+      - 'desktop/tests/oracle-endpoint-smoke.cjs'
+      - '.github/workflows/navdeck-oracle-deploy-check.yml'
+  pull_request:
+    paths:
+      - 'deploy/oracle/**'
+      - 'desktop/NavdeckDesktop/CloudEndpoint.cs'
+      - 'desktop/tests/oracle-endpoint-smoke.cjs'
+      - '.github/workflows/navdeck-oracle-deploy-check.yml'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate safe deployment shell syntax
+        run: bash -n deploy/oracle/deploy.sh
+      - name: Validate desktop Oracle routing
+        run: node desktop/tests/oracle-endpoint-smoke.cjs
+      - name: Validate Nginx config without exposing MongoDB
+        run: |
+          docker run --rm \
+            --add-host navdeck-backend:127.0.0.1 \
+            -v "$PWD/deploy/oracle/nginx.conf:/etc/nginx/conf.d/default.conf:ro" \
+            nginx:1.27-alpine nginx -t
