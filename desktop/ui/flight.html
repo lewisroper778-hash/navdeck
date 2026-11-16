@@ -26,7 +26,7 @@
 .field input:focus,.field textarea:focus{border-color:#b286f2;outline:none}.field input:disabled{opacity:.5}
 .details-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.detail{padding:11px 12px;background:#323139;border-radius:7px}.detail small{color:#a9a5b3;display:block}.detail b{display:block;margin-top:4px;overflow-wrap:anywhere}
 .rule{border-top:1px solid #43404c;margin:19px 0}
-.tab-table{width:100%;border-collapse:collapse;min-width:940px}.tab-table td,.tab-table th{padding:10px;border-bottom:1px solid #42404b;text-align:left;font-size:11px}.tab-table th{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#aba6b5;background:#212127}
+.tab-table{width:100%;border-collapse:collapse;min-width:1190px}.tab-table td,.tab-table th{padding:10px;border-bottom:1px solid #42404b;text-align:left;font-size:11px}.tab-table th{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#aba6b5;background:#212127}
 .tab-table input{background:#19191e;color:white;border:1px solid #54505e;border-radius:5px;padding:8px;width:74px}.tab-table input[type=checkbox]{width:auto}
 .tab-table .ops button{font-size:10px;border:1px solid #5c4b74;border-radius:5px;background:#3f3651;color:#e0d1fd;padding:6px;margin-right:3px}.tab-table .ops button:disabled{opacity:.3}
 .tab-table tr.done{background:#283a30}.tab-table tr.skip{opacity:.4}.tab-table tr.nextfix{background:#40334f}
@@ -54,6 +54,58 @@ const field=(id,label,value,ph='',type='text')=>'<div class="field"><label for="
 const button=(id,title)=>'<button class="button primary" id="'+id+'" data-edit>'+e(title)+'</button>';
 const time=/^([01]\d|2[0-3]):[0-5]\d$/;
 const phases=['briefing','departure','enroute','arrival','close'];
+
+function clockAdd(base,seconds){
+ if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(base||''))return null;
+ const [h,m]=base.split(':').map(Number);
+ const total=((h*60+m+Math.round(Number(seconds||0)/60))%1440+1440)%1440;
+ return String(Math.floor(total/60)).padStart(2,'0')+':'+String(total%60).padStart(2,'0');
+}
+function timeDeviation(actual,planned){
+ if(!actual||!planned)return null;
+ let [a,b]=[actual,planned].map(v=>{const [h,m]=v.split(':').map(Number);return h*60+m});
+ let delta=a-b;
+ if(delta>720)delta-=1440;
+ if(delta< -720)delta+=1440;
+ return delta;
+}
+function navlogRows(flight){
+ const base=flight.times?.takeoff||flight.times?.sched_takeoff||null;
+ let lastATA=null,lastETASecs=0,lastFuelDeviation=0;
+ return (flight.waypoints||[]).map(w=>{
+   if(w.skipped)return {...w,eto:null,planned:null,fuelDeviation:null,timeDev:null};
+   const sec=Number(w.eta||0);
+   const planned=base&&w.eta?clockAdd(base,sec):null;
+   const planFuel=(w.fob!==null&&w.fob!==undefined&&w.fob!=='')?Number(w.fob):null;
+   const actualFuel=(w.actual_fob!==null&&w.actual_fob!==undefined&&w.actual_fob!=='')?Number(w.actual_fob):null;
+   const fuelDeviation=Number.isFinite(actualFuel)&&Number.isFinite(planFuel)?actualFuel-planFuel:null;
+   let eto,dev;
+   if(w.ata){
+     eto=w.ata;dev=timeDeviation(w.ata,planned);
+     lastATA=w.ata;lastETASecs=sec;
+   }else{
+     eto=lastATA?clockAdd(lastATA,sec-lastETASecs):planned;
+     dev=lastATA&&planned?timeDeviation(eto,planned):null;
+   }
+   const estimatedFuel=Number.isFinite(actualFuel)?actualFuel:
+     Number.isFinite(planFuel)?planFuel+lastFuelDeviation:null;
+   if(fuelDeviation!==null)lastFuelDeviation=fuelDeviation;
+   return {...w,planned,eto,timeDev:dev,fuelDeviation,estimatedFuel};
+ });
+}
+function fuelSummary(flight,rows){
+ const current=rows.filter(x=>!x.skipped&&x.fuelDeviation!==null);
+ const deviation=current.length?current[current.length-1].fuelDeviation:0;
+ const fuel=flight.fuel||{};
+ const dest=rows.filter(x=>!x.skipped).at(-1);
+ const predicted=dest?.fob&&Number.isFinite(Number(dest.fob))?Number(dest.fob)+deviation:null;
+ const minFuel=Number(fuel.min_fuel||0)||Number(fuel.alternate||0)+Number(fuel.reserve||0);
+ const reserve=Number(fuel.mayday_fuel||fuel.reserve||0);
+ const state=predicted===null?'NO FORECAST':predicted<reserve?'MAYDAY FUEL':predicted<minFuel?'MINIMUM FUEL':'NORMAL';
+ return {deviation,predicted,state};
+}
+function signed(v,suffix=''){return v===null||!Number.isFinite(v)?'—':(v>0?'+':'')+Math.round(v)+suffix}
+
 let id=new URL(location.href).searchParams.get('id'),f=null,section='briefing',pending=false,ink=false;
 function message(text,error=false){let x=d('statusMsg');x.hidden=false;x.className='message '+(error?'err':'good');x.textContent=text}
 function clear(){d('statusMsg').hidden=true}
@@ -111,19 +163,28 @@ function departure(){
  panel('Planned departure',details([['Scheduled OFF',t.sched_off],['Scheduled T-O',t.sched_takeoff],['Taxi fuel',f.fuel?.taxi],['Airport',f.origin]]));
 }
 function enroute(){
- const rows=f.waypoints||[],active=rows.filter(x=>!x.skipped),next=active.find(x=>!x.passed&&!x.ata);
+ const rows=navlogRows(f),active=rows.filter(x=>!x.skipped),next=active.find(x=>!x.passed&&!x.ata);
+ const completed=active.filter(x=>x.passed||x.ata).length;
+ const fuel=fuelSummary(f,rows),units=f.weights?.ofp_units||'KG';
  const tbody=rows.map((r,i)=>{
  const done=r.passed||r.ata;
- return '<tr class="'+(r.skipped?'skip':done?'done':next===r?'nextfix':'')+'"><td><input type="checkbox" data-pass="'+i+'" '+(done?'checked':'')+(r.skipped||f.status==='closed'?' disabled':'')+'></td><td><b>'+e(r.ident)+'</b><small style="display:block;color:#999">'+e(r.airway||'DCT')+'</small></td>'+
- '<td>'+e(r.altitude||'—')+'</td><td>'+e(r.eta||'—')+'</td><td>'+e(r.fob||'—')+'</td>'+
- '<td><input data-ata="'+i+'" value="'+e(r.ata||'')+'" placeholder="HH:MM"></td><td><input data-fob="'+i+'" value="'+e(r.actual_fob||'')+'" placeholder="FOB"></td><td><input data-alt="'+i+'" value="'+e(r.actual_alt||'')+'" placeholder="FT"></td>'+
- '<td class="ops"><button data-wsave="'+i+'" data-edit>Save</button>'+(r.skipped?'<button data-restore="'+i+'" data-edit>Restore</button>':'<button data-skip="'+i+'" data-edit>Skip</button><button data-direct="'+i+'" data-edit>DCT</button>')+'</td></tr>';
+ return '<tr class="'+(r.skipped?'skip':done?'done':next===r?'nextfix':'')+'"><td><input type="checkbox" data-pass="'+i+'" '+(done?'checked':'')+(r.skipped||f.status==='closed'?' disabled':'')+'></td>'+
+ '<td><b>'+e(r.ident)+'</b><small style="display:block;color:#999">'+e(r.airway||'DCT')+'</small></td>'+
+ '<td>'+e(r.altitude||'—')+'</td><td>'+e(r.eto||'—')+'</td><td>'+e(r.fob||'—')+'</td>'+
+ '<td><input data-ata="'+i+'" value="'+e(r.ata||'')+'" placeholder="HH:MM"></td>'+
+ '<td><input data-fob="'+i+'" value="'+e(r.actual_fob||'')+'" placeholder="FOB"></td>'+
+ '<td><input data-alt="'+i+'" value="'+e(r.actual_alt||'')+'" placeholder="FT"></td>'+
+ '<td>'+e(signed(r.timeDev,' min'))+'</td><td>'+e(signed(r.fuelDeviation))+'</td>'+
+ '<td class="ops"><button data-wsave="'+i+'" data-edit>Save</button>'+
+ (r.skipped?'<button data-restore="'+i+'" data-edit>Restore</button>':
+ '<button data-skip="'+i+'" data-edit>Skip</button><button data-direct="'+i+'" data-edit>DCT</button>')+'</td></tr>';
  }).join('');
  const undos=[...new Set(rows.map(x=>x.direct_group).filter(Boolean))];
- return panel('Enroute navigation','<p class="muted">Full waypoint tracking with actual time, fuel, altitude, skip, direct-to and undo. Dates and times remain in the original NAVDECK flight record.</p>'+
- '<div class="scroll-table"><table class="tab-table"><thead><tr><th>Passed</th><th>Fix</th><th>FL</th><th>ETA</th><th>Plan FOB</th><th>ATA</th><th>Actual FOB</th><th>ALT</th><th>Actions</th></tr></thead><tbody>'+tbody+'</tbody></table></div>'+
+ const forecast=details([['Waypoint progress',completed+'/'+active.length],['Next fix',next?.ident||'—'],['Estimated landing fuel',fuel.predicted===null?'—':Math.round(fuel.predicted)+' '+units],['Fuel deviation',signed(fuel.deviation)+' '+units],['Fuel state',fuel.state],['ETOs',f.times?.takeoff?'Actual takeoff':'Scheduled']]);
+ return panel('Enroute navigation','<p class="muted">Track waypoints, actual times, fuel and altitude, skip fixes or fly direct-to. Changes sync to your existing NAVDECK flight.</p>'+forecast+
+ '<div class="rule"></div><div class="scroll-table"><table class="tab-table"><thead><tr><th>Passed</th><th>Fix</th><th>FL</th><th>ETO UTC</th><th>Plan FOB</th><th>ATA UTC</th><th>Actual FOB</th><th>ALT</th><th>ΔTime</th><th>ΔFuel</th><th>Actions</th></tr></thead><tbody>'+tbody+'</tbody></table></div>'+
  '<div class="mini-actions">'+undos.map((g,i)=>'<button class="button ghost" data-undo="'+e(g)+'" data-edit>Undo direct '+(i+1)+'</button>').join('')+
- '<button class="button ghost" id="reset" data-edit>Reset tracker</button></div>');
+ '<button class="button ghost" id="reset" data-edit>Reset tracker</button></div><p class="muted">ETOs and fuel forecasts use the imported OFP and actual entries. Review any ATC direct routing changes before using estimates.</p>');
 }
 function arrival(){
  const t=f.times||{},n=f.arrival_notes||{};
