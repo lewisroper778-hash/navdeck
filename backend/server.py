@@ -832,7 +832,12 @@ async def reopen_flight(flight_id: str, user: dict = Depends(require_user)):
 
 app.include_router(api_router)
 app.include_router(build_router(db, _owned_flight, _editable_flight))
-app.include_router(build_bridge_router(db))
+async def _desktop_simbrief_import(user_id: str):
+    # Reuse the same importer, validation and user ownership as the web app.
+    return await import_from_simbrief(ImportRequest(), {"user_id": user_id})
+
+
+app.include_router(build_bridge_router(db, _desktop_simbrief_import))
 
 
 @app.get("/health")
