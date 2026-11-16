@@ -864,6 +864,22 @@ async def _desktop_flight_ops(user_id: str, flight_id: str,
         return await close_flight(flight_id, user)
     if action == "reopenFlight":
         return await reopen_flight(flight_id, user)
+    if action == "saveNotes":
+        doc = await _editable_flight(flight_id, user_id)
+        # Only accept arrival note fields supported by the existing web app.
+        allowed = {"metar", "runway", "notes"}
+        if not set(payload).issubset(allowed):
+            raise HTTPException(status_code=400, detail="Invalid notes fields")
+        notes = (doc.get("arrival_notes") or {}).copy()
+        for key, value in payload.items():
+            if value is not None and (not isinstance(value, str) or len(value) > 8000):
+                raise HTTPException(status_code=400, detail="Invalid note value")
+            notes[key] = value.strip() if isinstance(value, str) else None
+        await db.flights.update_one(
+            {"id": flight_id, "user_id": user_id},
+            {"$set": {"arrival_notes": notes}})
+        doc["arrival_notes"] = notes
+        return Flight(**doc)
     if action == "resetFlight":
         return await reset_tracker(flight_id, user)
     raise HTTPException(status_code=400, detail="Unsupported desktop operation")
