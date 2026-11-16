@@ -170,7 +170,7 @@ internal sealed class NavdeckApi
                 "toggleWaypoint", "skipWaypoint", "directTo", "undoDirect",
                 "saveWaypoint", "saveTimes", "saveActuals", "saveArrival",
                 "signReport", "closeFlight", "reopenFlight", "resetFlight",
-                "saveNotes"
+                "saveNotes", "recordGoAround", "reviewGoAround"
             };
             if (!allowed.Contains(operation))
                 throw new ArgumentException("Unsupported flight operation");
@@ -192,6 +192,26 @@ internal sealed class NavdeckApi
         using var document = JsonDocument.Parse(
             await response.Content.ReadAsStringAsync(timeout.Token));
         return document.RootElement.Clone();
+    }
+
+    // Send detected go-arounds through the same paired-flight, owned API.
+    // Stable event IDs allow safe retry when Render temporarily sleeps.
+    public async Task SendGoAroundAsync(string flightId, DetectedGoAround detected)
+    {
+        using var payload = JsonDocument.Parse(JsonSerializer.Serialize(new
+        {
+            flight_id = flightId,
+            operation = "recordGoAround",
+            values = new
+            {
+                event_id = detected.EventId,
+                detected_at = detected.DetectedAtUtc.ToString("O"),
+                radio_alt_ft = detected.RadioAltFt,
+                climb_fpm = detected.ClimbFpm,
+                source = "simulator"
+            }
+        }));
+        await RequestDesktopAsync("flightAction", payload.RootElement);
     }
 
     public async Task<byte[]> GetReportPdfAsync(string id)

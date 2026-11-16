@@ -7,7 +7,7 @@ import xml.etree.ElementTree as ET
 from contextlib import suppress
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 import requests
 from dotenv import load_dotenv
@@ -24,12 +24,12 @@ try:
     from backend.clerk_auth import clerk_router, require_user
     from backend.extras import build_router, kick_vatsim_refresh, store_report
     from backend.bridge import build_bridge_router
-    from backend.reporting_validation import desktop_report_blockers, desktop_signoff_blockers
+    from backend.reporting_validation import desktop_report_blockers, desktop_signoff_blockers, go_around_review_blockers
 except ModuleNotFoundError:
     from clerk_auth import clerk_router, require_user
     from extras import build_router, kick_vatsim_refresh, store_report
     from bridge import build_bridge_router
-    from reporting_validation import desktop_report_blockers, desktop_signoff_blockers
+    from reporting_validation import desktop_report_blockers, desktop_signoff_blockers, go_around_review_blockers
 
 
 ROOT_DIR = Path(__file__).parent
@@ -212,6 +212,7 @@ class Flight(BaseModel):
     status: str = "open"  # open | closed
     closed_at: Optional[str] = None
     arrival_notes: dict = Field(default_factory=dict)
+    go_arounds: List[dict] = Field(default_factory=list)
     ai: dict = Field(default_factory=dict)
     notams: dict = Field(default_factory=dict)
     raw_simbrief_id: Optional[str] = None
@@ -220,6 +221,20 @@ class Flight(BaseModel):
 
 class ImportRequest(BaseModel):
     pilot_id: Optional[str] = None
+
+
+class GoAroundRecord(BaseModel):
+    event_id: uuid.UUID
+    detected_at: datetime
+    radio_alt_ft: Optional[float] = Field(default=None, ge=0, le=2500)
+    climb_fpm: Optional[float] = Field(default=None, ge=0, le=8000)
+    source: Literal["simulator", "manual"] = "simulator"
+
+
+class GoAroundReview(BaseModel):
+    event_id: uuid.UUID
+    review: Literal["confirmed", "false_positive"]
+    reason: str = Field(default="", max_length=1000)
 
 
 HHMM_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
@@ -361,6 +376,7 @@ def _close_blockers(doc: dict) -> List[str]:
         missing.append("Landing rate")
     if not (doc.get("signoff") or {}).get("signed"):
         missing.append("Signed report")
+    missing.extend(go_around_review_blockers(doc))
     return missing
 
 
@@ -782,6 +798,11 @@ async def update_actuals(flight_id: str, body: ActualsUpdate, user: dict = Depen
 @api_router.post("/flights/{flight_id}/signoff", response_model=Flight)
 async def sign_report(flight_id: str, body: SignRequest, user: dict = Depends(require_user)):
     doc = await _editable_flight(flight_id, user["user_id"])
+    blockers = go_around_review_blockers(doc)
+    if blockers:
+        raise HTTPException(status_code=400,
+            detail="Review and document go-arounds before signing: " +
+            ", ".join(blockers))
     signoff = {
         "signed": True,
         "signed_by": body.signed_by,
@@ -862,6 +883,56 @@ async def _desktop_flight_ops(user_id: str, flight_id: str,
         return await update_actuals(flight_id, ActualsUpdate(**payload), user)
     if action == "saveArrival":
         return await update_arrival(flight_id, ArrivalUpdate(**payload), user)
+    if action == "recordGoAround":
+        data = GoAroundRecord(**payload)
+        doc = await _editable_flight(flight_id, user_id)
+        event_id = str(data.event_id)
+        if any(item.get("id") == event_id
+               for item in doc.get("go_arounds") or []):
+            return Flight(**doc)
+        item = {
+            "id": event_id,
+            "detected_at": data.detected_at.astimezone(timezone.utc).isoformat(),
+            "radio_alt_ft": data.radio_alt_ft,
+            "climb_fpm": data.climb_fpm,
+            "source": data.source,
+            "review": "pending",
+            "reason": "",
+            "reviewed_at": None,
+        }
+        await db.flights.update_one(
+            {"id": flight_id, "user_id": user_id,
+             "status": {"$ne": "closed"},
+             "go_arounds.id": {"$ne": event_id}},
+            {"$push": {"go_arounds": item},
+             "$set": {"signoff": SignOff().model_dump()}})
+        updated = await _owned_flight(flight_id, user_id)
+        return Flight(**updated)
+    if action == "reviewGoAround":
+        data = GoAroundReview(**payload)
+        doc = await _editable_flight(flight_id, user_id)
+        event_id = str(data.event_id)
+        if not any(item.get("id") == event_id
+                   for item in doc.get("go_arounds") or []):
+            raise HTTPException(status_code=404,
+                                detail="Go-around event not found in flight")
+        reason = data.reason.strip()
+        if data.review == "confirmed" and len(reason) < 8:
+            raise HTTPException(status_code=400,
+                detail="Please enter a reason of at least 8 characters")
+        if data.review == "false_positive" and not reason:
+            reason = "Pilot reviewed: detection was not a go-around"
+        await db.flights.update_one(
+            {"id": flight_id, "user_id": user_id,
+             "status": {"$ne": "closed"}, "go_arounds.id": event_id},
+            {"$set": {
+                "go_arounds.$.review": data.review,
+                "go_arounds.$.reason": reason,
+                "go_arounds.$.reviewed_at":
+                    datetime.now(timezone.utc).isoformat(),
+                "signoff": SignOff().model_dump()}})
+        updated = await _owned_flight(flight_id, user_id)
+        return Flight(**updated)
     if action == "signReport":
         doc = await _editable_flight(flight_id, user_id)
         blockers = desktop_signoff_blockers(doc)

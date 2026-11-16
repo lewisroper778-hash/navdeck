@@ -3,6 +3,8 @@ import io
 import os
 
 import requests
+from xml.sax.saxutils import escape
+
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import getSampleStyleSheet
@@ -46,6 +48,33 @@ def build_report_pdf(f: dict) -> bytes:
                      v(wp.get("fob")), wp.get("ata") or "", wp.get("actual_fob") or "", wp.get("actual_alt") or ""])
     grey = [("TEXTCOLOR", (0, r), (-1, r), colors.grey) for r in skipped_rows]
     story += [Spacer(1, 3 * mm), Table(rows, repeatRows=1, style=TableStyle([("GRID", (0, 0), (-1, -1), 0.3, colors.lightgrey), ("FONTSIZE", (0, 0), (-1, -1), 7), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#ede9fe"))] + grey))]
+
+    go_arounds = f.get("go_arounds") or []
+    if go_arounds:
+        go_rows = [["Detected UTC", "Source", "Review", "Reason"]]
+        for item in go_arounds:
+            detected = str(item.get("detected_at") or "")[:16].replace("T", " ")
+            review = item.get("review") or "pending"
+            go_rows.append([
+                detected or "—",
+                "Simulator" if item.get("source") == "simulator" else "Manual",
+                "Confirmed" if review == "confirmed" else (
+                    "Not a go-around" if review == "false_positive" else "Pending"),
+                Paragraph(escape(str(item.get("reason") or "Not yet provided")),
+                          ss["BodyText"])
+            ])
+        story += [
+            Spacer(1, 3 * mm),
+            Paragraph("<b>Go-around / missed approach review</b>", ss["Heading3"]),
+            Table(go_rows, colWidths=[31 * mm, 28 * mm, 39 * mm, 170 * mm],
+                  repeatRows=1, style=TableStyle([
+                      ("GRID", (0, 0), (-1, -1), 0.3, colors.lightgrey),
+                      ("FONTSIZE", (0, 0), (-1, -1), 8),
+                      ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                      ("BACKGROUND", (0, 0), (-1, 0),
+                       colors.HexColor("#ede9fe"))
+                  ]))
+        ]
 
     story += [Spacer(1, 4 * mm), Paragraph(f"<b>Arrival weather</b> {notes.get('metar') or '—'}<br/><b>Runway</b> {notes.get('runway') or '—'}<br/><b>Arrival notes</b> {notes.get('notes') or '—'}<br/><b>Remarks</b> {s.get('remarks') or 'Nil'}", ss["BodyText"])]
     sig = s.get("signature") or ""

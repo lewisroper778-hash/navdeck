@@ -20,6 +20,11 @@
 @media(max-width:720px){main{padding:20px 17px}.top{margin-bottom:19px}.topright .label{display:none}.metric-grid{grid-template-columns:1fr 1fr}.hero h1{font-size:26px}}
 
 .demo-banner{border:1px solid #b990f6;background:#342c44;color:#f0e3ff;padding:11px 16px;border-radius:9px;margin:13px 0;font-size:12px}
+.ga-card{border:1px solid #65506d;border-radius:9px;padding:15px;margin:11px 0;background:#292531}
+.ga-card .ga-title{display:flex;align-items:center;justify-content:space-between;gap:10px;font-weight:700}
+.ga-card small{color:#aaa4b4;display:block;margin:5px 0 9px}
+.ga-card textarea,.ga-card select{width:100%;background:#1d1d23;color:#f5f3f9;border:1px solid #53515e;padding:10px;border-radius:7px;margin-top:8px}
+.ga-card textarea:focus,.ga-card select:focus{outline:2px solid #a773ef}
 .fuel-trend{background:#222128;border:1px solid #454150;border-radius:9px;padding:14px;margin:14px 0}
 .fuel-trend svg{width:100%;height:auto;display:block}
 .checkline button{border:0;background:transparent;color:#bc9eff;text-align:left;font:inherit;cursor:pointer}
@@ -132,6 +137,11 @@ function reportBlockers(flight,includeEvents=false){
    if(!validNum(w.actual_alt)||Number(w.actual_alt)>60000)issues.push([(w.ident||'Waypoint')+' · Actual altitude','enroute']);
  });
  if(!validNum(flight.arrival_fob))issues.push(['Arrival fuel on board','arrival']);
+ (flight.go_arounds||[]).forEach((ga,i)=>{
+   if(ga.review==='false_positive')return;
+   if(ga.review!=='confirmed'||String(ga.reason||'').trim().length<8)
+     issues.push(['Go-around '+(i+1)+' · Reason and review required','close']);
+ });
  if(includeEvents){
    const t=flight.times||{};
    for(const [key,label,phase] of [['off','Gate-out time','departure'],['takeoff','Takeoff time','departure'],['landing','Landing time','arrival'],['on','Gate-in time','arrival']])
@@ -179,6 +189,9 @@ function demoFlight(){
    aircraft:'Airbus A320',route:'SAMPLE01 SAMPLE02 SAMPLE03 SAMPLE04',
    cruise_level:'FL320',distance:'155',ete:'01:10',
    status:'open',signoff:{signed:false},arrival_notes:{},
+   go_arounds:[{id:'54fd87ac-5028-411e-b6c0-f1e88d8b17c6',
+     detected_at:'2026-11-16T13:26:00Z',radio_alt_ft:380,climb_fpm:980,
+     source:'simulator',review:'pending',reason:''}],
    fuel:{taxi:'220',trip:'2450',contingency:'180',alternate:'650',reserve:'1000',extra:'250',
      block:'4750',min_takeoff:'4200',min_fuel:'1650',mayday_fuel:'1000',avg_burn_per_hour:'2100'},
    weights:{ofp_units:'KG',units:'KG',pax_count:'134',cargo:'2200',
@@ -214,6 +227,22 @@ function demoAction(action,values){
    Object.assign(f,values);
  }else if(action==='saveNotes'){
    Object.assign(f.arrival_notes,values);
+ }else if(action==='recordGoAround'){
+   if(!Array.isArray(f.go_arounds))f.go_arounds=[];
+   if(!f.go_arounds.some(x=>x.id===values.event_id))
+     f.go_arounds.push({id:values.event_id,detected_at:values.detected_at,
+       radio_alt_ft:values.radio_alt_ft??null,climb_fpm:values.climb_fpm??null,
+       source:values.source||'manual',review:'pending',reason:''});
+   f.signoff={signed:false};
+ }else if(action==='reviewGoAround'){
+   const item=(f.go_arounds||[]).find(x=>x.id===values.event_id);
+   if(!item)throw Error('Go-around event not found');
+   if(values.review==='confirmed'&&String(values.reason||'').trim().length<8)
+     throw Error('Please enter the go-around reason');
+   item.review=values.review;
+   item.reason=values.review==='false_positive'&&!values.reason?
+      'Pilot reviewed: not a go-around':values.reason;
+   f.signoff={signed:false};
  }else if(action==='signReport'){
    const blockers=reportBlockers(f,true);
    if(blockers.length)throw Error('Complete the required report items before signing');
@@ -350,7 +379,8 @@ function enroute(){
  '<button data-skip="'+i+'" data-edit>Skip</button><button data-direct="'+i+'" data-edit>DCT</button>')+'</td></tr>';
  }).join('');
  const undos=[...new Set(rows.map(x=>x.direct_group).filter(Boolean))];
- const forecast=details([['Waypoint progress',completed+'/'+active.length],['Next fix',next?.ident||'—'],['Estimated landing fuel',fuel.predicted===null?'—':Math.round(fuel.predicted)+' '+units],['Fuel deviation',signed(fuel.deviation)+' '+units],['Fuel state',fuel.state],['Holding before divert',fuel.holdMin===null?'—':fuel.holdMin+' min'],['Minimum fuel',Math.round(fuel.minFuel)+' '+units],['Final reserve',Math.round(fuel.reserve)+' '+units],['Average burn/hour',fuel.burn?Math.round(fuel.burn)+' '+units:'—']]);
+ const goAroundCount=(f.go_arounds||[]).length;
+ const forecast=details([['Go-arounds to review',(f.go_arounds||[]).filter(x=>x.review==='pending').length+'/'+goAroundCount],['Waypoint progress',completed+'/'+active.length],['Next fix',next?.ident||'—'],['Estimated landing fuel',fuel.predicted===null?'—':Math.round(fuel.predicted)+' '+units],['Fuel deviation',signed(fuel.deviation)+' '+units],['Fuel state',fuel.state],['Holding before divert',fuel.holdMin===null?'—':fuel.holdMin+' min'],['Minimum fuel',Math.round(fuel.minFuel)+' '+units],['Final reserve',Math.round(fuel.reserve)+' '+units],['Average burn/hour',fuel.burn?Math.round(fuel.burn)+' '+units:'—']]);
  return panel('In-Flight Reporting','<p class="muted">Live simulator data, waypoint reports, actual times, fuel and altitude. NAVDECK Link can automatically update a paired flight, or you can save manual entries here.</p>'+
  '<div class="live-report" aria-label="Live simulator reporting">'+
  '<div class="live-indicator"><span>Simulator</span><b id="liveConnection" class="disconnected">Awaiting connection</b></div>'+
@@ -359,7 +389,7 @@ function enroute(){
  '<div class="live-indicator"><span>Fuel on board</span><b id="liveFuel">— LB</b></div>'+
  '<div class="live-indicator"><span>Current UTC</span><b id="liveUtc">—</b></div>'+
  '</div>'+forecast+fuelChart(rows,fuel)+
- '<div class="mini-actions"><button class="button ghost" id="refreshReport" type="button">↻ Sync report from NAVDECK</button></div>'+
+ '<div class="mini-actions"><button class="button ghost" id="refreshReport" type="button">↻ Sync report from NAVDECK</button><button class="button ghost" id="manualGoAround" data-edit type="button">Record a go-around manually</button></div>'+
  '<div class="rule"></div><div class="scroll-table"><table class="tab-table"><thead><tr><th>Passed</th><th>Fix</th><th>FL</th><th>ETO UTC</th><th>Plan FOB</th><th>ATA UTC</th><th>Actual FOB</th><th>ALT</th><th>ΔTime</th><th>ΔFuel</th><th>Actions</th></tr></thead><tbody>'+tbody+'</tbody></table></div>'+
  (rows.length>pageSize?'<div class="mini-actions"><button class="button ghost" id="wpPrev" '+(!wpPage?'disabled':'')+'>← Previous fixes</button><span class="muted">Waypoints '+(start+1)+'–'+Math.min(rows.length,start+pageSize)+' of '+rows.length+'</span><button class="button ghost" id="wpNext" '+(wpPage>=totalPages-1?'disabled':'')+'>Next fixes →</button></div>':'')+
  '<div class="mini-actions">'+undos.map((g,i)=>'<button class="button ghost" data-undo="'+e(g)+'" data-edit>Undo direct '+(i+1)+'</button>').join('')+
@@ -376,6 +406,33 @@ function arrival(){
  '<div class="field"><label>Flight remarks</label><textarea id="notes" rows="4">'+e(n.notes||'')+'</textarea></div>'+
  button('saveNotes','Save arrival notes'))+'</div>'+
  panel('Arrival summary',details([['Scheduled LDG',t.sched_landing],['Actual LDG',t.landing],['Scheduled ON',t.sched_on],['Actual ON',t.on],['Landing rate',f.landing_rate],['Arrival fuel',f.arrival_fob]]));
+}
+function goAroundPanel(){
+ const events=f.go_arounds||[];
+ const body=events.length?events.map((ga,i)=>{
+   const state=ga.review==='confirmed'?'Confirmed go-around':
+     ga.review==='false_positive'?'Not a go-around · pilot reviewed':'POSSIBLE GO-AROUND · REVIEW REQUIRED';
+   const time=ga.detected_at?String(ga.detected_at).slice(11,16)+' UTC':'Unknown time';
+   const measurements=[
+      ga.radio_alt_ft==null?'':Math.round(Number(ga.radio_alt_ft))+' ft AGL',
+      ga.climb_fpm==null?'':Math.round(Number(ga.climb_fpm))+' fpm climb'
+   ].filter(Boolean).join(' · ');
+   return '<div class="ga-card"><div class="ga-title"><span>Go-around '+(i+1)+'</span><span class="tag">'+e(state)+'</span></div>'+
+     '<small>'+e(time)+(measurements?' · '+e(measurements):'')+
+     ' · '+e(ga.source==='manual'?'Manual entry':'Simulator detection')+'</small>'+
+     (f.status==='closed'?'<p>'+e(ga.reason||'No reason')+'</p>':
+      '<label class="muted">Reason for go-around</label>'+
+      '<select id="gaPreset'+i+'"><option value="">Choose a reason or explain below</option>'+
+      ['Unstable approach','ATC instruction','Weather conditions','Runway occupied','Traffic conflict','Technical concern','Other']
+        .map(x=>'<option value="'+e(x)+'">'+e(x)+'</option>').join('')+
+      '</select><textarea id="gaReason'+i+'" rows="2" maxlength="1000" placeholder="Explain what happened…">'+e(ga.review==='false_positive'?'':ga.reason||'')+'</textarea>'+
+      '<div class="mini-actions"><button class="button primary" type="button" data-ga-confirm="'+i+'" data-edit>Confirm and save reason</button>'+
+      '<button class="button ghost" type="button" data-ga-false="'+i+'" data-edit>Not a go-around</button></div>')+
+    '</div>';
+ }).join(''):'<p class="muted">No go-arounds recorded for this flight.</p>';
+ return panel('Go-around review',body+
+ '<p class="muted">NAVDECK detects a possible go-around from simulator climb and approach data. Confirm and explain each event, or mark an incorrect detection. A pending event blocks signing and closing.</p>'+
+ '<button class="button ghost" type="button" id="refreshGoArounds">↻ Check for newly detected go-arounds</button>');
 }
 function closeFlight(){
  const t=f.times||{},sg=f.signoff||{},closed=f.status==='closed';
@@ -395,7 +452,7 @@ function closeFlight(){
  '<label class="muted" style="display:block;margin:12px 0"><input type="checkbox" id="agree"> I confirm this flight record is accurate.</label>'+
  '<p class="muted">'+(readyToSign?'All flight actuals have been recorded. The report is ready for sign-off.':'Complete the required waypoint, fuel and flight actuals before signing.')+'</p>'+
  '<button class="button primary" id="sign" data-edit '+(!readyToSign?'disabled':'')+'>Sign flight report</button>';
- return '<div class="pair">'+panel('Completion checklist',checks.map(([name,ok,phase])=>'<div class="checkline"><button type="button" data-jump="'+e(phase)+'">'+e(name)+'</button><b class="'+(ok?'green':'red')+'">'+(ok?'✓ Complete':'Required')+'</b></div>').join('')+
+ return goAroundPanel()+'<div class="pair">'+panel('Completion checklist',checks.map(([name,ok,phase])=>'<div class="checkline"><button type="button" data-jump="'+e(phase)+'">'+e(name)+'</button><b class="'+(ok?'green':'red')+'">'+(ok?'✓ Complete':'Required')+'</b></div>').join('')+
  '<div class="mini-actions">'+(closed?'<button class="button primary" id="reopen">Reopen flight</button>':'<button class="button primary" id="finish" '+(!good?'disabled':'')+'>Close flight</button>')+'</div>')+
  panel('Signed operational report',signature)+'</div>'+
  panel('Archive and export','<p class="muted">Closed flights are saved to NAVDECK Logbook. A signed PDF report can be saved directly to your PC.</p><div class="mini-actions"><button class="button ghost" id="print">Print flight summary</button>'+
@@ -437,6 +494,11 @@ function bind(){
  }
  if(section==='departure')on('saveDeparture',run(()=>act('saveTimes',validateTimes({off:v('off'),takeoff:v('to'),tsat:v('tsat2'),ctot:v('ctot2')}))));
  if(section==='enroute'){
+  on('manualGoAround',()=>{
+    if(confirm('Record a possible go-around for this flight? You will enter the reason before signing.'))
+      act('recordGoAround',{event_id:crypto.randomUUID(),
+        detected_at:new Date().toISOString(),source:'manual'});
+  });
   on('wpPrev',()=>{wpPage=Math.max(0,wpPage-1);draw();});
   on('wpNext',()=>{wpPage++;draw();});
   on('refreshReport',run(async()=>{
@@ -492,6 +554,25 @@ function bind(){
   on('metarFetch',run(async()=>{const a=await api('getMetar',{icao:f.destination});if(a?.metar){d('metar').value=a.metar;message('METAR loaded. Save notes to keep it.')}else message('No METAR available')}));
  }
  if(section==='close'){
+  on('refreshGoArounds',run(async()=>{
+    if(isDemo){message('Demonstration flight refreshed locally.');return;}
+    const response=await api('getFlightDetails',{flight_id:f.id});
+    if(!response?.flight)throw Error('Cannot load go-around events');
+    f=response.flight;draw();message('Latest go-around detections loaded');
+  }));
+  document.querySelectorAll('[data-ga-confirm]').forEach(b=>b.onclick=()=>{
+    const i=Number(b.dataset.gaConfirm),ga=f.go_arounds?.[i];
+    if(!ga)return;
+    const reason=v('gaReason'+i)||v('gaPreset'+i);
+    if(reason.trim().length<8){message('Enter a reason of at least 8 characters for go-around '+(i+1),true);return;}
+    act('reviewGoAround',{event_id:ga.id,review:'confirmed',reason});
+  });
+  document.querySelectorAll('[data-ga-false]').forEach(b=>b.onclick=()=>{
+    const i=Number(b.dataset.gaFalse),ga=f.go_arounds?.[i];
+    if(ga&&confirm('Mark this automatic detection as NOT a go-around?'))
+      act('reviewGoAround',{event_id:ga.id,review:'false_positive',
+        reason:v('gaReason'+i)||'Pilot reviewed: not a go-around'});
+  });
   document.querySelectorAll('[data-jump]').forEach(b=>b.onclick=()=>{section=b.dataset.jump;draw();});
   on('finish',()=>{if(confirm('Close this flight and store its report in NAVDECK?'))act('closeFlight')});
   on('reopen',()=>{if(confirm('Reopen this flight for editing?'))act('reopenFlight')});

@@ -3,6 +3,12 @@ namespace NavdeckLink;
 internal sealed class MainForm : Form
 {
     public bool SimulatorConnected => _sim.IsOpen;
+
+    // Do not permit a signed/closed report to bypass detections still awaiting
+    // the cloud, even if the API is sleeping or the network briefly dropped.
+    public bool HasPendingGoAround(string flightId) =>
+        _goAroundQueue.Any(item =>
+            string.Equals(item.FlightId, flightId, StringComparison.OrdinalIgnoreCase));
     public Sample? LiveAircraftSample =>
         !_testFlight && _sim.IsOpen && _latestTelemetry is { } sample &&
         DateTime.UtcNow - _latestTelemetryAt < TimeSpan.FromSeconds(5)
@@ -14,6 +20,10 @@ internal sealed class MainForm : Form
     private readonly Config _config = Config.Load();
     private readonly FsuipcLink _sim = new();
     private readonly FlightTracker _tracker = new();
+    private readonly GoAroundDetector _goAroundDetector = new();
+    private readonly Queue<(string FlightId, DetectedGoAround Event)> _goAroundQueue = new();
+    private bool _goAroundSending;
+    private string? _pairedFlightId;
     private readonly RunwayDetector _runwayDetector = new();
     private readonly RunwayVisualizer _runwayVisualizer = new();
     private RunwayMatch? _lastRunway;
@@ -316,6 +326,7 @@ internal sealed class MainForm : Form
             async (_, _) =>
             {
                 _tracker.Reset();
+                _goAroundDetector.Reset();
                 _watcher.Reset();
                 Log("Ready for a new flight");
                 await RefreshRoute();
@@ -600,6 +611,7 @@ internal sealed class MainForm : Form
         try
         {
             var f = await _api.GetFlightAsync();
+            _pairedFlightId = f?.Id;
             SetStatus(_navStatus, f is null ? "NAVDECK connected · import a flight before pushback" : $"Filling {f.Callsign} {f.Origin} → {f.Destination}", f is null ? Theme.Amber : Theme.Green);
             if (f is not null) _watcher.SetRoute(f.Pending);
             _lastRoute = DateTime.UtcNow;
@@ -622,12 +634,23 @@ internal sealed class MainForm : Form
         if (_sim.Read() is not { } s)
         {
             _latestTelemetry = null;
+            _goAroundDetector.Reset();
             SetStatus(_simStatus, "Sim disconnected · waiting for FSUIPC7…", Theme.Amber);
             return;
         }
         _latestTelemetry = s;
         _latestTelemetryAt = DateTime.UtcNow;
-        OnSimEvent(_tracker.Update(s, DateTime.UtcNow));
+        var nowUtc = DateTime.UtcNow;
+        OnSimEvent(_tracker.Update(s, nowUtc));
+        if (_goAroundDetector.Update(s, nowUtc, !s.OnGround)
+            is { } detection)
+        {
+            Log($"Possible go-around detected at {detection.RadioAltFt:N0} ft AGL · review required");
+            if (_pairedFlightId is { Length: > 0 } flightId)
+                _goAroundQueue.Enqueue((flightId, detection));
+            else
+                Log("  Not saved: no paired open NAVDECK flight was selected");
+        }
         if (_tracker.Stage == Stage.Airborne && _watcher.Update(s.Lat, s.Lon) is { } fix) _ = LogFix(fix, s);
     }
 
@@ -643,6 +666,11 @@ internal sealed class MainForm : Form
         try
         {
             var f = await _api.GetFlightAsync();
+            if (_pairedFlightId != f?.Id)
+            {
+                _goAroundDetector.Reset();
+                _pairedFlightId = f?.Id;
+            }
 
             if (f is not null)
             {
@@ -700,6 +728,30 @@ internal sealed class MainForm : Form
     }
 
 
+    private async Task FlushGoAroundQueue()
+    {
+        if (_goAroundSending || _api is null || _goAroundQueue.Count == 0)
+            return;
+        _goAroundSending = true;
+        try
+        {
+            var next = _goAroundQueue.Peek();
+            await _api.SendGoAroundAsync(next.FlightId, next.Event);
+            _goAroundQueue.Dequeue();
+            Log("  Possible go-around saved to NAVDECK · reason required in Close & Sign");
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or AuthException)
+        {
+            // Keep this event with the original flight ID for retry, never
+            // silently attach it to whichever flight becomes active next.
+            Log("  Go-around sync pending: " + ex.Message);
+        }
+        finally
+        {
+            _goAroundSending = false;
+        }
+    }
+
     private async Task SlowTick()
     {
         if (!_testFlight && !_sim.IsOpen && _sim.TryOpen())
@@ -709,6 +761,30 @@ internal sealed class MainForm : Form
             Log("Connected to MSFS through FSUIPC7");
         }
         if (_api is null && Config.IsValidCode(_config.Code) && _navStatus.ForeColor != Theme.Red) await Connect();
+        // A SimBrief import may happen while this window is hidden.
+        // Discover newly paired flight IDs without reloading the desktop UI.
+        if (_api is not null && !_routeRefreshing &&
+            DateTime.UtcNow - _lastRoute > TimeSpan.FromSeconds(40))
+        {
+            _lastRoute = DateTime.UtcNow;
+            try
+            {
+                var current = await _api.GetFlightAsync();
+                if (_pairedFlightId != current?.Id)
+                {
+                    _goAroundDetector.Reset();
+                    _pairedFlightId = current?.Id;
+                    if (current is not null) _watcher.SetRoute(current.Pending);
+                    else _watcher.Reset();
+                    Log(current is null
+                        ? "No active NAVDECK flight paired"
+                        : "Flight automatically paired for go-around reporting");
+                }
+            }
+            catch (Exception ex) when (ex is HttpRequestException or
+                                       TaskCanceledException or AuthException) { }
+        }
+        await FlushGoAroundQueue();
 
         if (_api is not null && DateTime.UtcNow - _lastBeat > TimeSpan.FromSeconds(30))
         {
@@ -787,6 +863,7 @@ internal sealed class MainForm : Form
         if (_testFlight) return;
         _testFlight = true;
         _tracker.Reset();
+        _goAroundDetector.Reset();
         Log("Test flight started");
         var script = new List<Sample>();
         script.AddRange(Enumerable.Repeat(new Sample(true, 0, 0, true, 9800), 5));

@@ -47,7 +47,8 @@ class BridgeTarget(BaseModel):
 class DesktopFlightAction(BaseModel):
     action: Literal["toggleWaypoint", "skipWaypoint", "directTo", "undoDirect",
                     "saveWaypoint", "saveTimes", "saveActuals", "saveArrival",
-                    "signReport", "closeFlight", "reopenFlight", "resetFlight", "saveNotes"]
+                    "signReport", "closeFlight", "reopenFlight", "resetFlight", "saveNotes",
+                    "recordGoAround", "reviewGoAround"]
     payload: dict = Field(default_factory=dict)
 
 

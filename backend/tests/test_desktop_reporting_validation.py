@@ -4,10 +4,12 @@ import unittest
 
 try:
     from backend.reporting_validation import (
-        desktop_report_blockers, desktop_signoff_blockers)
+        desktop_report_blockers, desktop_signoff_blockers,
+        go_around_review_blockers)
 except ModuleNotFoundError:
     from reporting_validation import (
-        desktop_report_blockers, desktop_signoff_blockers)
+        desktop_report_blockers, desktop_signoff_blockers,
+        go_around_review_blockers)
 
 
 class ReportingValidationTests(unittest.TestCase):
@@ -64,6 +66,37 @@ class ReportingValidationTests(unittest.TestCase):
         issues = desktop_signoff_blockers(f)
         self.assertIn("Landing UTC", issues)
         self.assertIn("Landing rate", issues)
+
+    def test_pending_go_around_prevents_signoff(self):
+        f = self.sample()
+        f["go_arounds"] = [{"id": "a", "review": "pending", "reason": ""}]
+        self.assertIn("Go-around 1: review and reason required",
+                      desktop_signoff_blockers(f))
+
+    def test_confirmed_go_around_requires_reason(self):
+        f = self.sample()
+        f["go_arounds"] = [{"id": "a", "review": "confirmed",
+                             "reason": "bad"}]
+        self.assertEqual(len(go_around_review_blockers(f)), 1)
+        f["go_arounds"][0]["reason"] = "Unstable approach"
+        self.assertEqual(desktop_signoff_blockers(f), [])
+
+    def test_false_detection_can_be_dismissed(self):
+        f = self.sample()
+        f["go_arounds"] = [{"id": "a", "review": "false_positive",
+                             "reason": "Pilot reviewed"}]
+        self.assertEqual(desktop_signoff_blockers(f), [])
+
+    def test_multiple_go_arounds_all_need_review(self):
+        f = self.sample()
+        f["go_arounds"] = [
+            {"id": "a", "review": "confirmed", "reason": "Poor visibility"},
+            {"id": "b", "review": "pending", "reason": ""},
+        ]
+        self.assertEqual(len(go_around_review_blockers(f)), 1)
+        f["go_arounds"][1]["review"] = "confirmed"
+        f["go_arounds"][1]["reason"] = "ATC ordered go around"
+        self.assertEqual(go_around_review_blockers(f), [])
 
 
 if __name__ == "__main__":
