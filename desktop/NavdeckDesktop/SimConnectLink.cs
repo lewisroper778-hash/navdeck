@@ -21,6 +21,7 @@ internal sealed class SimConnectLink : IDisposable
     private readonly DispatchProc _dispatch;
     private Sample? _latest;
     private DateTime _lastReceivedUtc;
+    private DateTime _openedUtc;
     private bool _quit;
     public string? AircraftTitle { get; private set; }
     public bool IsOpen => _handle != IntPtr.Zero;
@@ -36,6 +37,7 @@ internal sealed class SimConnectLink : IDisposable
                 IntPtr.Zero, 0, IntPtr.Zero, 0);
             if (result < 0 || connection == IntPtr.Zero) return false;
             _handle = connection;
+            _openedUtc = DateTime.UtcNow;
             _quit = false;
             _latest = null;
             Add("SIM ON GROUND", "Bool");
@@ -81,8 +83,8 @@ internal sealed class SimConnectLink : IDisposable
                 Close();
                 return null;
             }
-            if (_lastReceivedUtc != default &&
-                DateTime.UtcNow - _lastReceivedUtc > TimeSpan.FromSeconds(12))
+            if (DateTime.UtcNow - (_lastReceivedUtc == default
+                    ? _openedUtc : _lastReceivedUtc) > TimeSpan.FromSeconds(12))
             {
                 Close();
                 return null;
@@ -140,6 +142,7 @@ internal sealed class SimConnectLink : IDisposable
         _handle = IntPtr.Zero;
         _latest = null;
         _lastReceivedUtc = default;
+        _openedUtc = default;
         AircraftTitle = null;
         if (old != IntPtr.Zero)
         {
