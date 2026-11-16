@@ -167,9 +167,24 @@ internal sealed class DesktopForm : Form
                 if (_browser.CoreWebView2 is null)
                     return;
 
-                // Only locally packaged pages may render inside this app.
-                _browser.CoreWebView2.Navigate(
-                    "https://navdeck-desktop.local/" + route);
+                // Navigate between locally packaged workspace tabs using
+                // only the hash fragment. This avoids reloading the entire
+                // HTML/CSS/WebView document on every sidebar click.
+                if (route.StartsWith("workspace.html#", StringComparison.Ordinal)
+                    && _browser.Source is { } current
+                    && current.Host == "navdeck-desktop.local"
+                    && current.AbsolutePath == "/workspace.html")
+                {
+                    var fragment = route.Substring("workspace.html".Length);
+                    _ = _browser.CoreWebView2.ExecuteScriptAsync(
+                        "location.hash = " +
+                        System.Text.Json.JsonSerializer.Serialize(fragment));
+                }
+                else
+                {
+                    _browser.CoreWebView2.Navigate(
+                        "https://navdeck-desktop.local/" + route);
+                }
 
                 if (activeNavigation is not null)
                 {
