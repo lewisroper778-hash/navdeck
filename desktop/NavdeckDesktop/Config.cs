@@ -7,6 +7,9 @@ internal sealed class Config
 {
     public string Code { get; set; } = "";
 
+    // Set only after a verified Clerk session connected this Windows app.
+    public bool SignedInWithClerk { get; set; }
+
     // Display preference: lb or kg. Defaults to pounds.
     public string FuelUnit { get; set; } = "lb";
 
