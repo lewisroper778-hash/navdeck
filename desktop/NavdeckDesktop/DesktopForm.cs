@@ -203,6 +203,9 @@ internal sealed class DesktopForm : Form
 
         AddSection("WORKSPACE");
         AddNavigation("Dashboard", "◈", "map.html");
+        // Primary operation: open the live in-flight report in one click.
+        // Resolves the currently paired active flight before loading its details.
+        AddNavigation("In-Flight Reporting", "▤", "flight.html?active=1#enroute");
         AddNavigation("My Flights", "✈", "workspace.html#flights");
         AddNavigation("SimBrief", "≋", "workspace.html#simbrief");
         AddNavigation("VATSIM", "◎", "workspace.html#vatsim");
