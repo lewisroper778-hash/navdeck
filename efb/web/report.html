@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NAVDECK EFB journey log</title>
+<link rel="icon" type="image/svg+xml" href="img/logo.svg">
+<style>
+  :root { --ink: #18202e; --muted: #6e7a8c; --line: #d6dde6; --tile: #f3f2f7; --accent: #7c3aed; --good: #109664; --bad: #d63c3c; --card: #ffffff; --text: #18202e; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #e8e8ec; color: var(--ink); font: 12px/1.45 "Segoe UI", system-ui, -apple-system, Arial, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .page { width: 210mm; min-height: 297mm; margin: 12px auto; background: #fff; padding: 0 0 12mm; box-shadow: 0 4px 20px rgba(20, 40, 80, .15); }
+  .band { background: #1c1c22; color: #fff; padding: 9mm 14mm 7mm; display: flex; align-items: center; gap: 14px; }
+  .band img { max-height: 38px; max-width: 110px; border-radius: 8px; }
+  .band img.airline { background: #fff; border-radius: 4px; padding: 2px; }
+  .band h1 { margin: 0; font-size: 20px; letter-spacing: .04em; }
+  .band .right { margin-left: auto; text-align: right; font-size: 11px; color: #c4b5fd; font-weight: 700; letter-spacing: .08em; }
+  .body { padding: 8mm 14mm 0; }
+  .route { font-size: 28px; font-weight: 800; letter-spacing: .01em; }
+  .route span { color: var(--accent); margin: 0 10px; }
+  .sub { color: var(--muted); margin-top: 2px; }
+  h2 { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); border-bottom: 1px solid var(--line); padding-bottom: 4px; margin: 16px 0 8px; }
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px; }
+  .tile { background: var(--tile); border-radius: 6px; padding: 8px 10px; }
+  .tile span { display: block; font-size: 9px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+  .tile b { font-size: 17px; }
+  .tile small { display: block; color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 9px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); padding: 4px 6px; border-bottom: 1px solid var(--line); }
+  td { padding: 4px 6px; border-bottom: 1px solid #edf0f4; vertical-align: top; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; font-family: Consolas, "SF Mono", Menlo, monospace; }
+  tr { break-inside: avoid; }
+  .good { color: var(--good); } .bad { color: var(--bad); } .muted { color: var(--muted); }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  pre { font: 10px/1.45 Consolas, "SF Mono", Menlo, monospace; background: var(--tile); border-radius: 6px; padding: 8px 10px; margin: 0; white-space: pre-wrap; }
+  .sig { display: inline-block; margin-right: 18px; vertical-align: top; }
+  .sig img { display: block; width: 190px; height: 63px; object-fit: contain; border-bottom: 1px solid var(--ink); }
+  .sig small { color: var(--muted); }
+  canvas.plot { width: 100%; height: 170px; display: block; border: 1px solid var(--line); border-radius: 6px; }
+  .section { break-inside: avoid; }
+  .foot { margin: 14px 14mm 0; padding-top: 6px; border-top: 1px solid var(--line); color: var(--muted); font-size: 9px; display: flex; justify-content: space-between; }
+  .tools { position: sticky; top: 0; background: #1c1c22; padding: 8px 12px; display: flex; gap: 8px; justify-content: center; z-index: 5; }
+  .tools button { font: 600 13px "Segoe UI", system-ui, sans-serif; padding: 8px 16px; border-radius: 8px; border: 0; background: #a78bfa; color: #160f2b; cursor: pointer; }
+  .draft { color: var(--bad); font-weight: 700; }
+  @page { size: A4; margin: 0; }
+  @media print { body { background: #fff; } .page { margin: 0; box-shadow: none; width: auto; } .tools { display: none; } }
+  body.embed .tools { display: none; } body.embed .page { margin: 0 auto; }
+</style>
+</head>
+<body>
+<div class="tools"><button onclick="window.print()">Print or save as PDF</button></div>
+<div class="page" id="page"></div>
+<script type="module" src="js/report.js"></script>
+</body>
+</html>

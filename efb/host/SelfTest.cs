@@ -1,0 +1,179 @@
+using System.Diagnostics;
+using System.Globalization;
+using System.Text;
+using System.Text.Json.Nodes;
+
+namespace NavdeckEfb;
+
+// "NavdeckEFB.exe --selftest <folder>": flies a simulated Gatwick - Heathrow flight through the real
+// flight engine, runway database, storage and local server, then writes a report. Used by the build.
+internal static class SelfTest
+{
+    public static int Run(string outDir)
+    {
+        var log = new StringBuilder();
+        var ok = true;
+        void Check(bool condition, string name)
+        {
+            log.AppendLine((condition ? "PASS  " : "FAIL  ") + name);
+            if (!condition) ok = false;
+        }
+
+        try
+        {
+            Directory.CreateDirectory(outDir);
+            var dataDir = Path.Combine(outDir, "data");
+            if (Directory.Exists(dataDir)) Directory.Delete(dataDir, true);
+
+            var sw = Stopwatch.StartNew();
+            var db = RunwayDb.LoadEmbedded();
+            log.AppendLine($"Runway database: {db.RunwayEnds:N0} runway ends in {sw.ElapsedMilliseconds} ms");
+            Check(db.RunwayEnds > 20000, "runway database loaded");
+            var thr = db.FindEnd("EGLL", "27R") ?? throw new InvalidOperationException("EGLL 27R missing");
+            var gat = db.FindEnd("EGKK", "08R") ?? throw new InvalidOperationException("EGKK 08R missing");
+
+            using var store = new Store(dataDir);
+            var engine = new FlightEngine(store, Task.FromResult(db));
+
+            // flight plan: two fixes on the way, then the arrival airport
+            var runwayBearing = Bearing(thr.Lat, thr.Lon, thr.OtherLat, thr.OtherLon);
+            var takeoffPoint = MoveBy(gat.Lat, gat.Lon, 80, 600);
+            var approachStart = MoveBy(thr.Lat, thr.Lon, (runwayBearing + 180) % 360, 8000);
+            (double Lat, double Lon) Along(double k) => (takeoffPoint.Lat + (approachStart.Lat - takeoffPoint.Lat) * k, takeoffPoint.Lon + (approachStart.Lon - takeoffPoint.Lon) * k);
+            var f1 = Along(0.3);
+            var f2 = Along(0.65);
+            var flight = Store.NewFlight();
+            flight["flightNo"] = "BAW123";
+            flight["dep"] = "EGKK";
+            flight["arr"] = "EGLL";
+            flight["fuel"] = new JsonObject { ["planTakeoff"] = 9000.0, ["planLanding"] = 8300.0 };
+            flight["navlog"] = new JsonArray(
+                Fix("WILLO", "wpt", f1, 240, 8800),
+                Fix("MIMFO", "wpt", f2, 420, 8600),
+                Fix("EGLL", "apt", (thr.Lat, thr.Lon), 900, 8300));
+            store.ReplaceFlight(flight);
+            store.ApplyOps("settings", new JsonArray(new JsonObject { ["op"] = "set", ["path"] = new JsonArray("fuelCheckMin"), ["value"] = 5 }));
+
+            double fuelLb = 18000;
+            var clock = new DateTime(2026, 11, 16, 10, 0, 0, DateTimeKind.Utc);
+            Sample S(bool ground, double gs, (double Lat, double Lon) p, double alt, double ra, double vs, bool brake = false, double td = 0) =>
+                new(ground, gs, td, brake, (int)fuelLb, p.Lat, p.Lon, alt, runwayBearing, ra, vs, true);
+            void Step(Sample s, double seconds)
+            {
+                clock = clock.AddSeconds(seconds);
+                engine.Feed(s, clock, null, "Airbus A320neo");
+            }
+            JsonObject F() => store.Flight;
+            double? Fuel(string key) => J.Num(F()["fuel"]?[key]);
+
+            // parked, refuelled by 1,500 kg
+            var gate = MoveBy(gat.Lat, gat.Lon, 180, 800);
+            for (var i = 0; i < 5; i++) Step(S(true, 0, gate, 200, 0, 0, brake: true), 1);
+            for (var i = 0; i < 20; i++) { fuelLb += 1500 / 0.45359237 / 20; Step(S(true, 0, gate, 200, 0, 0, brake: true), 3); }
+            for (var i = 0; i < 20; i++) Step(S(true, 0, gate, 200, 0, 0, brake: true), 5);
+            var receipts = F()["gsx"]?["receipts"] as JsonArray;
+            Check(receipts?.Count == 1 && J.Str(receipts[0]?["type"]) == "Fuel", "fuel uplift saved as a receipt automatically");
+
+            // taxi out, take-off, cruise, approach
+            var pos = gate;
+            for (var i = 0; i < 60; i++) { pos = MoveBy(pos.Lat, pos.Lon, 90, 8); Step(S(true, 15, pos, 200, 0, 0), 1); }
+            Check(J.Str(F()["times"]?["out"]).Length > 0 && Fuel("out") is > 0, "off-blocks time and fuel recorded");
+            for (var i = 0; i < 8; i++) Step(S(true, 60 + i * 12, takeoffPoint, 200, 0, 0), 1);
+            for (var i = 0; i <= 108; i++)
+            {
+                fuelLb -= 6;
+                var alt = Math.Min(5000, 200 + i * 60.0);
+                Step(S(false, 250, Along(i / 108.0), alt, alt, 1800), 5);
+            }
+            Check(J.Str(F()["times"]?["off"]).Length > 0, "take-off time recorded");
+            var nav = (JsonArray)F()["navlog"]!;
+            Check(J.Str(nav[0]?["ata"]).Length > 0 && J.Str(nav[1]?["ata"]).Length > 0, "both fixes passed with a time");
+            Check(J.Num(nav[0]?["fob"]) is > 0 && J.Num(nav[1]?["fob"]) is > 0, "fuel on board logged at each fix");
+            Check(J.Str(nav[2]?["ata"]).Length == 0, "arrival airport not marked before landing");
+            Check((F()["fuelChecks"] as JsonArray)?.Count >= 1, "automatic fuel check recorded");
+
+            for (var i = 0; i < 60; i++)
+            {
+                var p = MoveBy(thr.Lat, thr.Lon, runwayBearing, -8000 + i * (8396.0 / 60));
+                var alt = Math.Max(15, 2400 - i * 40.0);
+                Step(S(false, 140, p, alt, alt, -700), 2);
+            }
+            var touchCentre = MoveBy(thr.Lat, thr.Lon, runwayBearing, 396);
+            var touch = MoveBy(touchCentre.Lat, touchCentre.Lon, (runwayBearing + 90) % 360, 3);
+            Step(S(true, 135, touch, 80, 0, -180, td: -180), 1);
+
+            var landing = F()["landing"] as JsonObject;
+            Check(J.Num(landing?["rate"]) == 180, $"landing rate {J.Num(landing?["rate"])}");
+            Check(J.Str(landing?["runway"]) == "27R" && J.Str(landing?["airport"]) == "EGLL", $"runway {J.Str(landing?["runway"])} {J.Str(landing?["airport"])}");
+            Check(J.Num(landing?["distFt"]) is { } dist && Math.Abs(dist - 1299) < 120, $"touchdown {J.Num(landing?["distFt"])} ft from threshold");
+            Check(J.Num(landing?["offsetFt"]) is { } off && off > 4 && off < 16, $"touchdown {J.Num(landing?["offsetFt"])} ft right of centreline");
+            Check(J.Str(nav[2]?["ata"]).Length > 0, "arrival airport gets the landing time and fuel");
+
+            pos = touch;
+            for (var i = 0; i < 30; i++) { pos = MoveBy(pos.Lat, pos.Lon, runwayBearing, 60 - i); Step(S(true, Math.Max(15, 120 - i * 4), pos, 80, 0, 0), 1); }
+            for (var i = 0; i < 60; i++) { pos = MoveBy(pos.Lat, pos.Lon, 180, 5); Step(S(true, 12, pos, 80, 0, 0), 5); }
+            for (var i = 0; i < 10; i++) Step(S(true, 0, pos, 80, 0, 0, brake: true), 5);
+            Check(J.Str(F()["times"]?["in"]).Length > 0 && Fuel("in") is > 0, "on-blocks time and fuel recorded");
+            Check(Fuel("out") > Fuel("in"), "fuel burned is positive");
+
+            // closing rules
+            lock (store.Gate)
+                ((JsonArray)F()["goArounds"]!).Add(new JsonObject { ["time"] = J.Iso(clock), ["raFt"] = 400.0, ["reason"] = "" });
+            Check(store.CloseFlight() is not null, "cannot close before signing");
+            store.ApplyOps("flight", new JsonArray(new JsonObject { ["op"] = "set", ["path"] = new JsonArray("closed"), ["value"] = new JsonObject { ["name"] = "TEST", ["signature"] = "data:image/png;base64,AA==", ["time"] = J.Iso(clock) } }));
+            Check(store.CloseFlight() is { } why && why.Contains("go-around"), "cannot close while a go-around reason is missing");
+            store.ApplyOps("flight", new JsonArray(new JsonObject { ["op"] = "set", ["path"] = new JsonArray("goArounds", 0, "reason"), ["value"] = "Unstable approach" }));
+            Check(store.CloseFlight() is null, "closes once signed and the reason is entered");
+            Check(store.History.Count == 1, "closed flight added to the logbook");
+
+            // local server answers
+            var server = new EfbServer(store, engine);
+            server.StartAsync(18640).GetAwaiter().GetResult();
+            using (var http = new HttpClient())
+            {
+                var state = http.GetStringAsync($"http://127.0.0.1:{server.Port}/api/state").GetAwaiter().GetResult();
+                Check(JsonNode.Parse(state)?["flight"]?["landing"]?["runway"]?.GetValue<string>() == "27R", "local server serves the flight");
+                var index = http.GetStringAsync($"http://127.0.0.1:{server.Port}/").GetAwaiter().GetResult();
+                Check(index.Contains("NAVDECK EFB"), "local server serves the EFB pages");
+                var id = J.Str(store.History[0]?["id"]);
+                var archived = http.GetStringAsync($"http://127.0.0.1:{server.Port}/api/history/{id}").GetAwaiter().GetResult();
+                Check(archived.Contains("Unstable approach"), "closed flight readable from the logbook");
+            }
+            server.DisposeAsync().AsTask().Wait(3000);
+            store.Flush();
+            Check(File.Exists(Path.Combine(dataDir, "flight.json")), "flight saved to disk");
+        }
+        catch (Exception ex)
+        {
+            ok = false;
+            log.AppendLine("FAIL  unexpected error: " + ex);
+        }
+
+        log.AppendLine(ok ? "ALL CHECKS PASSED" : "SELF-TEST FAILED");
+        try { File.WriteAllText(Path.Combine(outDir, "selftest.txt"), log.ToString()); } catch (Exception) { }
+        return ok ? 0 : 1;
+    }
+
+    private static JsonObject Fix(string ident, string type, (double Lat, double Lon) p, double planT, double planFob) => new()
+    {
+        ["ident"] = ident, ["type"] = type, ["lat"] = p.Lat, ["lon"] = p.Lon, ["planT"] = planT, ["planFob"] = planFob,
+    };
+
+    private static (double Lat, double Lon) MoveBy(double lat, double lon, double bearingDeg, double meters)
+    {
+        var b = bearingDeg * Math.PI / 180;
+        return (lat + Math.Cos(b) * meters / 111195.0, lon + Math.Sin(b) * meters / (111195.0 * Math.Cos(lat * Math.PI / 180)));
+    }
+
+    private static double Bearing(double lat1, double lon1, double lat2, double lon2)
+    {
+        var a = lat1 * Math.PI / 180;
+        var b = lat2 * Math.PI / 180;
+        var d = (lon2 - lon1) * Math.PI / 180;
+        var y = Math.Sin(d) * Math.Cos(b);
+        var x = Math.Cos(a) * Math.Sin(b) - Math.Sin(a) * Math.Cos(b) * Math.Cos(d);
+        return (Math.Atan2(y, x) * 180 / Math.PI + 360) % 360;
+    }
+
+    private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
+}

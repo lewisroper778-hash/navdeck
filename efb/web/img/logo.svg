@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="NAVDECK EFB">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2b2b33"/>
+      <stop offset="1" stop-color="#16161b"/>
+    </linearGradient>
+    <linearGradient id="pu" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#7c3aed"/>
+      <stop offset="1" stop-color="#c4b5fd"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <rect x="10" y="10" width="492" height="492" rx="104" fill="none" stroke="#3a3a44" stroke-width="4"/>
+  <!-- compass ring -->
+  <circle cx="256" cy="256" r="176" fill="none" stroke="#3d3d48" stroke-width="10"/>
+  <g stroke="#55555f" stroke-width="10" stroke-linecap="round">
+    <line x1="256" y1="62" x2="256" y2="92"/><line x1="256" y1="420" x2="256" y2="450"/>
+    <line x1="62" y1="256" x2="92" y2="256"/><line x1="420" y1="256" x2="450" y2="256"/>
+  </g>
+  <!-- the N: two legs and a route line climbing to an arrow head -->
+  <path d="M166 368 V150 L332 330 V196" fill="none" stroke="url(#pu)" stroke-width="46" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M332 112 L376 190 H288 Z" fill="#c4b5fd"/>
+  <circle cx="166" cy="368" r="16" fill="#16161b" stroke="#a78bfa" stroke-width="10"/>
+</svg>
