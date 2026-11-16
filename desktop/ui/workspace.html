@@ -361,10 +361,13 @@ async function renderSettings(){
  '<div class="two-col"><section class="panel">'+header('Connection diagnostics','Uses your secure NAVDECK desktop session')+'<div id="diagInfo" class="loader">Checking the connection…</div>'+
  '<div class="inline-callout">Sign in with your Clerk website account using the button below. No connection code is needed. The simulator controls remain available from <b>Simulator Connection</b> in the sidebar. Desktop credentials are never exposed to these pages.</div></section>'+
  '<section class="panel">'+header('About this application','NAVDECK Desktop · Native shell + local interface')+
- '<ul class="bullet-list"><li>All application pages are packaged locally.</li><li>NAVDECK is used as a data service, never as an embedded website.</li><li>The simulator runs through the existing FSUIPC7 bridge.</li><li>Map tiles and VATSIM traffic require internet access.</li><li>Cloud account features need the matching backend API deployed.</li></ul></section></div>'+
+ '<ul class="bullet-list"><li>All application pages are packaged locally.</li><li>NAVDECK is used as a data service, never as an embedded website.</li><li>The simulator uses SimConnect when available, with FSUIPC7 as a fallback.</li><li>Map tiles and VATSIM traffic require internet access.</li><li>Cloud account features need the matching backend API deployed.</li></ul></section></div>'+
  '<section class="panel" id="accountPanel">'+header('Account','Manage your NAVDECK Desktop account on this PC')+
  '<p class="muted">Signing out clears this app's saved desktop session and Clerk sign-in cookies. It does not delete your flights or sign you out of a separate web browser.</p>'+
- '<div id="accountActions" class="row">Checking account…</div><div id="signOutNotice" role="status" aria-live="polite"></div></section>';
+ '<div id="accountActions" class="row">Checking account…</div><div id="signOutNotice" role="status" aria-live="polite"></div></section>'+
+ '<section class="panel">'+header('Open with simulator','Launch NAVDECK automatically when MSFS 2020 or 2024 starts')+
+ '<p class="muted">When enabled, a lightweight NAVDECK watcher starts with Windows and waits quietly for the simulator. It opens this app as soon as MSFS starts. No administrator access or FSUIPC startup setting is required.</p>'+
+ '<div id="autoStartActions" class="row">Checking Windows startup…</div><div id="autoStartNotice" role="status" aria-live="polite"></div></section>';
  const test=async()=>{try{const x=await call('getFlight');if(!$('diagInfo'))return;$('diagInfo').innerHTML=notice('Paired NAVDECK cloud connection is working. '+(x?.flight?'Current flight: '+(x.flight.callsign||'available'):'No active flight.'),'good');setCloud(true,'NAVDECK bridge linked')}
  catch(e){if(!$('diagInfo'))return;$('diagInfo').innerHTML=notice('Pairing unsuccessful: '+e.message,'error');setCloud(false,'Pairing required')}};
  action('testConnection',test);
@@ -399,6 +402,24 @@ async function renderSettings(){
    setCloud(false,'Signed out');
   }
  }catch(e){if($('accountActions'))$('accountActions').innerHTML=notice('Unable to check account: '+e.message,'error');}
+ try{
+  const state=await call('getAutoStart');
+  const draw=enabled=>{
+   if(!$('autoStartActions'))return;
+   $('autoStartActions').innerHTML=btn('toggleAutoStart',enabled?'Disable automatic launch':'Enable automatic launch');
+   action('toggleAutoStart',async()=>{
+    const button=$('toggleAutoStart');button.disabled=true;
+    try{
+     const changed=await call('toggleAutoStart');
+     draw(!!changed?.enabled);
+     $('autoStartNotice').innerHTML=notice(changed?.enabled
+      ?'Enabled. NAVDECK will open when MSFS starts after your next Windows sign-in.'
+      :'Automatic simulator launch disabled.','good');
+    }catch(e){$('autoStartNotice').innerHTML=notice('Unable to update startup: '+e.message,'error');button.disabled=false;}
+   });
+  };
+  draw(!!state?.enabled);
+ }catch(e){if($('autoStartActions'))$('autoStartActions').innerHTML=notice('Unable to check Windows startup: '+e.message,'error');}
  test();
 }
 const pages={flights:renderFlights,simbrief:renderSimbrief,vatsim:()=>renderVatsim(false),community:renderCommunity,logbook:renderLogbook,settings:renderSettings};
