@@ -431,7 +431,8 @@ function goAroundPanel(){
     '</div>';
  }).join(''):'<p class="muted">No go-arounds recorded for this flight.</p>';
  return panel('Go-around review',body+
- '<p class="muted">NAVDECK detects a possible go-around from simulator climb and approach data. Confirm and explain each event, or mark an incorrect detection. A pending event blocks signing and closing.</p>');
+ '<p class="muted">NAVDECK detects a possible go-around from simulator climb and approach data. Confirm and explain each event, or mark an incorrect detection. A pending event blocks signing and closing.</p>'+
+ '<button class="button ghost" type="button" id="refreshGoArounds">↻ Check for newly detected go-arounds</button>');
 }
 function closeFlight(){
  const t=f.times||{},sg=f.signoff||{},closed=f.status==='closed';
@@ -553,6 +554,12 @@ function bind(){
   on('metarFetch',run(async()=>{const a=await api('getMetar',{icao:f.destination});if(a?.metar){d('metar').value=a.metar;message('METAR loaded. Save notes to keep it.')}else message('No METAR available')}));
  }
  if(section==='close'){
+  on('refreshGoArounds',run(async()=>{
+    if(isDemo){message('Demonstration flight refreshed locally.');return;}
+    const response=await api('getFlightDetails',{flight_id:f.id});
+    if(!response?.flight)throw Error('Cannot load go-around events');
+    f=response.flight;draw();message('Latest go-around detections loaded');
+  }));
   document.querySelectorAll('[data-ga-confirm]').forEach(b=>b.onclick=()=>{
     const i=Number(b.dataset.gaConfirm),ga=f.go_arounds?.[i];
     if(!ga)return;
