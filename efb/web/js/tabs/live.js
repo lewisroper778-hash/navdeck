@@ -143,7 +143,7 @@ export default {
     headEl = h('div', { class: 'row', style: { fontSize: '14px' } }, h('span', { class: 'muted' }, 'Loading VATSIM traffic…'));
     listEl = h('div', { class: 'live-list' });
     mapEl = h('div', { class: 'live-map' }, !window.L && h('div', { class: 'empty' }, 'The map is not available on this device. The list shows everyone online.'));
-    root.append(h('div', { class: 'live' },
+    root.append(h('div', { class: 'vlive' },
       h('div', { class: 'live-top' }, h('h2', null, 'Live'), h('span', { class: 'tag' }, 'VATSIM network'), seg, search, h('div', { class: 'spacer' }), headEl),
       h('div', { class: 'live-body' }, mapEl, listEl)));
     map = null; lastFit = '';
