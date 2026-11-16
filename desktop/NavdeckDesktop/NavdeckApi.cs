@@ -138,6 +138,23 @@ internal sealed class NavdeckApi
             request.Content = JsonContent.Create(update);
         }
 
+        if (action == "importSimbrief")
+        {
+            string? pilotId = null;
+            if (payload is { ValueKind: JsonValueKind.Object } requestBody &&
+                requestBody.TryGetProperty("pilot_id", out var entered) &&
+                entered.ValueKind != JsonValueKind.Null)
+            {
+                if (entered.ValueKind != JsonValueKind.String)
+                    throw new ArgumentException("Invalid SimBrief Pilot ID");
+                pilotId = entered.GetString()?.Trim();
+                if (!string.IsNullOrEmpty(pilotId) &&
+                    (pilotId.Length > 16 || pilotId.Any(c => c < '0' || c > '9')))
+                    throw new ArgumentException("SimBrief Pilot ID must be digits");
+            }
+            request.Content = JsonContent.Create(new { pilot_id = pilotId });
+        }
+
         if (action == "flightAction")
         {
             if (payload is not { } instruction ||
@@ -169,7 +186,7 @@ internal sealed class NavdeckApi
         // when a cloud endpoint is offline. SimBrief import takes longer.
         using var timeout = new CancellationTokenSource(
             action == "importSimbrief"
-                ? TimeSpan.FromSeconds(30) : TimeSpan.FromSeconds(9));
+                ? TimeSpan.FromSeconds(40) : TimeSpan.FromSeconds(18));
         using var response = await _http.SendAsync(request, timeout.Token);
         await EnsureOk(response);
         using var document = JsonDocument.Parse(
