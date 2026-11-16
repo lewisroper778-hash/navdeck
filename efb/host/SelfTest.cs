@@ -102,6 +102,16 @@ internal static class SelfTest
             var restarted = new FlightEngine(store, Task.FromResult(db));
             restarted.Feed(S(false, 250, Along(0.99), 5000, 5000, 0), clock.AddSeconds(1), null, "Airbus A320neo");
             Check(restarted.Stage == Stage.Airborne, "a restart in the air resumes the flight");
+
+            // a wrong landing left behind by an older version is cleared when the app starts in the air
+            store.ApplyOps("flight", new JsonArray(
+                new JsonObject { ["op"] = "set", ["path"] = new JsonArray("times", "on"), ["value"] = J.Iso(clock) },
+                new JsonObject { ["op"] = "set", ["path"] = new JsonArray("fuel", "on"), ["value"] = 5000.0 },
+                new JsonObject { ["op"] = "set", ["path"] = new JsonArray("landing"), ["value"] = new JsonObject { ["rate"] = 90 } }));
+            var updated = new FlightEngine(store, Task.FromResult(db));
+            updated.Feed(S(false, 250, Along(0.99), 5000, 5000, 0), clock.AddSeconds(2), null, "Airbus A320neo");
+            Check(updated.Stage == Stage.Airborne && J.Str(F()["times"]?["on"]).Length == 0 && F()["landing"] is null && J.Num(F()["fuel"]?["on"]) is null,
+                "a stale landing is cleared automatically when the app starts in the air");
             var nav = (JsonArray)F()["navlog"]!;
             Check(J.Str(nav[0]?["ata"]).Length > 0 && J.Str(nav[1]?["ata"]).Length > 0, "both fixes passed with a time");
             Check(J.Num(nav[0]?["fob"]) is > 0 && J.Num(nav[1]?["fob"]) is > 0, "fuel on board logged at each fix");

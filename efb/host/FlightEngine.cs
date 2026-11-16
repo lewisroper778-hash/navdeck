@@ -75,7 +75,19 @@ internal sealed class FlightEngine
                 var hasOff = J.Str(times["off"]).Length > 0;
                 var hasOn = J.Str(times["on"]).Length > 0;
                 var hasIn = J.Str(times["in"]).Length > 0;
-                if (hasOff && !hasOn && !s.OnGround) _tracker.Resume(Stage.Airborne);
+                var clearlyFlying = !s.OnGround && s.GroundSpeedKt > 60 &&
+                                    (!double.IsFinite(s.RadioAltFt) || s.RadioAltFt > 100);
+                if (hasOn && !hasIn && clearlyFlying)
+                {
+                    // A landing was recorded but the aircraft is flying (for example a touch-and-go logged
+                    // by an older version): clear it and carry on with the flight.
+                    ClearLanding(f, times, fuel);
+                    hasOn = false;
+                    _tracker.Resume(Stage.Airborne);
+                    _store.Notify("Landing cleared", "A landing was recorded but the aircraft is still flying, so it was removed. The flight continues and the next landing is recorded.", "good");
+                    _store.Touch("flight");
+                }
+                else if (hasOff && !hasOn && !s.OnGround) _tracker.Resume(Stage.Airborne);
                 else if (hasOn && !hasIn && s.OnGround) _tracker.Resume(Stage.TaxiIn);
                 else if (hasOut && !hasOff && s.OnGround) _tracker.Resume(Stage.TaxiOut);
                 if (_tracker.Stage != Stage.Parked)
