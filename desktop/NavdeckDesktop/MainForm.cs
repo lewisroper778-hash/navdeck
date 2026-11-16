@@ -17,6 +17,36 @@ internal sealed class MainForm : Form
     public string SimulatorAircraft =>
         _sim.AircraftTitle ?? "Unknown aircraft";
 
+    public void SignOut()
+    {
+        // Never silently discard detected go-arounds awaiting cloud sync.
+        if (_goAroundQueue.Count > 0 || _goAroundSending)
+            throw new InvalidOperationException(
+                "A go-around event is still syncing. Keep the simulator connected " +
+                "and sign out after the event is saved.");
+
+        var previousCode = _config.Code;
+        _config.Code = "";
+        try { _config.Save(); }
+        catch { _config.Code = previousCode; throw; }
+
+        DesktopProfileCache.Clear(previousCode);
+        _api = null;
+        _pairedFlightId = null;
+        _watcher.Reset();
+        _goAroundDetector.Reset();
+        _tracker.Reset();
+        _lastRoute = DateTime.MinValue;
+        _lastBeat = DateTime.MinValue;
+        _nextConnectAttemptAt = DateTime.MinValue;
+        _flightCallsign.Text = "NO ACTIVE FLIGHT";
+        _flightRoute.Text = "Departure —  →  Destination —";
+        _waypointCount.Text = "0 remaining waypoints";
+        _routeStatus.Text = "Signed out · no flight paired";
+        SetStatus(_navStatus, "Signed out · enter a connection code to pair", Theme.Amber);
+        Log("NAVDECK account signed out on this PC");
+    }
+
     private readonly Config _config = Config.Load();
     private readonly FsuipcLink _sim = new();
     private readonly FlightTracker _tracker = new();
@@ -610,6 +640,9 @@ internal sealed class MainForm : Form
         _config.Code = dlg.Code;
         _config.Save();
         _api = null;
+        _pairedFlightId = null;
+        _watcher.Reset();
+        _goAroundDetector.Reset();
         _nextConnectAttemptAt = DateTime.MinValue;
         _ = Connect();
     }
@@ -621,10 +654,14 @@ internal sealed class MainForm : Form
             return;
 
         _connectInProgress = true;
+        var attemptedCode = _config.Code;
         try
         {
-            var candidate = new NavdeckApi(_config.Code);
+            var candidate = new NavdeckApi(attemptedCode);
             var f = await candidate.GetFlightAsync();
+            // An old connection must not reauthenticate after sign-out or
+            // replace a newer pairing while its HTTP request was in flight.
+            if (_config.Code != attemptedCode) return;
             _api = candidate;
             _nextConnectAttemptAt = DateTime.MinValue;
             _pairedFlightId = f?.Id;
@@ -637,6 +674,7 @@ internal sealed class MainForm : Form
         }
         catch (AuthException ex)
         {
+            if (_config.Code != attemptedCode) return;
             _api = null;
             _nextConnectAttemptAt = DateTime.UtcNow.AddMinutes(2);
             SetStatus(_navStatus, "Connection code not accepted", Theme.Red);
@@ -644,6 +682,7 @@ internal sealed class MainForm : Form
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
+            if (_config.Code != attemptedCode) return;
             _api = null;
             _nextConnectAttemptAt = DateTime.UtcNow.AddSeconds(25);
             SetStatus(_navStatus, "Can't reach NAVDECK · retrying", Theme.Amber);
