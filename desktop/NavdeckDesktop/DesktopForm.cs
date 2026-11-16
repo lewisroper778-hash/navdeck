@@ -104,7 +104,7 @@ internal sealed class DesktopForm : Form
                 EndCap = System.Drawing.Drawing2D.LineCap.Round
             };
             using var dot = new SolidBrush(Color.FromArgb(160, 207, 255));
-            g.DrawRoundedRectangle(border, 1.5f, 1.5f, 49, 49, 11);
+            g.DrawRectangle(border, 2, 2, 48, 48);
             // Geometric N: a navigation track between two vertical fixes.
             g.DrawLines(main, new PointF[]
             {
