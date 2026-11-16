@@ -244,7 +244,7 @@ internal sealed class NavdeckApi
         }
         catch (JsonException) { }
         if (res.StatusCode == HttpStatusCode.Unauthorized) throw new AuthException(detail);
-        throw new HttpRequestException(detail);
+        throw new HttpRequestException(detail, null, res.StatusCode);
     }
 
     private static string? Trim(string? s, int max) => s is null ? null : s.Length > max ? s[..max] : s;
