@@ -233,8 +233,10 @@
       const t=await window.navdeckDesktop.getTelemetry();showTelemetry(t);
     }catch{showTelemetry(null);}finally{busy=false;}
   }
+  let cloudSyncBusy=false;
   async function syncCloudFlight(){
-    if(typeof window.navdeckDesktop?.getFlight!=='function')return;
+    if(cloudSyncBusy||typeof window.navdeckDesktop?.getFlight!=='function')return;
+    cloudSyncBusy=true;
     try{
       const response=await window.navdeckDesktop.getFlight();
       const f=response?.flight;
@@ -256,6 +258,7 @@
       if(f.callsign)el('flightTitle').textContent=String(f.callsign).slice(0,26)+' · LIVE';
       if(f.aircraft)el('heroAircraft').textContent=String(f.aircraft).slice(0,60);
     }catch{ /* A simulator can still be tracked before cloud pairing. */ }
+    finally{cloudSyncBusy=false;}
   }
   el('openFlight').onclick=()=>{
     location.href=cloudFlightId?
