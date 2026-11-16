@@ -424,6 +424,8 @@ internal sealed class DesktopForm : Form
                       window.navdeckDesktop = Object.freeze({
                         getTelemetry: () => request('getTelemetry').catch(() => null),
                         getTouchdown: () => request('getTouchdown'),
+                        getAutoStart: () => request('getAutoStart'),
+                        toggleAutoStart: () => request('toggleAutoStart'),
                         getFlight: () => request('getFlight'),
                         getActiveFlightDetails: () => request('getActiveFlightDetails'),
                         getFlights: () => request('getFlights'),
@@ -477,7 +479,15 @@ internal sealed class DesktopForm : Form
                         var action = act.GetString() ?? "";
                         object? data;
 
-                        if (action == "getSession")
+                        if (action == "getAutoStart")
+                        {
+                            data = new { enabled = SimulatorAutostart.IsEnabled() };
+                        }
+                        else if (action == "toggleAutoStart")
+                        {
+                            data = new { enabled = SimulatorAutostart.Toggle() };
+                        }
+                        else if (action == "getSession")
                         {
                             // Only expose session state, never the desktop token.
                             var session = Config.Load();
