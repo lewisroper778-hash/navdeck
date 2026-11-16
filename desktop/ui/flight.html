@@ -37,6 +37,15 @@
 .green{color:#9ce9ad}.red{color:#efa5ae}
 dl{margin:0}.report-list{color:#beb8c7;font-size:12px;white-space:pre-wrap}
 details{background:#313039;border:1px solid #45414d;border-radius:7px;padding:10px;margin:7px 0}summary{cursor:pointer;font-size:12px;font-weight:650}details p{white-space:pre-wrap;color:#bbb5c6;font-size:12px}
+.live-report{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:14px 0}
+.live-indicator{border:1px solid #51465f;background:linear-gradient(120deg,#353040,#26262d);padding:12px;border-radius:9px;min-width:0}
+.live-indicator span{display:block;color:#ada5bd;font-size:10px;text-transform:uppercase;letter-spacing:.7px}
+.live-indicator b{display:block;margin-top:6px;font-variant-numeric:tabular-nums;font-size:17px}
+.live-indicator .connected{color:#91efb1}.live-indicator .disconnected{color:#efb2aa}
+.tab-table .quick-now{font-size:10px;border-radius:5px;background:#7b3ec7;border:1px solid #9960e2;color:white;padding:7px;margin-left:3px;cursor:pointer}
+.tab-table .quick-now:disabled{opacity:.4;cursor:default}
+@media(max-width:1250px){.live-report{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:850px){.live-report{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .mini-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:16px}.mini-actions .button{font-size:11px}
 @media(max-width:1170px){.pair{grid-template-columns:1fr}.fieldrow{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media print{header,.phasebar,.button,#statusMsg,.toolbar{display:none!important}main,.panel,body{color:black!important;background:white!important;box-shadow:none!important}.detail{background:white!important;border:1px solid #ccc}.detail small{color:#555!important}}
@@ -172,6 +181,7 @@ function draw(){
  document.querySelectorAll('[data-phase]').forEach(b=>b.onclick=()=>{section=b.dataset.phase;draw()});
  d('stage').innerHTML=({briefing,departure,enroute,arrival,closeFlight})[section]();
  bind();
+ if(section==='enroute')refreshLive();
  if(closed){document.querySelectorAll('[data-edit]').forEach(b=>b.disabled=true);document.querySelectorAll('#stage input, #stage textarea, #stage select').forEach(b=>b.disabled=true);}
 }
 function briefing(){
@@ -208,7 +218,7 @@ function enroute(){
  return '<tr class="'+(r.skipped?'skip':done?'done':next===r?'nextfix':'')+'"><td><input type="checkbox" data-pass="'+i+'" '+(done?'checked':'')+(r.skipped||f.status==='closed'?' disabled':'')+'></td>'+
  '<td><b>'+e(r.ident)+'</b><small style="display:block;color:#999">'+e(r.airway||'DCT')+'</small></td>'+
  '<td>'+e(r.altitude||'—')+'</td><td>'+e(r.eto||'—')+'</td><td>'+e(r.fob||'—')+'</td>'+
- '<td><input data-ata="'+i+'" value="'+e(r.ata||'')+'" placeholder="HH:MM"></td>'+
+ '<td style="white-space:nowrap"><input data-ata="'+i+'" value="'+e(r.ata||'')+'" placeholder="HH:MM"><button type="button" class="quick-now" data-now="'+i+'" data-edit title="Log UTC now and simulator fuel/altitude">NOW</button></td>'+
  '<td><input data-fob="'+i+'" value="'+e(r.actual_fob||'')+'" placeholder="FOB"></td>'+
  '<td><input data-alt="'+i+'" value="'+e(r.actual_alt||'')+'" placeholder="FT"></td>'+
  '<td>'+e(signed(r.timeDev,' min'))+'</td><td>'+e(signed(r.fuelDeviation))+'</td>'+
@@ -218,7 +228,15 @@ function enroute(){
  }).join('');
  const undos=[...new Set(rows.map(x=>x.direct_group).filter(Boolean))];
  const forecast=details([['Waypoint progress',completed+'/'+active.length],['Next fix',next?.ident||'—'],['Estimated landing fuel',fuel.predicted===null?'—':Math.round(fuel.predicted)+' '+units],['Fuel deviation',signed(fuel.deviation)+' '+units],['Fuel state',fuel.state],['ETOs',f.times?.takeoff?'Actual takeoff':'Scheduled']]);
- return panel('Enroute navigation','<p class="muted">Track waypoints, actual times, fuel and altitude, skip fixes or fly direct-to. Changes sync to your existing NAVDECK flight.</p>'+forecast+
+ return panel('In-Flight Reporting','<p class="muted">Live simulator data, waypoint reports, actual times, fuel and altitude. NAVDECK Link can automatically update a paired flight, or you can save manual entries here.</p>'+
+ '<div class="live-report" aria-label="Live simulator reporting">'+
+ '<div class="live-indicator"><span>Simulator</span><b id="liveConnection" class="disconnected">Awaiting connection</b></div>'+
+ '<div class="live-indicator"><span>Groundspeed</span><b id="liveSpeed">— KT</b></div>'+
+ '<div class="live-indicator"><span>Altitude</span><b id="liveAltitude">— FT</b></div>'+
+ '<div class="live-indicator"><span>Fuel on board</span><b id="liveFuel">— LB</b></div>'+
+ '<div class="live-indicator"><span>Current UTC</span><b id="liveUtc">—</b></div>'+
+ '</div>'+forecast+
+ '<div class="mini-actions"><button class="button ghost" id="refreshReport" type="button">↻ Sync report from NAVDECK</button></div>'+
  '<div class="rule"></div><div class="scroll-table"><table class="tab-table"><thead><tr><th>Passed</th><th>Fix</th><th>FL</th><th>ETO UTC</th><th>Plan FOB</th><th>ATA UTC</th><th>Actual FOB</th><th>ALT</th><th>ΔTime</th><th>ΔFuel</th><th>Actions</th></tr></thead><tbody>'+tbody+'</tbody></table></div>'+
  '<div class="mini-actions">'+undos.map((g,i)=>'<button class="button ghost" data-undo="'+e(g)+'" data-edit>Undo direct '+(i+1)+'</button>').join('')+
  '<button class="button ghost" id="reset" data-edit>Reset tracker</button></div><p class="muted">ETOs and fuel forecasts use the imported OFP and actual entries. Review any ATC direct routing changes before using estimates.</p>');
@@ -254,6 +272,26 @@ function closeFlight(){
  panel('Archive and export','<p class="muted">Closed flights are saved to NAVDECK Logbook. A signed PDF report can be saved directly to your PC.</p><div class="mini-actions"><button class="button ghost" id="print">Print flight summary</button>'+
  (closed?'<button class="button primary" id="pdf">Download signed PDF</button>':'')+'</div>');
 }
+async function refreshLive(){
+ if(!f||section!=='enroute'||!d('liveConnection'))return;
+ const utc=new Date().toISOString().slice(11,19)+'Z';
+ d('liveUtc').textContent=utc;
+ try{
+   const t=await api('getTelemetry');
+   latestSample=t||null;
+   if(section!=='enroute'||!d('liveConnection'))return;
+   const connected=t&&Number.isFinite(Number(t.lat))&&Number.isFinite(Number(t.lon));
+   d('liveConnection').textContent=connected?'LIVE / LINKED':'Disconnected';
+   d('liveConnection').className=connected?'connected':'disconnected';
+   const fmt=(x,digits=0)=>x==null||!Number.isFinite(Number(x))?'—':Number(x).toLocaleString('en-GB',{maximumFractionDigits:digits});
+   d('liveSpeed').textContent=fmt(t?.groundspeed_kt)+' KT';
+   d('liveAltitude').textContent=fmt(t?.altitude_ft)+' FT';
+   d('liveFuel').textContent=fmt(t?.fuel_lb)+' LB';
+ }catch{
+   latestSample=null;
+   if(d('liveConnection')){d('liveConnection').textContent='Unavailable';d('liveConnection').className='disconnected';}
+ }
+}
 function bind(){
  if(section==='briefing'){
   on('saveSlots',run(()=>act('saveTimes',validateTimes({tsat:v('tsat'),ctot:v('ctot')}))));
@@ -261,6 +299,30 @@ function bind(){
  }
  if(section==='departure')on('saveDeparture',run(()=>act('saveTimes',validateTimes({off:v('off'),takeoff:v('to'),tsat:v('tsat2'),ctot:v('ctot2')}))));
  if(section==='enroute'){
+  on('refreshReport',run(async()=>{
+    const data=await api('getFlightDetails',{flight_id:f.id});
+    if(!data?.flight)throw Error('Could not refresh report');
+    f=data.flight;draw();message('In-flight report synced');
+  }));
+  document.querySelectorAll('[data-now]').forEach(button=>button.onclick=run(async()=>{
+    const i=Number(button.dataset.now);
+    const row=f.waypoints?.[i];
+    if(!row||row.skipped||f.status==='closed')return;
+    // Manual press only: record UTC arrival and, when available,
+    // the simulator's current altitude and fuel in the OFP's units.
+    const values={index:i,ident:row.ident,ata:new Date().toISOString().slice(11,16)};
+    let telemetry=null;
+    try{telemetry=await api('getTelemetry');}catch{}
+    const alt=telemetry?.altitude_ft;
+    if(alt!=null&&Number.isFinite(Number(alt))&&Number(alt)>=0&&Number(alt)<=60000)
+      values.actual_alt=String(Math.round(Number(alt)));
+    const fuel=telemetry?.fuel_lb;
+    if(fuel!=null&&Number.isFinite(Number(fuel))&&Number(fuel)>=0){
+      const inOFP=(f.weights?.ofp_units||'KG')==='LB'?Number(fuel):Number(fuel)/2.20462;
+      values.actual_fob=String(Math.round(inOFP));
+    }
+    return act('saveWaypoint',values);
+  }));
   const row=i=>f.waypoints[i];
   document.querySelectorAll('[data-pass]').forEach(b=>b.onchange=()=>act('toggleWaypoint',{index:Number(b.dataset.pass),ident:row(Number(b.dataset.pass)).ident,passed:b.checked}));
   document.querySelectorAll('[data-wsave]').forEach(b=>b.onclick=run(()=>{
@@ -309,5 +371,10 @@ function bind(){
  }
 }
 on('back',()=>location.href='workspace.html#flights');
+window.addEventListener('hashchange',()=>{
+ const selected=location.hash.replace('#','');
+ if(f&&phases.includes(selected)&&section!==selected){section=selected;draw();}
+});
+setInterval(()=>{if(!document.hidden)refreshLive();},2400);
 init();
 })();</script></body></html>
