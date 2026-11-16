@@ -15,10 +15,10 @@
 .flight-label{display:flex;align-items:center;gap:9px;min-width:0;letter-spacing:.1px;font-weight:650;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .flight-label:before{content:"";width:3px;height:18px;background:#d4ef70;border-radius:4px;flex:none}
 .icon-btn{border:0;background:transparent;color:#b9b7be;border-radius:7px;padding:5px 7px;font-size:18px;line-height:1}.icon-btn:hover{background:#39383f;color:#fff}
-.hero{height:196px;flex:none;position:relative;overflow:hidden;background:radial-gradient(ellipse at 58% 35%,#555662 0,#33343b 38%,#27282c 73%);margin:0 12px 8px;border:1px solid #39383e;border-radius:8px}
+.hero{height:152px;flex:none;position:relative;overflow:hidden;background:radial-gradient(ellipse at 58% 35%,#555662 0,#33343b 38%,#27282c 73%);margin:0 12px 8px;border:1px solid #39383e;border-radius:8px}
 .hero:after{content:"";position:absolute;inset:0;background:linear-gradient(0deg,#202025b8,transparent 48%);pointer-events:none}
 .hero .orb{position:absolute;border:1px solid #ffffff10;border-radius:50%;width:270px;height:270px;left:20px;top:-112px}
-.hero svg{position:absolute;left:10%;top:6px;width:84%;height:178px;transform:rotate(-15deg);filter:drop-shadow(8px 13px 9px #0008)}
+.hero svg{position:absolute;left:10%;top:6px;width:84%;height:140px;transform:rotate(-15deg);filter:drop-shadow(8px 13px 9px #0008)}
 .hero-foot{position:absolute;z-index:2;bottom:11px;left:15px;right:15px;display:flex;justify-content:space-between;gap:8px;align-items:center;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:#dedee5}
 .signal{display:inline-flex;gap:6px;align-items:center;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase}.signal:before{content:"";width:7px;height:7px;border-radius:100%;background:#7c7b84}.signal.live:before{background:#61d893;box-shadow:0 0 7px #61d89366}
 .route-card{padding:5px 12px 8px}
@@ -38,6 +38,7 @@
 .summary-row{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:7px}
 .data-cell{display:flex;justify-content:space-between;align-items:center;gap:5px;background:#37373c;border:1px solid #46454e;border-radius:4px;padding:8px 9px;min-width:0;font-size:11px}
 .data-cell.wide{grid-column:1/-1}.data-cell span{color:#afadb6;white-space:nowrap}.data-cell b{font-weight:650;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.open-flight{margin-top:12px;width:100%;background:#5f398e;border:1px solid #8962b7;color:#f8f4ff;border-radius:7px;padding:10px 12px;text-align:center;font-weight:650}.open-flight:hover{background:#7443b3}.open-flight:disabled{opacity:.45;cursor:default}
 .progress-wrap{padding:15px 0 5px}.progress-label{display:flex;justify-content:space-between;font-size:11px;color:#c7c4ce}.progress-track{height:5px;border-radius:20px;background:#45414c;margin-top:12px;position:relative;overflow:hidden}.progress-track>div{height:100%;width:0%;border-radius:20px;background:linear-gradient(90deg,#ae8bfb,#7e36f3);transition:width .7s}
 .details-bottom{margin-top:auto;padding:10px 12px 14px}.action-strip{display:flex;background:#34343a;border:1px solid #46444b;border-radius:7px;overflow:hidden}.action-strip button{flex:1;display:grid;justify-items:center;gap:2px;border:0;border-right:1px solid #46444b;background:none;color:#ccc9d2;padding:11px 6px;font-size:10px}.action-strip button:last-child{border-right:0}.action-strip button:hover{background:#40364e;color:#fff}.action-strip .glyph{font-size:17px}
 .map-wrap{position:relative;min-width:0;overflow:hidden;background:#23252b}.map-fill{position:absolute;inset:0;z-index:1;background:repeating-linear-gradient(45deg,#26282e,#26282e 10px,#24262b 10px,#24262b 20px)}.map-top{position:absolute;top:17px;left:19px;right:20px;z-index:650;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;pointer-events:none}.map-top>*{pointer-events:auto}
@@ -83,18 +84,10 @@
         <div class="airport"><b id="arrCode">--- </b><span>Arrival</span><small id="arrName">Not selected</small></div>
       </div>
       <div class="route-meta">
-        <div><strong>Route configuration</strong><span id="routeSub">Set your airports to begin</span></div>
-        <div><strong id="routeStatus">No flight selected</strong><button class="small-action" id="routeEditBtn" type="button">✎ Edit route</button></div>
+        <div><strong>Paired NAVDECK flight</strong><span id="routeSub">Connect to sync your flight</span></div>
+        <div><strong id="routeStatus">No active flight</strong><span id="nextFix">Next fix: —</span></div>
       </div>
-      <form id="routeForm" class="edit-route" autocomplete="off">
-        <input id="depInput" maxlength="4" placeholder="EGLL" aria-label="Departure airport code" pattern="[a-zA-Z0-9]{3,4}" required>
-        <input id="arrInput" maxlength="4" placeholder="KJFK" aria-label="Arrival airport code" pattern="[a-zA-Z0-9]{3,4}" required>
-        <button type="submit">Save</button>
-      </form>
-      <div class="progress-wrap">
-        <div class="progress-label"><span id="progressFrom">Departure</span><span id="progressTo">Destination</span></div>
-        <div class="progress-track"><div id="progressBar"></div></div>
-      </div>
+      <button class="open-flight" id="openFlight" type="button" disabled>Open flight operations</button>
     </section>
 
     <div class="section-title">Flight information</div>
@@ -146,7 +139,7 @@
   const cleanCode=(s)=>String(s||'').replace(/[^a-zA-Z0-9]/g,'').slice(0,4).toUpperCase();
   let map=null,marker=null,trail=null,layer=null,latest=null,follow=true,mapStarted=false,busy=false;
   const tracks=[];
-  let pairedRoute=null, manualRoute=false;
+  let cloudFlightId=null, lastIconHeading=null;
   const layers={
     dark:{url:'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',attribution:'Tiles &copy; Esri'},
     satellite:{url:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',attribution:'Imagery &copy; Esri'}
@@ -185,31 +178,6 @@
     el('followBtn').onclick=()=>setFollow(!follow,true);
     map.on('dragstart',()=>{setFollow(false);});
   }
-  function readRoute(){
-    if(pairedRoute&&!manualRoute)return pairedRoute;
-    try{let data=JSON.parse(localStorage.getItem('navdeck.desktop.route')||'{}');return {dep:cleanCode(data.dep),arr:cleanCode(data.arr)};}catch{return {dep:'',arr:''}}
-  }
-  function renderRoute(){
-    const r=readRoute();
-    el('depCode').textContent=r.dep||'—';
-    el('arrCode').textContent=r.arr||'—';
-    el('depName').textContent=r.dep?'Selected airport':'Not selected';
-    el('arrName').textContent=r.arr?'Selected airport':'Not selected';
-    el('progressFrom').textContent=r.dep||'Departure';
-    el('progressTo').textContent=r.arr||'Destination';
-    el('routeSub').textContent=r.dep&&r.arr?r.dep+' → '+r.arr:'Add departure and destination';
-    el('routeStatus').textContent=r.dep&&r.arr?'Route saved':'No flight selected';
-    el('depInput').value=r.dep;el('arrInput').value=r.arr;
-  }
-  el('routeEditBtn').onclick=()=>{const form=el('routeForm');form.classList.toggle('visible');if(form.classList.contains('visible'))el('depInput').focus();};
-  el('routeForm').onsubmit=e=>{
-    e.preventDefault();
-    const dep=cleanCode(el('depInput').value),arr=cleanCode(el('arrInput').value);
-    if(dep.length<3||arr.length<3){notify('Enter 3–4 character airport codes.');return;}
-    try{localStorage.setItem('navdeck.desktop.route',JSON.stringify({dep,arr}));}catch{}
-    manualRoute=true;
-    el('routeForm').classList.remove('visible');renderRoute();
-  };
   el('copyBtn').onclick=async()=>{
     if(!latest){notify('No simulator GPS coordinates available.');return;}
     const coords=latest.lat.toFixed(5)+', '+latest.lon.toFixed(5);
@@ -221,7 +189,7 @@
       for(const k of ['groundspeed','altitude','heading','fuel'])el(k).textContent='—';
       for(const k of ['mapSpeed','mapAlt','mapHdg','mapFuel'])el(k).textContent='—';
       el('coordinates').textContent='Waiting for simulator';
-      if(marker&&map){map.removeLayer(marker);marker=null;}if(trail&&map){map.removeLayer(trail);trail=null;}tracks.length=0;el('progressBar').style.width='0%';return;
+      if(marker&&map){map.removeLayer(marker);marker=null;}if(trail&&map){map.removeLayer(trail);trail=null;}tracks.length=0;lastIconHeading=null;return;
     }
     const lat=Number(t.lat),lon=Number(t.lon),head=Number(t.heading_deg)||0;
     latest={...t,lat,lon};
@@ -243,10 +211,10 @@
     if(!map)return;
     const pt=[lat,lon];
     if(!marker){marker=L.marker(pt,{icon:planeIcon(head,'#c395ff',38),zIndexOffset:1000}).addTo(map).bindTooltip('My simulator aircraft');map.flyTo(pt,9,{duration:.6});}
-    else{marker.setLatLng(pt);marker.setIcon(planeIcon(head,'#c395ff',38));if(follow&&map.distance(map.getCenter(),pt)>900)map.panTo(pt,{animate:false});}
+    else{marker.setLatLng(pt);if(lastIconHeading===null||Math.abs(head-lastIconHeading)>1.5){marker.setIcon(planeIcon(head,'#c395ff',38));lastIconHeading=head;}if(follow&&map.distance(map.getCenter(),pt)>900)map.panTo(pt,{animate:false});}
     if(!tracks.length||Math.abs(tracks[tracks.length-1][0]-lat)+Math.abs(tracks[tracks.length-1][1]-lon)>.0001){tracks.push(pt);if(tracks.length>240)tracks.shift();}
     if(trail)trail.setLatLngs(tracks);else trail=L.polyline(tracks,{color:'#ac78fd',weight:3,opacity:.8}).addTo(map);
-    el('progressBar').style.width=String(Math.min(95,Math.max(4,tracks.length/2.4)))+'%';
+
   }
   async function pollTelemetry(){
     if(busy)return;busy=true;
@@ -260,20 +228,30 @@
     try{
       const response=await window.navdeckDesktop.getFlight();
       const f=response?.flight;
-      if(!f)return;
-      if(f.origin&&f.destination){
-        pairedRoute={dep:cleanCode(f.origin),arr:cleanCode(f.destination)};
-        renderRoute();
-        el('routeStatus').textContent='Synced from NAVDECK';
+      if(!f){
+        cloudFlightId=null;el('openFlight').disabled=true;
+        el('routeStatus').textContent='No active flight';
+        el('routeSub').textContent='Import an OFP from SimBrief';
+        el('nextFix').textContent='Next fix: —';
+        return;
       }
-      if(f.callsign)el('flightTitle').textContent=String(f.callsign).slice(0,26)+' · MY AIRCRAFT';
+      el('depCode').textContent=cleanCode(f.origin)||'—';
+      el('arrCode').textContent=cleanCode(f.destination)||'—';
+      el('depName').textContent='NAVDECK route';
+      el('arrName').textContent='NAVDECK route';
+      el('routeSub').textContent=(f.origin||'—')+' → '+(f.destination||'—');
+      el('routeStatus').textContent=f.callsign||'Active flight';
+      el('nextFix').textContent='Next fix: '+(f.waypoints?.[0]?.ident||'—');
+      cloudFlightId=f.id;
+      el('openFlight').disabled=!cloudFlightId;
+      if(f.callsign)el('flightTitle').textContent=String(f.callsign).slice(0,26)+' · LIVE';
       if(f.aircraft)el('heroAircraft').textContent=String(f.aircraft).slice(0,60);
     }catch{ /* A simulator can still be tracked before cloud pairing. */ }
   }
-  renderRoute();
+  el('openFlight').onclick=()=>{if(cloudFlightId)location.href='flight.html?id='+encodeURIComponent(cloudFlightId);};
   setupMap();
   syncCloudFlight();setInterval(syncCloudFlight,30000);
-  pollTelemetry();setInterval(pollTelemetry,1000);
+  pollTelemetry();setInterval(pollTelemetry,1200);
 
 })();
 </script>
