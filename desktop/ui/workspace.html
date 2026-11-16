@@ -87,8 +87,36 @@ async function renderFlights(force=false){
 }
 async function renderSimbrief(){
  $('content').innerHTML=template('SimBrief connection','Link your SimBrief pilot identifier, save it to NAVDECK and import your latest operational flight plan.','Integration','API link',btn('importOFP','↻  Import latest OFP',true))+
+ '<section class="panel">'+header('Create a flight plan','Enter the flight details and launch SimBrief dispatch in your browser. NAVDECK will import the completed OFP.')+
+ '<form id="simbriefPlanForm"><div class="grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:12px;margin-bottom:15px">'+
+ '<div class="setting-group"><label for="planOrig">Departure ICAO</label><input id="planOrig" required maxlength="4" placeholder="EGLL"></div>'+
+ '<div class="setting-group"><label for="planDest">Arrival ICAO</label><input id="planDest" required maxlength="4" placeholder="LFPG"></div>'+
+ '<div class="setting-group"><label for="planType">Aircraft type</label><input id="planType" required maxlength="8" placeholder="A320"></div>'+
+ '<div class="setting-group"><label for="planAirline">Airline</label><input id="planAirline" maxlength="3" placeholder="BAW"></div>'+
+ '<div class="setting-group"><label for="planFlight">Flight number</label><input id="planFlight" maxlength="5" placeholder="304"></div>'+
+ '<div class="setting-group"><label for="planHour">Departure UTC hour</label><input id="planHour" maxlength="2" placeholder="14" inputmode="numeric"></div>'+
+ '<div class="setting-group"><label for="planMinute">Departure minute</label><input id="planMinute" maxlength="2" placeholder="30" inputmode="numeric"></div></div>'+
+ '<div class="row"><button type="submit" class="button primary">Generate on SimBrief</button><span class="muted">SimBrief opens externally; NAVDECK stays in its own app window.</span></div></form><div id="plannerNotice"></div></section>'+
  '<div class="two-col"><section class="panel">'+header('SimBrief integration','Connect using your existing NAVDECK pairing code')+'<div id="profileNotice"></div><form id="profileForm"><div class="setting-group"><label for="pilotId">SimBrief Pilot ID</label><input id="pilotId" inputmode="numeric" maxlength="16" placeholder="Your numeric SimBrief Pilot ID" pattern="[0-9]{1,16}"><small>The pilot identifier from your SimBrief account settings.</small></div><div class="setting-group"><label for="displayName">Pilot display name</label><input id="displayName" maxlength="80" placeholder="Your display name"></div><div class="row right"><button class="button primary" type="submit">Save NAVDECK settings</button></div></form></section>'+
  '<section class="panel">'+header('How it connects','A true desktop integration instead of an embedded website')+'<div class="inline-callout">NAVDECK Desktop talks directly to the cloud API using your simulator pairing token. No website screen or browser login is displayed here.</div><ul class="bullet-list"><li>Pair once through Simulator Connection.</li><li>Enter your SimBrief Pilot ID.</li><li>Save, then import your latest OFP.</li><li>Open My Flights to view your records.</li></ul><p style="color:var(--dim);font-size:11px;margin-top:18px">The new cloud import endpoints must be deployed to your NAVDECK server first.</p></section></div>';
+ $('simbriefPlanForm').onsubmit=async event=>{
+  event.preventDefault();
+  const value=id=>String($(id)?.value||'').trim().toUpperCase();
+  const orig=value('planOrig'),dest=value('planDest'),type=value('planType');
+  if(!/^[A-Z]{4}$/.test(orig)||!/^[A-Z]{4}$/.test(dest)||!/^[A-Z0-9-]{3,8}$/.test(type)){
+    $('plannerNotice').innerHTML=notice('Enter valid four-letter airport ICAOs and an aircraft type.','error');return;
+  }
+  const hour=value('planHour'),minute=value('planMinute');
+  if((hour&&!/^(?:[01]?\\d|2[0-3])$/.test(hour))||(minute&&!/^[0-5]?\\d$/.test(minute))){
+    $('plannerNotice').innerHTML=notice('Departure hour and minute must be valid UTC times.','error');return;
+  }
+  const values={orig,dest,type,airline:value('planAirline'),fltnum:value('planFlight'),deph:hour,depm:minute};
+  const query=new URLSearchParams(Object.entries(values).filter(([,v])=>v));
+  try{
+    await call('openSimbrief',{url:'https://dispatch.simbrief.com/options/custom?'+query.toString()});
+    $('plannerNotice').innerHTML=notice('SimBrief opened. Generate your plan there, then return here and import it.','good');
+  }catch(e){$('plannerNotice').innerHTML=notice('Could not open SimBrief: '+e.message,'error')}
+ };
  action('importOFP',async()=>{
   const b=$('importOFP');b.disabled=true;let label=b.textContent;b.textContent='Importing…';
   try{const data=await call('importSimbrief');flightCache=null;$('profileNotice').innerHTML=notice('Imported '+String(data?.flight?.callsign||'the latest flight')+' successfully.','good');}
