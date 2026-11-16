@@ -345,7 +345,7 @@ internal sealed class DesktopForm : Form
                         getLogbook: () => request('getLogbook'),
                         getProfile: () => request('getProfile'),
                         saveProfile: (payload) => request('saveProfile', payload),
-                        importSimbrief: () => request('importSimbrief'),
+                        importSimbrief: (payload) => request('importSimbrief', payload),
                         openSimbrief: (payload) => request('openSimbrief', payload),
                         openVatsim: (payload) => request('openVatsim', payload)
                       });
