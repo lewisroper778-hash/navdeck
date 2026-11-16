@@ -66,6 +66,10 @@ jobs:
         shell: pwsh
         run: node desktop/tests/flight-ui-smoke.cjs
 
+      - name: Smoke-test SimBrief import routing and account sign-out
+        shell: pwsh
+        run: node desktop/tests/workspace-account-smoke.cjs
+
       - name: Install .NET SDK
         uses: actions/setup-dotnet@v4
         with:
@@ -152,4 +156,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $tag = "desktop-" + "${{ github.run_number }}"
-          gh release create $tag installer-output/*.exe --target $env:GITHUB_SHA --title "NAVDECK Desktop $tag" --latest --notes "Public NAVDECK Desktop installer for Windows x64. Uses the website compass logo, a compact unclipped sidebar header, faster simulator startup, guarded background sync, In-Flight Reporting, SimBrief and go-around review. Requires MSFS with FSUIPC7 for live simulator tracking and the updated NAVDECK backend for cloud records. The installer is not code-signed; test live telemetry and cloud pairing on your PC."
+          gh release create $tag installer-output/*.exe --target $env:GITHUB_SHA --title "NAVDECK Desktop $tag" --latest --notes "Public NAVDECK Desktop installer for Windows x64. NAVDECK 1.2.1 removes Preview Reporting shortcuts, opens the exact imported SimBrief flight directly in In-Flight Reporting, and adds a Settings sign-out that clears the local account pairing. Also includes the website logo, fast simulator startup, guarded cloud sync and go-around review. Requires MSFS with FSUIPC7 for live simulator tracking and the updated NAVDECK backend for cloud records. The installer is not code-signed; test live telemetry and cloud pairing on your PC."

@@ -218,8 +218,12 @@ internal sealed class DesktopForm : Form
                     _browser.Source is { } currentFlight &&
                     currentFlight.Host == "navdeck-desktop.local" &&
                     currentFlight.AbsolutePath == "/flight.html" &&
-                    (route.Contains("demo=1", StringComparison.Ordinal) ==
-                     currentFlight.Query.Contains("demo=1", StringComparison.Ordinal));
+                    // Only hash-switch when the flight selection itself is
+                    // identical. An imported flight ID must never be reused
+                    // when the user selects the active reporting shortcut.
+                    string.Equals(currentFlight.Query,
+                        new Uri("https://navdeck-desktop.local/" + route).Query,
+                        StringComparison.Ordinal);
                 if (sameWorkspace || sameFlight)
                 {
                     int hashPos = route.IndexOf('#');
@@ -254,7 +258,6 @@ internal sealed class DesktopForm : Form
         // Primary operation: open the live in-flight report in one click.
         // Resolves the currently paired active flight before loading its details.
         AddNavigation("In-Flight Reporting", "▤", "flight.html?active=1#enroute");
-        AddNavigation("Preview Reporting", "◇", "flight.html?demo=1#enroute");
         AddNavigation("My Flights", "✈", "workspace.html#flights");
         AddNavigation("SimBrief", "≋", "workspace.html#simbrief");
         AddNavigation("VATSIM", "◎", "workspace.html#vatsim");
@@ -396,7 +399,9 @@ internal sealed class DesktopForm : Form
                         saveProfile: (payload) => request('saveProfile', payload),
                         importSimbrief: (payload) => request('importSimbrief', payload),
                         openSimbrief: (payload) => request('openSimbrief', payload),
-                        openVatsim: (payload) => request('openVatsim', payload)
+                        openVatsim: (payload) => request('openVatsim', payload),
+                        getSession: () => request('getSession'),
+                        signOut: () => request('signOut')
                       });
                       window.chrome.webview.addEventListener('message', event => {
                         if (event.data?.type !== 'navdeck:result') return;
@@ -434,7 +439,29 @@ internal sealed class DesktopForm : Form
                         var action = act.GetString() ?? "";
                         object? data;
 
-                        if (action == "getTelemetry")
+                        if (action == "getSession")
+                        {
+                            // Only expose pairing status, never the connection token.
+                            data = new { paired = Config.IsValidCode(Config.Load().Code) };
+                        }
+                        else if (action == "signOut")
+                        {
+                            // Remove local account pairing without touching website sessions.
+                            if (_bridge is { IsDisposed: false })
+                                _bridge.SignOut();
+                            else
+                            {
+                                var saved = Config.Load();
+                                var oldCode = saved.Code;
+                                saved.Code = "";
+                                saved.Save();
+                                DesktopProfileCache.Clear(oldCode);
+                            }
+                            _cloudApi = null;
+                            _cloudCode = null;
+                            data = new { signed_out = true };
+                        }
+                        else if (action == "getTelemetry")
                         {
                             var sample = _bridge?.LiveAircraftSample;
                             data = sample is { } t
