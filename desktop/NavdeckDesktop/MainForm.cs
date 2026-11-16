@@ -3,6 +3,12 @@ namespace NavdeckLink;
 internal sealed class MainForm : Form
 {
     public bool SimulatorConnected => _sim.IsOpen;
+
+    // Do not permit a signed/closed report to bypass detections still awaiting
+    // the cloud, even if the API is sleeping or the network briefly dropped.
+    public bool HasPendingGoAround(string flightId) =>
+        _goAroundQueue.Any(item =>
+            string.Equals(item.FlightId, flightId, StringComparison.OrdinalIgnoreCase));
     public Sample? LiveAircraftSample =>
         !_testFlight && _sim.IsOpen && _latestTelemetry is { } sample &&
         DateTime.UtcNow - _latestTelemetryAt < TimeSpan.FromSeconds(5)
