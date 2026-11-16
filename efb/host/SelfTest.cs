@@ -86,6 +86,22 @@ internal static class SelfTest
                 Step(S(false, 250, Along(i / 108.0), alt, alt, 1800), 5);
             }
             Check(J.Str(F()["times"]?["off"]).Length > 0, "take-off time recorded");
+
+            // accidental wheel contact on a low pass, then climbing away again
+            var pass = MoveBy(thr.Lat, thr.Lon, runwayBearing, 900);
+            Step(S(false, 140, pass, 120, 40, -300), 1);
+            Step(S(true, 138, MoveBy(pass.Lat, pass.Lon, runwayBearing, 70), 80, 0, 0, td: -260), 1);
+            Step(S(true, 136, MoveBy(pass.Lat, pass.Lon, runwayBearing, 140), 80, 0, 0), 1);
+            for (var i = 1; i <= 6; i++) Step(S(false, 145, MoveBy(pass.Lat, pass.Lon, runwayBearing, 140 + i * 75), 80 + i * 90, i * 90, 1800), 1);
+            Check(J.Str(F()["times"]?["on"]).Length == 0 && F()["landing"] is null, "an accidental touchdown is not taken as the landing");
+            Check(engine.Stage == Stage.Airborne, "the flight continues after a touch-and-go");
+            var tg = F()["goArounds"] as JsonArray;
+            Check(tg?.Count == 1 && J.Str(tg[0]?["kind"]) == "touch-and-go", "touch-and-go recorded once (needs a reason before closing)");
+
+            // the app is restarted in the air and picks the flight up again
+            var restarted = new FlightEngine(store, Task.FromResult(db));
+            restarted.Feed(S(false, 250, Along(0.99), 5000, 5000, 0), clock.AddSeconds(1), null, "Airbus A320neo");
+            Check(restarted.Stage == Stage.Airborne, "a restart in the air resumes the flight");
             var nav = (JsonArray)F()["navlog"]!;
             Check(J.Str(nav[0]?["ata"]).Length > 0 && J.Str(nav[1]?["ata"]).Length > 0, "both fixes passed with a time");
             Check(J.Num(nav[0]?["fob"]) is > 0 && J.Num(nav[1]?["fob"]) is > 0, "fuel on board logged at each fix");
@@ -101,16 +117,17 @@ internal static class SelfTest
             var touchCentre = MoveBy(thr.Lat, thr.Lon, runwayBearing, 396);
             var touch = MoveBy(touchCentre.Lat, touchCentre.Lon, (runwayBearing + 90) % 360, 3);
             Step(S(true, 135, touch, 80, 0, -180, td: -180), 1);
+            pos = touch;
+            for (var i = 0; i < 30; i++) { pos = MoveBy(pos.Lat, pos.Lon, runwayBearing, 60 - i); Step(S(true, Math.Max(15, 120 - i * 4), pos, 80, 0, 0), 1); }
 
             var landing = F()["landing"] as JsonObject;
+            Check(J.Time(F()["times"]?["on"]) is { } onTime && onTime < clock.AddSeconds(-20), "landing time is the moment of touchdown, not when it was confirmed");
             Check(J.Num(landing?["rate"]) == 180, $"landing rate {J.Num(landing?["rate"])}");
             Check(J.Str(landing?["runway"]) == "27R" && J.Str(landing?["airport"]) == "EGLL", $"runway {J.Str(landing?["runway"])} {J.Str(landing?["airport"])}");
             Check(J.Num(landing?["distFt"]) is { } dist && Math.Abs(dist - 1299) < 120, $"touchdown {J.Num(landing?["distFt"])} ft from threshold");
             Check(J.Num(landing?["offsetFt"]) is { } off && off > 4 && off < 16, $"touchdown {J.Num(landing?["offsetFt"])} ft right of centreline");
             Check(J.Str(nav[2]?["ata"]).Length > 0, "arrival airport gets the landing time and fuel");
 
-            pos = touch;
-            for (var i = 0; i < 30; i++) { pos = MoveBy(pos.Lat, pos.Lon, runwayBearing, 60 - i); Step(S(true, Math.Max(15, 120 - i * 4), pos, 80, 0, 0), 1); }
             for (var i = 0; i < 60; i++) { pos = MoveBy(pos.Lat, pos.Lon, 180, 5); Step(S(true, 12, pos, 80, 0, 0), 5); }
             for (var i = 0; i < 10; i++) Step(S(true, 0, pos, 80, 0, 0, brake: true), 5);
             Check(J.Str(F()["times"]?["in"]).Length > 0 && Fuel("in") is > 0, "on-blocks time and fuel recorded");
@@ -122,7 +139,9 @@ internal static class SelfTest
             Check(store.CloseFlight() is not null, "cannot close before signing");
             store.ApplyOps("flight", new JsonArray(new JsonObject { ["op"] = "set", ["path"] = new JsonArray("closed"), ["value"] = new JsonObject { ["name"] = "TEST", ["signature"] = "data:image/png;base64,AA==", ["time"] = J.Iso(clock) } }));
             Check(store.CloseFlight() is { } why && why.Contains("go-around"), "cannot close while a go-around reason is missing");
-            store.ApplyOps("flight", new JsonArray(new JsonObject { ["op"] = "set", ["path"] = new JsonArray("goArounds", 0, "reason"), ["value"] = "Unstable approach" }));
+            store.ApplyOps("flight", new JsonArray(new JsonObject { ["op"] = "set", ["path"] = new JsonArray("goArounds", 0, "reason"), ["value"] = "Accidental touchdown" }));
+            Check(store.CloseFlight() is { } stillMissing && stillMissing.Contains("go-around"), "every go-around and touch-and-go needs a reason");
+            store.ApplyOps("flight", new JsonArray(new JsonObject { ["op"] = "set", ["path"] = new JsonArray("goArounds", 1, "reason"), ["value"] = "Unstable approach" }));
             Check(store.CloseFlight() is null, "closes once signed and the reason is entered");
             Check(store.History.Count == 1, "closed flight added to the logbook");
 

@@ -129,7 +129,7 @@ export default {
         f.closed ? h('button', { class: 'btn primary', onclick: () => exportPdf(f.id) }, 'Export PDF')
           : h('button', { class: 'btn primary', onclick: signAndClose }, 'Sign and close flight')),
       f.closed && h('div', { class: 'banner b-good' }, h('div', null, h('b', null, 'Flight closed. '), `Signed by ${f.closed.name} at ${fmtT(f.closed.time)}z.`), h('div', { class: 'spacer' }), h('a', { class: 'btn small', href: '#report' }, 'Open report')),
-      !f.closed && needReason && h('div', { class: 'banner' }, h('div', null, h('b', null, 'Go-around detected. '), 'The reason must be entered before the flight can be signed and closed.'), h('div', { class: 'spacer' }), h('button', { class: 'btn small', onclick: signAndClose }, 'Enter reason')),
+      !f.closed && needReason && h('div', { class: 'banner' }, h('div', null, h('b', null, (() => { const open = f.goArounds.filter(g => !g.reason); const tg = open.some(g => g.kind === 'touch-and-go'), ga = open.some(g => g.kind !== 'touch-and-go'); return (ga && tg ? 'Go-around and touch-and-go detected. ' : tg ? 'Touch-and-go detected. ' : 'Go-around detected. '); })()), 'The reason must be entered before the flight can be signed and closed.'), h('div', { class: 'spacer' }), h('button', { class: 'btn small', onclick: signAndClose }, 'Enter reason')),
       f.diversion && h('div', { class: 'banner b-bad' }, h('div', null, h('b', null, `Diverted to ${f.diversion.to}. `), `${fmtT(f.diversion.time)}z  ${f.diversion.reason || ''}`)),
       h('div', { class: 'grid' },
         h('div', { class: 'card c12' },

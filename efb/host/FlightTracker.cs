@@ -8,6 +8,9 @@ internal sealed record SimEvent(string Type);
 internal sealed class FlightTracker
 {
     private DateTime? _stillSince;
+    private DateTime? _contactAt, _groundSince, _airSince;
+    private int _contactRate;
+    private double? _contactLat, _contactLon, _contactGs, _contactTrack;
     private double? _prevLat, _prevLon, _lastApproachTrack;
     private double _lastAirborneVs = double.NaN;
 
@@ -17,6 +20,13 @@ internal sealed class FlightTracker
     public double? TouchdownLon { get; private set; }
     public double? TouchdownGroundSpeedKt { get; private set; }
     public double? ApproachTrackDeg { get; private set; }
+    public DateTime? TouchdownTime { get; private set; }
+
+    // A wheel contact only becomes the landing once the aircraft stays on the ground and slows down.
+    // Lifting off again before that is a bounce (kept as one landing) or a touch-and-go.
+    private const double ConfirmBelowKt = 40;
+    private static readonly TimeSpan ConfirmAfter = TimeSpan.FromSeconds(6);
+    private const double ConfirmAfterBelowKt = 80;
 
     public SimEvent? Update(Sample s, DateTime now)
     {
@@ -45,22 +55,23 @@ internal sealed class FlightTracker
                 Stage = Stage.Airborne;
                 return new SimEvent("takeoff");
 
-            case Stage.Airborne when s.OnGround:
-                Stage = Stage.TaxiIn;
-                var rate = Math.Abs(s.TouchdownFpm);
-                // The latched value is occasionally zero; fall back to the last vertical speed in the air.
-                if (rate < 1 && double.IsFinite(_lastAirborneVs)) rate = Math.Abs(_lastAirborneVs);
-                LandingRate = (int)Math.Round(rate);
-                ApproachTrackDeg = _lastApproachTrack;
-                if (s.HasPosition)
+            case Stage.Airborne:
+                return AirborneOrLanding(s, now);
+
+            case Stage.TaxiIn when !s.OnGround && s.GroundSpeedKt > 40:
+                // Airborne again after a landing was recorded (a long touch-and-go): the flight continues.
+                _airSince ??= now;
+                if (now - _airSince >= TimeSpan.FromSeconds(2))
                 {
-                    TouchdownLat = s.Lat;
-                    TouchdownLon = s.Lon;
-                    TouchdownGroundSpeedKt = s.GroundSpeedKt;
+                    Stage = Stage.Airborne;
+                    ClearTouchdown();
+                    _airSince = null;
+                    return new SimEvent("relaunch");
                 }
-                return new SimEvent("landing");
+                break;
 
             case Stage.TaxiIn:
+                _airSince = null;
                 // Parked = stopped with the brake set, or stopped with the engine shut down.
                 if (s.OnGround && s.GroundSpeedKt < 1 && (s.ParkingBrake || !s.Engine1On))
                 {
@@ -81,6 +92,70 @@ internal sealed class FlightTracker
         return null;
     }
 
+    private SimEvent? AirborneOrLanding(Sample s, DateTime now)
+    {
+        if (s.OnGround)
+        {
+            _groundSince ??= now;
+            if (_contactAt is null)
+            {
+                // First wheel contact: keep its numbers, they are the landing if it is confirmed.
+                var rate = Math.Abs(s.TouchdownFpm);
+                if (rate < 1 && double.IsFinite(_lastAirborneVs)) rate = Math.Abs(_lastAirborneVs);
+                _contactAt = now;
+                _contactRate = (int)Math.Round(rate);
+                _contactTrack = _lastApproachTrack;
+                if (s.HasPosition)
+                {
+                    _contactLat = s.Lat;
+                    _contactLon = s.Lon;
+                    _contactGs = s.GroundSpeedKt;
+                }
+            }
+            var settled = s.GroundSpeedKt < ConfirmBelowKt ||
+                          (now - _groundSince >= ConfirmAfter && s.GroundSpeedKt < ConfirmAfterBelowKt);
+            if (!settled) return null;
+
+            Stage = Stage.TaxiIn;
+            LandingRate = _contactRate;
+            ApproachTrackDeg = _contactTrack;
+            TouchdownLat = _contactLat;
+            TouchdownLon = _contactLon;
+            TouchdownGroundSpeedKt = _contactGs;
+            TouchdownTime = _contactAt;
+            _contactAt = _groundSince = null;
+            return new SimEvent("landing");
+        }
+
+        _groundSince = null;
+        if (_contactAt is null) return null;
+
+        // Off the ground again. A bounce stays low and keeps the first contact as the touchdown;
+        // climbing away means it was a touch-and-go and the flight carries on.
+        var lowBounce = double.IsFinite(s.RadioAltFt) && s.RadioAltFt < 50 &&
+                        (!double.IsFinite(s.VerticalSpeedFpm) || s.VerticalSpeedFpm < 600) &&
+                        now - _contactAt < TimeSpan.FromSeconds(15);
+        if (lowBounce) return null;
+        _contactAt = null;
+        return new SimEvent("touchandgo");
+    }
+
+    // Puts the tracker back into a stage after the app restarts in the middle of a flight.
+    public void Resume(Stage stage)
+    {
+        Stage = stage;
+        _contactAt = _groundSince = _airSince = null;
+        _stillSince = null;
+    }
+
+    private void ClearTouchdown()
+    {
+        LandingRate = null;
+        TouchdownLat = TouchdownLon = TouchdownGroundSpeedKt = ApproachTrackDeg = null;
+        TouchdownTime = null;
+        _contactAt = _groundSince = null;
+    }
+
     public void Reset()
     {
         Stage = Stage.Parked;
@@ -89,6 +164,8 @@ internal sealed class FlightTracker
         _prevLat = _prevLon = _lastApproachTrack = null;
         _lastAirborneVs = double.NaN;
         _stillSince = null;
+        TouchdownTime = null;
+        _contactAt = _groundSince = _airSince = null;
     }
 
     private static double Bearing(double lat1, double lon1, double lat2, double lon2)

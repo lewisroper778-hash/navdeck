@@ -1,6 +1,6 @@
 // Landing: touchdown plotter, landing rate and the go-around log.
-import { S, h, fmtT, fmtAlt, num, setF } from '../core.js';
-import { drawTouchdown, lateralText, rateRating, rateClass, modal } from '../widgets.js';
+import { S, h, api, fmtT, fmtAlt, num, setF } from '../core.js';
+import { drawTouchdown, lateralText, rateRating, rateClass, modal, confirmBox, toast } from '../widgets.js';
 import { GO_AROUND_REASONS } from '../data.js';
 
 async function editReason(i) {
@@ -12,6 +12,20 @@ async function editReason(i) {
   await setF(['goArounds', i, 'reason'], select.value);
   await setF(['goArounds', i, 'remark'], remark.value.trim());
 }
+
+async function undoLanding() {
+  const ok = await confirmBox('Undo this landing?',
+    'Use this if the aircraft only touched the ground by accident or the landing was recorded at the wrong time. The landing time, fuel and touchdown are cleared and the flight continues; the next landing is recorded automatically.',
+    'Undo landing', true);
+  if (!ok) return;
+  try {
+    await api('/api/flight/undo-landing', { method: 'POST', body: {} });
+  } catch (e) {
+    toast(e.message, 'bad', 'Landing not undone');
+  }
+}
+
+export const eventHeight = g => (g.kind === 'touch-and-go' ? 'Touch-and-go' : g.raFt != null ? fmtAlt(Math.round(g.raFt)) + ' AGL' : '--');
 
 export default {
   deps: ['flight', 'settings'],
@@ -30,15 +44,16 @@ export default {
             h('div', null, h('span', null, 'Centreline'), h('b', null, l?.offsetFt != null ? lateralText(l.offsetFt) : '--')),
             h('div', null, h('span', null, 'Ground speed'), h('b', { class: 'mono' }, l?.gsKt != null ? num(l.gsKt) + ' kt' : '--')),
             h('div', null, h('span', null, 'Time'), h('b', { class: 'mono' }, fmtT(f.times.on) + (f.times.on ? 'z' : ''))))),
-        h('div', { class: 'card c12' }, h('h3', null, 'Touchdown plotter'), canvas),
-        h('div', { class: 'card c12' }, h('h3', null, 'Go-arounds'),
+        h('div', { class: 'card c12' }, h('h3', null, 'Touchdown plotter', h('span', { class: 'spacer' }),
+          (l || f.times.on) && !f.closed && !f.times.in && h('button', { class: 'btn small danger', onclick: undoLanding }, 'Undo landing')), canvas),
+        h('div', { class: 'card c12' }, h('h3', null, 'Go-arounds and touch-and-goes'),
           f.goArounds.length ? h('table', { class: 'tbl' },
             h('thead', null, h('tr', null, ['Time', 'Height', 'Reason', 'Remarks', ''].map(x => h('th', null, x)))),
             h('tbody', null, f.goArounds.map((g, i) => h('tr', null,
-              h('td', { class: 'mono' }, fmtT(g.time) + 'z'), h('td', { class: 'mono' }, g.raFt != null ? fmtAlt(Math.round(g.raFt)) + ' AGL' : '--'),
+              h('td', { class: 'mono' }, fmtT(g.time) + 'z'), h('td', { class: 'mono' }, eventHeight(g)),
               h('td', null, g.reason ? g.reason : h('span', { class: 'tag bad' }, 'Reason required')), h('td', null, g.remark || ''),
               h('td', { style: { width: '90px' } }, !f.closed && h('button', { class: 'btn small', onclick: () => editReason(i) }, g.reason ? 'Edit' : 'Enter'))))))
-            : h('div', { class: 'empty' }, 'No go-arounds detected on this flight.'))));
+            : h('div', { class: 'empty' }, 'No go-arounds or touch-and-goes on this flight.'))));
     requestAnimationFrame(() => drawTouchdown(canvas, l));
   },
 };

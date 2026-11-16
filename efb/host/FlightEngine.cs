@@ -13,6 +13,8 @@ internal sealed class FlightEngine
     private readonly GoAroundDetector _goAround = new();
 
     private string _flightId = "";
+    private bool _resumeChecked;
+    private bool _lastOnGround = true;
     private int _fixIndex = -1;
     private double _minDist = double.MaxValue;
     private double? _nextDistNm;
@@ -57,11 +59,28 @@ internal sealed class FlightEngine
                 _fuelBase = _fuelLast = double.NaN;
                 _goAround.Reset();
                 if (_tracker.Stage is Stage.Arrived or Stage.Parked) _tracker.Reset();
+                _resumeChecked = false;
             }
 
             var closed = f["closed"] is JsonObject;
             var times = Obj(f, "times");
             var fuel = Obj(f, "fuel");
+            _lastOnGround = s.OnGround;
+
+            // Started (or restarted) in the middle of a flight: carry on from where the flight document is.
+            if (!_resumeChecked && !closed && _tracker.Stage == Stage.Parked && s.HasPosition)
+            {
+                _resumeChecked = true;
+                var hasOut = J.Str(times["out"]).Length > 0;
+                var hasOff = J.Str(times["off"]).Length > 0;
+                var hasOn = J.Str(times["on"]).Length > 0;
+                var hasIn = J.Str(times["in"]).Length > 0;
+                if (hasOff && !hasOn && !s.OnGround) _tracker.Resume(Stage.Airborne);
+                else if (hasOn && !hasIn && s.OnGround) _tracker.Resume(Stage.TaxiIn);
+                else if (hasOut && !hasOff && s.OnGround) _tracker.Resume(Stage.TaxiOut);
+                if (_tracker.Stage != Stage.Parked)
+                    _store.Notify("Flight resumed", $"Continuing the flight in the {StageName(_tracker.Stage)} phase.");
+            }
 
             if (!closed)
             {
@@ -92,7 +111,16 @@ internal sealed class FlightEngine
                         changed = true;
                         break;
                     case "landing":
-                        Landing(f, times, fuel, s, now, fobKg);
+                        Landing(f, times, fuel, s, _tracker.TouchdownTime ?? now, fobKg);
+                        changed = true;
+                        break;
+                    case "touchandgo":
+                        TouchAndGo(f, now, "Touch-and-go detected. The flight continues; enter a reason before closing.");
+                        changed = true;
+                        break;
+                    case "relaunch":
+                        ClearLanding(f, times, fuel);
+                        TouchAndGo(f, now, "Airborne again after touching down. The landing was cleared and the flight continues.");
                         changed = true;
                         break;
                     case "gatein":
@@ -140,6 +168,59 @@ internal sealed class FlightEngine
             }
         }
     }
+
+    private void TouchAndGo(JsonObject f, DateTime now, string message)
+    {
+        _goAround.Reset();     // the climb-out must not also count as a separate go-around
+        Arr(f, "goArounds").Add(new JsonObject
+        {
+            ["time"] = J.Iso(now), ["raFt"] = 0.0, ["kind"] = "touch-and-go", ["reason"] = "", ["remark"] = "",
+        });
+        _store.Notify("Touch-and-go", message, "warn");
+    }
+
+    private static void ClearLanding(JsonObject f, JsonObject times, JsonObject fuel)
+    {
+        times.Remove("on");
+        times.Remove("in");
+        fuel.Remove("on");
+        fuel.Remove("in");
+        f.Remove("landing");
+        if (f["navlog"] is JsonArray nav && nav.Count > 0 && nav[^1] is JsonObject last &&
+            J.Str(last["type"]) == "apt" && J.Bool(last["auto"], false))
+        {
+            last.Remove("ata");
+            last.Remove("fob");
+            last.Remove("alt");
+            last.Remove("auto");
+        }
+    }
+
+    // "Undo landing" from the Landing tab: the recorded landing was wrong, so the flight continues.
+    public string? UndoLanding()
+    {
+        lock (_store.Gate)
+        {
+            var f = _store.Flight;
+            if (f["closed"] is JsonObject) return "The flight is already closed.";
+            if (f["landing"] is null && J.Str(f["times"]?["on"]).Length == 0) return "No landing has been recorded.";
+            ClearLanding(f, Obj(f, "times"), Obj(f, "fuel"));
+            _tracker.Resume(_lastOnGround ? Stage.TaxiOut : Stage.Airborne);
+            _store.Touch("flight");
+            _store.Notify("Landing removed", _lastOnGround
+                ? "The next take-off and landing will be recorded again."
+                : "The flight continues; the next landing will be recorded.", "good");
+            return null;
+        }
+    }
+
+    private static string StageName(Stage s) => s switch
+    {
+        Stage.TaxiOut => "taxi out",
+        Stage.Airborne => "airborne",
+        Stage.TaxiIn => "taxi in",
+        _ => s.ToString().ToLowerInvariant(),
+    };
 
     // Real time, or the simulator's clock when it is clearly different (or always, if chosen in Settings).
     private DateTime Clock(DateTime realUtc, DateTime? simUtc)

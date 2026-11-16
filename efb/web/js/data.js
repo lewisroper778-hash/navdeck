@@ -95,7 +95,7 @@ export const TURNAROUND_STEPS = [
 ];
 
 export const GO_AROUND_REASONS = [
-  'Unstable approach', 'Runway occupied', 'ATC instruction', 'Wind shear or gusts', 'Weather below minima',
+  'Unstable approach', 'Accidental touchdown', 'Runway occupied', 'ATC instruction', 'Wind shear or gusts', 'Weather below minima',
   'Traffic separation', 'Aircraft configuration', 'Long or deep landing expected', 'Training or practice', 'Other',
 ];
 
