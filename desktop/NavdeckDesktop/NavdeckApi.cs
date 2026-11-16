@@ -52,6 +52,19 @@ internal sealed class NavdeckApi
     public async Task<JsonElement> RequestDesktopAsync(
         string action, JsonElement? payload = null)
     {
+        string flightId = "";
+        if (action is "getFlightDetails" or "flightAction")
+        {
+            if (payload is not { } info ||
+                info.ValueKind != JsonValueKind.Object ||
+                !info.TryGetProperty("flight_id", out var id) ||
+                id.ValueKind != JsonValueKind.String ||
+                !Guid.TryParse(id.GetString(), out var flightGuid))
+                throw new ArgumentException("Invalid flight identifier");
+
+            flightId = Uri.EscapeDataString(flightGuid.ToString());
+        }
+
         string path = action switch
         {
             "getFlight" => "flight",
@@ -60,12 +73,15 @@ internal sealed class NavdeckApi
             "getProfile" => "desktop/profile",
             "saveProfile" => "desktop/profile",
             "importSimbrief" => "desktop/import",
+            "getFlightDetails" => $"desktop/flights/{flightId}",
+            "flightAction" => $"desktop/flights/{flightId}/action",
             _ => throw new ArgumentException("Unsupported desktop request")
         };
 
         using var request = new HttpRequestMessage(
             action == "saveProfile" ? HttpMethod.Put :
-            action == "importSimbrief" ? HttpMethod.Post : HttpMethod.Get,
+            action is "importSimbrief" or "flightAction"
+                ? HttpMethod.Post : HttpMethod.Get,
             path);
 
         if (action == "saveProfile")
@@ -86,6 +102,32 @@ internal sealed class NavdeckApi
                     throw new ArgumentException("Invalid profile update field");
             }
             request.Content = JsonContent.Create(update);
+        }
+
+        if (action == "flightAction")
+        {
+            if (payload is not { } instruction ||
+                !instruction.TryGetProperty("operation", out var op) ||
+                op.ValueKind != JsonValueKind.String ||
+                !instruction.TryGetProperty("values", out var values) ||
+                values.ValueKind != JsonValueKind.Object)
+                throw new ArgumentException("Invalid flight operation");
+
+            string operation = op.GetString() ?? "";
+            var allowed = new HashSet<string>(StringComparer.Ordinal)
+            {
+                "toggleWaypoint", "skipWaypoint", "directTo", "undoDirect",
+                "saveWaypoint", "saveTimes", "saveActuals", "saveArrival",
+                "signReport", "closeFlight", "reopenFlight", "resetFlight"
+            };
+            if (!allowed.Contains(operation))
+                throw new ArgumentException("Unsupported flight operation");
+
+            request.Content = JsonContent.Create(new
+            {
+                action = operation,
+                payload = values
+            });
         }
 
         using var response = await _http.SendAsync(request);
