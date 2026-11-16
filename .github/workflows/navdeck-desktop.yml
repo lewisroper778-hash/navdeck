@@ -2,6 +2,12 @@ name: NAVDECK Desktop Windows Build
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - 'feature/desktop-live-map'
+    paths:
+      - 'desktop/**'
+      - '.github/workflows/navdeck-desktop.yml'
   pull_request:
     paths:
       - 'desktop/**'
@@ -34,6 +40,141 @@ jobs:
           --self-contained true
           --no-restore
           --output desktop-output
+
+      - name: Bundle local Leaflet map assets
+        shell: pwsh
+        run: |
+          $vendor = "desktop-output/desktop-map/vendor"
+          New-Item -ItemType Directory -Force $vendor | Out-Null
+          $base = "https://unpkg.com/leaflet@1.9.4/dist"
+          Invoke-WebRequest -Uri "$base/leaflet.js" -OutFile "$vendor/leaflet.js"
+          Invoke-WebRequest -Uri "$base/leaflet.css" -OutFile "$vendor/leaflet.css"
+          New-Item -ItemType Directory -Force "$vendor/images" | Out-Null
+          foreach ($name in @("marker-icon.png", "marker-icon-2x.png", "marker-shadow.png", "layers.png", "layers-2x.png")) {
+            Invoke-WebRequest -Uri "$base/images/$name" -OutFile "$vendor/images/$name"
+          }
+          if ((Get-Item "$vendor/leaflet.js").Length -lt 100000) {
+            throw "Packaged Leaflet JavaScript is incomplete."
+          }
+          if ((Get-Item "$vendor/leaflet.css").Length -lt 10000) {
+            throw "Packaged Leaflet stylesheet is incomplete."
+          }
+
+      - name: Bundle public-domain aircraft imagery
+        shell: pwsh
+        run: |
+          $assets = "desktop-output/desktop-map/assets"
+          New-Item -ItemType Directory -Force $assets | Out-Null
+          $aircraft = "https://upload.wikimedia.org/wikipedia/commons/4/42/Canjet_takeoff.jpg"
+          try {
+            Invoke-WebRequest -Uri $aircraft -OutFile "$assets/aircraft.jpg" -ErrorAction Stop
+            if ((Get-Item "$assets/aircraft.jpg").Length -lt 10000) {
+              throw "Aircraft photo downloaded incompletely."
+            }
+            Write-Host "Public-domain aircraft image bundled."
+          }
+          catch {
+            Write-Warning "Aircraft photo unavailable; the dashboard will show its built-in vector illustration."
+            Remove-Item "$assets/aircraft.jpg" -ErrorAction SilentlyContinue
+          }
+
+      - name: Verify packaged live map
+        shell: pwsh
+        run: |
+          $map = "desktop-output/desktop-map/map.html"
+          if (-not (Test-Path $map)) {
+            throw "Desktop live map was not included in the published application."
+          }
+          $html = Get-Content $map -Raw
+          if ($html -notmatch 'navdeckDesktop.getTelemetry') {
+            throw "Packaged live map is missing native telemetry integration."
+          }
+          if ($html -notmatch 'vendor/leaflet.js' -or
+              -not (Test-Path "desktop-output/desktop-map/vendor/leaflet.js")) {
+            throw "The installed map must include its local Leaflet runtime."
+          }
+          if (-not (Test-Path "desktop-output/NavdeckDesktop.exe")) {
+            throw "Published Windows executable was not found."
+          }
+          Write-Host "Desktop executable and live map are present."
+
+      - name: Syntax-check packaged map JavaScript
+        shell: pwsh
+        run: |
+          $html = Get-Content "desktop-output/desktop-map/map.html" -Raw
+          $inlineScripts = [regex]::Matches($html, '(?s)<script(?:\\s[^>]*)?>(.*?)</script>')
+          $count = 0
+          foreach ($match in $inlineScripts) {
+            $source = $match.Groups[1].Value
+            if ([string]::IsNullOrWhiteSpace($source)) { continue }
+            $temp = Join-Path $env:RUNNER_TEMP "navdeck-map-check-$count.js"
+            [System.IO.File]::WriteAllText($temp, $source)
+            & node --check $temp
+            if ($LASTEXITCODE -ne 0) {
+              throw "Invalid JavaScript in packaged map script $count"
+            }
+            $count++
+          }
+          if ($count -lt 1) { throw "No inline map JavaScript found to validate." }
+          Write-Host "Validated $count inline map script(s)."
+
+      - name: Capture dashboard visual preview
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $edge = "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe"
+          if (-not (Test-Path $edge)) {
+            Write-Warning "Microsoft Edge unavailable for preview."
+            exit 0
+          }
+          $source = (Resolve-Path "desktop-output/desktop-map/map.html").Path.Replace('\', '/')
+          $url = "file:///$source"
+          $shot = Join-Path $PWD "desktop-ui-preview.png"
+          $profile = Join-Path $env:RUNNER_TEMP "navdeck-edge-preview"
+          & $edge --headless=new --disable-gpu --no-first-run --no-sandbox --hide-scrollbars "--user-data-dir=$profile" --virtual-time-budget=6000 "--window-size=1600,950" "--screenshot=$shot" "$url"
+          Start-Sleep -Seconds 8
+          if (Test-Path $shot) {
+            Write-Host "UI preview captured."
+          } else {
+            Write-Warning "UI preview could not be captured."
+          }
+
+      - name: Upload dashboard visual preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: NAVDECK-Desktop-UI-Preview
+          path: desktop-ui-preview.png
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --yes --no-progress
+
+      - name: Bundle Microsoft WebView2 bootstrapper
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force "desktop-deps" | Out-Null
+          Invoke-WebRequest -Uri "https://go.microsoft.com/fwlink/p/?LinkId=2124703" -OutFile "desktop-deps/MicrosoftEdgeWebview2Setup.exe"
+          if ((Get-Item "desktop-deps/MicrosoftEdgeWebview2Setup.exe").Length -lt 100000) {
+            throw "Microsoft WebView2 runtime bootstrapper download was incomplete."
+          }
+
+      - name: Build Windows setup installer
+        shell: pwsh
+        run: |
+          $compiler = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $compiler)) { throw "Inno Setup compiler not found." }
+          & $compiler "desktop/installer.iss"
+          if ($LASTEXITCODE -ne 0) { throw "Installer compilation failed." }
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: NAVDECK-Desktop-Setup-x64
+          path: desktop-installer/*.exe
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Upload Windows application
         uses: actions/upload-artifact@v4

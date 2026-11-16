@@ -10,6 +10,12 @@ internal sealed class MainForm : Form
     public bool NavdeckConnected => _api is not null;
     public string SimulatorAircraft =>
         _sim.AircraftTitle ?? "Unknown aircraft";
+    public string LiveFlightCallsign => _flightCallsign.Text;
+    public string LiveFlightRoute => _flightRoute.Text;
+    public string LiveFlightStage => _stage.Text;
+    public string LiveWaypointSummary => _waypointCount.Text;
+    public IReadOnlyList<RouteFix> LivePendingWaypoints => _watcher.Pending;
+
 
     private readonly Config _config = Config.Load();
     private readonly FsuipcLink _sim = new();
@@ -22,6 +28,7 @@ internal sealed class MainForm : Form
     private readonly System.Windows.Forms.Timer _slow = new() { Interval = 5000 };
     private readonly System.Windows.Forms.Timer _routeRefreshTimer = new() { Interval = 5000 };
     private readonly bool _startMinimized;
+    private readonly bool _promptForConnectionCode;
     private NavdeckApi? _api;
     private DateTime _lastBeat = DateTime.MinValue;
     private Sample? _latestTelemetry;
@@ -63,9 +70,10 @@ internal sealed class MainForm : Form
 
 
 
-    public MainForm(bool startMinimized)
+    public MainForm(bool startMinimized, bool promptForConnectionCode = true)
     {
         _startMinimized = startMinimized;
+        _promptForConnectionCode = promptForConnectionCode;
         Text = "NAVDECK Link";
         Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
         BackColor = Theme.Bg;
@@ -575,8 +583,14 @@ internal sealed class MainForm : Form
     private async Task Start()
     {
         if (_startMinimized) WindowState = FormWindowState.Minimized;
-        if (!Config.IsValidCode(_config.Code)) AskCode();
-        else await Connect();
+        if (Config.IsValidCode(_config.Code))
+            await Connect();
+        else if (_promptForConnectionCode)
+            AskCode();
+        else
+            SetStatus(_navStatus,
+                "Open Simulator Connection to enter your NAVDECK link code",
+                Theme.Amber);
         UpdateStartupButton();
         RefreshView();
         _poll.Start();
@@ -601,7 +615,22 @@ internal sealed class MainForm : Form
         {
             var f = await _api.GetFlightAsync();
             SetStatus(_navStatus, f is null ? "NAVDECK connected · import a flight before pushback" : $"Filling {f.Callsign} {f.Origin} → {f.Destination}", f is null ? Theme.Amber : Theme.Green);
-            if (f is not null) _watcher.SetRoute(f.Pending);
+            if (f is not null)
+            {
+                _watcher.SetRoute(f.Pending);
+                _flightCallsign.Text = string.IsNullOrWhiteSpace(f.Callsign)
+                    ? "ACTIVE FLIGHT" : f.Callsign;
+                _flightRoute.Text = $"{f.Origin ?? "—"}  →  {f.Destination ?? "—"}";
+                _waypointCount.Text = $"{f.Pending.Count} pending waypoints";
+                _routeStatus.Text = $"Flight plan synchronised · {DateTime.UtcNow:HH:mm}Z";
+            }
+            else
+            {
+                _watcher.Reset();
+                _flightCallsign.Text = "NO ACTIVE FLIGHT";
+                _flightRoute.Text = "Departure —  →  Destination —";
+                _waypointCount.Text = "0 pending waypoints";
+            }
             _lastRoute = DateTime.UtcNow;
         }
         catch (AuthException ex)

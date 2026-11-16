@@ -5,7 +5,28 @@ namespace NavdeckLink;
 internal sealed class DesktopForm : Form
 {
     private readonly WebView2 _browser = new();
+    private readonly Panel _workspace = new() { Dock = DockStyle.Fill };
+    private readonly Panel _simulatorWorkspace = new()
+    {
+        Dock = DockStyle.Fill,
+        Visible = false,
+        BackColor = Color.FromArgb(12, 17, 27)
+    };
     private MainForm? _bridge;
+    private readonly Dictionary<string, Button> _navButtons = new();
+    private bool _authenticated;
+    private readonly VatsimTrafficFeed _vatsimTraffic = new();
+    private bool _signingOut;
+    private bool _closingAfterCleanup;
+    private readonly CheckBox _staySignedIn = new()
+    {
+        Text = "Stay signed in on this computer",
+        Checked = true,
+        AutoSize = true,
+        ForeColor = Color.FromArgb(190, 207, 229),
+        BackColor = Color.Transparent,
+        Font = new Font("Segoe UI", 10f)
+    };
 
     private readonly Label _simStatus = new()
     {
@@ -22,6 +43,15 @@ internal sealed class DesktopForm : Form
     };
 
 
+    private readonly Label _utcClock = new()
+    {
+        Text = DateTime.UtcNow.ToString("HH:mm:ss") + "Z",
+        Font = new Font("Consolas", 17, FontStyle.Bold),
+        ForeColor = Color.FromArgb(229, 245, 255),
+        AutoSize = true,
+        Location = new Point(14, 31)
+    };
+
     private readonly Label _status = new()
     {
         Text = "NAVDECK Desktop",
@@ -30,29 +60,97 @@ internal sealed class DesktopForm : Form
         BackColor = Color.Transparent
     };
 
+    private void SelectNavigation(string selected)
+    {
+        _status.Text = selected.TrimStart('◈', '✈', '▤', '◎', '⌂', '▣', ' ') +
+            "  /  NAVDECK Desktop";
+        foreach (var item in _navButtons)
+        {
+            bool active = item.Key == selected;
+            item.Value.BackColor = active
+                ? Color.FromArgb(53, 53, 58) : Color.FromArgb(29, 29, 33);
+            item.Value.ForeColor = active
+                ? Color.White : Color.FromArgb(163, 163, 172);
+        }
+    }
+
+    private void StartSimulatorBridge()
+    {
+        try
+        {
+            _bridge = new MainForm(false, promptForConnectionCode: false)
+            {
+                TopLevel = false,
+                FormBorderStyle = FormBorderStyle.None,
+                ShowInTaskbar = false,
+                Dock = DockStyle.Fill,
+                MinimumSize = Size.Empty
+            };
+            _simulatorWorkspace.Controls.Add(_bridge);
+            _bridge.Show();
+            _bridge.Hide();
+            _statusTimer.Start();
+        }
+        catch (Exception ex)
+        {
+            _simStatus.Text = "Simulator connection unavailable";
+            _simStatus.ForeColor = Color.FromArgb(245, 158, 158);
+            MessageBox.Show(
+                "The simulator connection could not start. You can still use NAVDECK.\n\n" +
+                ex.Message, "NAVDECK Desktop", MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+        }
+    }
+
+    private void ShowSimulatorWorkspace()
+    {
+        if (!_authenticated || _bridge is null || _bridge.IsDisposed) return;
+        _browser.Visible = false;
+        _simulatorWorkspace.Visible = true;
+        _simulatorWorkspace.BringToFront();
+        _bridge.Show();
+        _bridge.BringToFront();
+        _status.Text = "Simulator Connection  /  NAVDECK Desktop";
+        foreach (var button in _navButtons.Values)
+        {
+            button.BackColor = Color.FromArgb(13, 19, 30);
+            button.ForeColor = Color.FromArgb(172, 190, 215);
+        }
+    }
+
+    private void ShowBrowserWorkspace()
+    {
+        _simulatorWorkspace.Visible = false;
+        if (_bridge is { IsDisposed: false }) _bridge.Hide();
+        _browser.Visible = true;
+        _browser.BringToFront();
+    }
+
     public DesktopForm()
     {
-        Text = "NAVDECK Desktop";
+        Text = "NAVDECK — Flight Operations";
         Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
         WindowState = FormWindowState.Maximized;
-        MinimumSize = new Size(1000, 700);
-        BackColor = Color.FromArgb(12, 17, 27);
+        MinimumSize = new Size(1100, 720);
+        Font = new Font("Segoe UI", 10f);
+        BackColor = Color.FromArgb(22, 23, 26);
 
         var toolbar = new Panel
         {
             Dock = DockStyle.Top,
-            Height = 48,
-            BackColor = Color.FromArgb(20, 27, 40)
+            Height = 70,
+            BackColor = Color.FromArgb(16, 23, 36)
         };
 
-        _status.Location = new Point(18, 16);
+        _status.Location = new Point(22, 22);
+        _status.Font = new Font("Segoe UI Semibold", 13f, FontStyle.Bold);
         toolbar.Controls.Add(_status);
 
         var bridgeButton = new Button
         {
-            Text = "SIMULATOR CONNECTION",
+            Text = "⚙  SIMULATOR",
             Dock = DockStyle.Right,
-            Width = 210,
+            Width = 185,
             FlatStyle = FlatStyle.Flat,
             BackColor = Color.FromArgb(30, 44, 66),
             ForeColor = Color.White
@@ -63,19 +161,17 @@ internal sealed class DesktopForm : Form
             if (_bridge is null || _bridge.IsDisposed)
                 return;
 
-            _bridge.Show();
-            _bridge.WindowState = FormWindowState.Normal;
-            _bridge.BringToFront();
-            _bridge.Activate();
+            ShowSimulatorWorkspace();
         };
 
         toolbar.Controls.Add(bridgeButton);
 
-        _simStatus.Location = new Point(230, 16);
+        _simStatus.Location = new Point(375, 26);
         toolbar.Controls.Add(_simStatus);
 
         _statusTimer.Tick += (_, _) =>
         {
+            _utcClock.Text = DateTime.UtcNow.ToString("HH:mm:ss") + "Z";
             if (_bridge is null || _bridge.IsDisposed)
                 return;
 
@@ -95,16 +191,38 @@ internal sealed class DesktopForm : Form
             }
         };
 
-        FormClosed += (_, _) => _statusTimer.Stop();
+        FormClosing += async (_, args) =>
+        {
+            if (_closingAfterCleanup || _staySignedIn.Checked ||
+                _browser.CoreWebView2 is null) return;
+            args.Cancel = true;
+            try
+            {
+                // Clear cookies, IndexedDB, local storage and Clerk session state.
+                await _browser.CoreWebView2.Profile.ClearBrowsingDataAsync();
+            }
+            catch (Exception)
+            {
+                // A new launch with Stay signed in disabled clears the profile again.
+            }
+            _closingAfterCleanup = true;
+            Close();
+        };
+        FormClosed += (_, _) =>
+        {
+            _statusTimer.Stop();
+            if (_bridge is { IsDisposed: false })
+                _bridge.Close();
+        };
 
 
         // Desktop navigation: independent of the website's existing navbar.
         var sidebar = new Panel
         {
             Dock = DockStyle.Left,
-            Width = 220,
-            BackColor = Color.FromArgb(25, 26, 31),
-            Padding = new Padding(12)
+            Width = 264,
+            BackColor = Color.FromArgb(29, 29, 33),
+            Padding = new Padding(15, 12, 12, 12)
         };
 
         var navigation = new FlowLayoutPanel
@@ -116,40 +234,123 @@ internal sealed class DesktopForm : Form
         };
 
         sidebar.Controls.Add(navigation);
+        var clockPanel = new Panel
+        {
+            Dock = DockStyle.Bottom,
+            Height = 166,
+            BackColor = Color.FromArgb(31, 31, 35)
+        };
+        clockPanel.Controls.Add(new Label
+        {
+            Text = "LOCAL OPERATIONS / ZULU",
+            Font = new Font("Segoe UI Semibold", 8f, FontStyle.Bold),
+            ForeColor = Color.FromArgb(124, 154, 188),
+            Location = new Point(14, 12),
+            AutoSize = true
+        });
+        clockPanel.Controls.Add(_utcClock);
+        clockPanel.Controls.Add(new Label
+        {
+            Text = "NAVDECK DESKTOP  •  v1.0",
+            Font = new Font("Segoe UI", 8f),
+            ForeColor = Color.FromArgb(114, 137, 165),
+            Location = new Point(14, 79),
+            AutoSize = true
+        });
+        sidebar.Controls.Add(clockPanel);
+        _simStatus.Location = new Point(14, 70);
+        _simStatus.Font = new Font("Segoe UI", 9f);
+        clockPanel.Controls.Add(_simStatus);
 
         var logo = new Label
         {
-            Text = "✈  NAVDECK",
-            ForeColor = Color.White,
-            Font = new Font("Segoe UI", 17, FontStyle.Bold),
-            Width = 190,
-            Height = 65,
+            Text = "↗  NAVDECK",
+            ForeColor = Color.FromArgb(244, 244, 248),
+            Font = new Font("Segoe UI Semibold", 17, FontStyle.Bold),
+            Width = 222,
+            Height = 56,
             TextAlign = ContentAlignment.MiddleLeft
         };
         navigation.Controls.Add(logo);
+
+        var navSearch = new TextBox
+        {
+            PlaceholderText = "⌕  Search navigation",
+            Width = 228,
+            Height = 38,
+            Font = new Font("Segoe UI", 10f),
+            BackColor = Color.FromArgb(40, 40, 45),
+            ForeColor = Color.White,
+            BorderStyle = BorderStyle.FixedSingle,
+            Margin = new Padding(0, 8, 0, 9)
+        };
+        navSearch.TextChanged += (_, _) =>
+        {
+            foreach (var item in _navButtons)
+                item.Value.Visible = item.Value.Text.Contains(
+                    navSearch.Text.Trim(), StringComparison.OrdinalIgnoreCase);
+        };
+        navigation.Controls.Add(navSearch);
+
+        var newFlightButton = new Button
+        {
+            Text = "＋   New flight",
+            Width = 228,
+            Height = 42,
+            TextAlign = ContentAlignment.MiddleLeft,
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(128, 60, 245),
+            ForeColor = Color.White,
+            Font = new Font("Segoe UI Semibold", 10, FontStyle.Bold),
+            Margin = new Padding(0, 0, 0, 11),
+            Cursor = Cursors.Hand
+        };
+        newFlightButton.FlatAppearance.BorderSize = 0;
+        newFlightButton.FlatAppearance.MouseOverBackColor = Color.FromArgb(145, 83, 252);
+        newFlightButton.Click += (_, _) =>
+        {
+            if (!_authenticated || _browser.CoreWebView2 is null) return;
+            ShowBrowserWorkspace();
+            SelectNavigation("▤   SimBrief");
+            _browser.CoreWebView2.Navigate("https://test.navdeck.online/settings");
+        };
+        navigation.Controls.Add(newFlightButton);
+
+        navigation.Controls.Add(new Label
+        {
+            Text = "WORKSPACE",
+            ForeColor = Color.FromArgb(127, 127, 138),
+            Font = new Font("Segoe UI", 8, FontStyle.Bold),
+            Width = 228, Height = 29,
+            Padding = new Padding(10, 7, 0, 0)
+        });
 
         void AddNavigation(string title, string route)
         {
             var button = new Button
             {
                 Text = title,
-                Width = 185,
-                Height = 44,
+                Width = 228,
+                Height = 42,
                 TextAlign = ContentAlignment.MiddleLeft,
                 FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(35, 36, 43),
-                ForeColor = Color.FromArgb(220, 222, 230),
-                Font = new Font("Segoe UI", 10),
-                Margin = new Padding(0, 3, 0, 3),
+                BackColor = Color.FromArgb(29, 29, 33),
+                ForeColor = Color.FromArgb(163, 163, 172),
+                Font = new Font("Segoe UI", 9.75f),
+                Margin = new Padding(0, 2, 0, 2),
                 Cursor = Cursors.Hand
             };
 
             button.FlatAppearance.BorderSize = 0;
             button.FlatAppearance.MouseOverBackColor =
-                Color.FromArgb(66, 46, 112);
+                Color.FromArgb(50, 50, 55);
 
+            _navButtons[title] = button;
             button.Click += (_, _) =>
             {
+                if (!_authenticated) return;
+                ShowBrowserWorkspace();
+                SelectNavigation(title);
                 if (_browser.CoreWebView2 is not null)
                     _browser.CoreWebView2.Navigate(
                         route.StartsWith("https://", StringComparison.Ordinal)
@@ -160,21 +361,22 @@ internal sealed class DesktopForm : Form
             navigation.Controls.Add(button);
         }
 
-        AddNavigation("Dashboard", "https://navdeck-desktop.local/map.html");
-        AddNavigation("My Flights", "/flights");
-        AddNavigation("SimBrief", "/settings");
-        AddNavigation("VATSIM", "/vatsim");
-        AddNavigation("Community", "/community");
-        AddNavigation("Logbook", "/logbook");
+        AddNavigation("◈   Overview", "https://navdeck-desktop.local/map.html");
+        AddNavigation("✈   My Flights", "/flights");
+        AddNavigation("▤   SimBrief", "/settings");
+        AddNavigation("◎   VATSIM", "/vatsim");
+        AddNavigation("⌂   NAVDECK Home", "/");
+        AddNavigation("▣   Logbook", "/logbook");
+        SelectNavigation("◈   Overview");
 
         var connectionButton = new Button
         {
-            Text = "Simulator Connection",
-            Width = 185,
-            Height = 44,
+            Text = "⚙   Simulator Connection",
+            Width = 228,
+            Height = 42,
             TextAlign = ContentAlignment.MiddleLeft,
             FlatStyle = FlatStyle.Flat,
-            BackColor = Color.FromArgb(66, 46, 112),
+            BackColor = Color.FromArgb(43, 43, 48),
             ForeColor = Color.White,
             Margin = new Padding(0, 16, 0, 3),
             Cursor = Cursors.Hand
@@ -186,33 +388,222 @@ internal sealed class DesktopForm : Form
             if (_bridge is null || _bridge.IsDisposed)
                 return;
 
-            _bridge.Show();
-            _bridge.WindowState = FormWindowState.Normal;
-            _bridge.BringToFront();
-            _bridge.Activate();
+            ShowSimulatorWorkspace();
         };
 
+        navigation.Controls.Add(new Label
+        {
+            Text = "SYSTEM",
+            ForeColor = Color.FromArgb(127, 127, 138),
+            Font = new Font("Segoe UI", 8, FontStyle.Bold),
+            Width = 228, Height = 40,
+            Padding = new Padding(10, 17, 0, 0)
+        });
         navigation.Controls.Add(connectionButton);
 
         _browser.Dock = DockStyle.Fill;
-        Controls.Add(_browser);
+        _workspace.Controls.Add(_browser);
+        _workspace.Controls.Add(_simulatorWorkspace);
+        Controls.Add(_workspace);
         Controls.Add(sidebar);
         Controls.Add(toolbar);
+        toolbar.Visible = false;
+        sidebar.Visible = false;
+        var loginHeader = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 64,
+            BackColor = Color.FromArgb(13, 19, 30)
+        };
+        loginHeader.Controls.Add(new Label
+        {
+            Text = "✈  NAVDECK  /  SECURE SIGN IN",
+            ForeColor = Color.White,
+            Font = new Font("Segoe UI Semibold", 13f, FontStyle.Bold),
+            Location = new Point(24, 20),
+            AutoSize = true
+        });
+        Controls.Add(loginHeader);
+
+        // NAVDECK credentials are entered only into the trusted Clerk website.
+        // The desktop shell remains locked until Clerk reports an active session.
+        var preferenceFile = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "NAVDECK", "Desktop", "stay-signed-in.txt");
+        try
+        {
+            _staySignedIn.Checked = !File.Exists(preferenceFile) ||
+                File.ReadAllText(preferenceFile).Trim() == "true";
+        }
+        catch (IOException) { _staySignedIn.Checked = false; }
+        catch (UnauthorizedAccessException) { _staySignedIn.Checked = false; }
+        _staySignedIn.CheckedChanged += async (_, _) =>
+        {
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(preferenceFile)!);
+                File.WriteAllText(preferenceFile,
+                    _staySignedIn.Checked ? "true" : "false");
+            }
+            catch (IOException) { /* Do not block sign-in for a preference write. */ }
+            catch (UnauthorizedAccessException) { }
+            // Honor changes made on the login screen immediately, not only
+            // after restarting the application.
+            if (!_staySignedIn.Checked && !_authenticated &&
+                _browser.CoreWebView2 is not null)
+            {
+                try
+                {
+                    await _browser.CoreWebView2.Profile.ClearBrowsingDataAsync();
+                    _browser.CoreWebView2.Navigate("https://test.navdeck.online/sign-in");
+                }
+                catch (Exception) { }
+            }
+        };
+        // The trusted Clerk login page is the entire workspace until
+        // an authenticated Clerk session is confirmed.
+        _staySignedIn.Dock = DockStyle.Right;
+        _staySignedIn.Padding = new Padding(12, 0, 22, 0);
+        loginHeader.Controls.Add(_staySignedIn);
+        var signOutButton = new Button
+        {
+            Text = "↪   Sign out",
+            Width = 208, Height = 46,
+            TextAlign = ContentAlignment.MiddleLeft,
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(24, 34, 51),
+            ForeColor = Color.FromArgb(181, 197, 217),
+            Cursor = Cursors.Hand,
+            Visible = false
+        };
+        signOutButton.FlatAppearance.BorderSize = 0;
+        signOutButton.Click += async (_, _) =>
+        {
+            if (_browser.CoreWebView2 is null || _signingOut) return;
+            _signingOut = true;
+            _authenticated = false;
+            ShowBrowserWorkspace();
+            toolbar.Visible = false;
+            sidebar.Visible = false;
+            loginHeader.Visible = true;
+            foreach (var button in _navButtons.Values) button.Enabled = false;
+            signOutButton.Visible = false;
+            _staySignedIn.Visible = true;
+            _statusTimer.Stop();
+            if (_bridge is { IsDisposed: false }) _bridge.Close();
+            _bridge = null;
+            try
+            {
+                // Revoke the Clerk session when already on the NAVDECK website.
+                if (Uri.TryCreate(_browser.CoreWebView2.Source,
+                        UriKind.Absolute, out var current) &&
+                    current.Host == "test.navdeck.online")
+                {
+                    await _browser.CoreWebView2.ExecuteScriptAsync(
+                        "window.Clerk?.signOut?.()");
+                }
+                // Cookies alone are not enough: Clerk can persist session data
+                // in local storage and IndexedDB.
+                await _browser.CoreWebView2.Profile.ClearBrowsingDataAsync();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    "Some session data could not be cleared. Close NAVDECK Desktop " +
+                    "before using this computer with another account.\n\n" +
+                    ex.Message, "NAVDECK Desktop", MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+            }
+            _browser.CoreWebView2.Navigate("https://test.navdeck.online/sign-in");
+            _status.Text = "Sign in  /  NAVDECK Desktop";
+            _signingOut = false;
+        };
+        signOutButton.Location = new Point(10, 107);
+        signOutButton.Width = 228;
+        signOutButton.Height = 38;
+        clockPanel.Controls.Add(signOutButton);
+        foreach (var button in _navButtons.Values) button.Enabled = false;
 
         Shown += async (_, _) =>
         {
-            _bridge = new MainForm(false);
-            _bridge.ShowInTaskbar = false;
-            _bridge.Opacity = 0;
-            _bridge.Show(this);
-            _bridge.Hide();
-            _bridge.Opacity = 1;
-            _statusTimer.Start();
-
             try
             {
-                await _browser.EnsureCoreWebView2Async();
+                // Keep one user profile, clearing all sign-in storage when
+                // the user opts out. This also honors checkbox changes at runtime.
+                var profile = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "NAVDECK", "Desktop", "WebView2");
+                Directory.CreateDirectory(profile);
+                var environment = await Microsoft.Web.WebView2.Core.CoreWebView2Environment
+                    .CreateAsync(userDataFolder: profile);
+                await _browser.EnsureCoreWebView2Async(environment);
                 _browser.CoreWebView2.Settings.AreDevToolsEnabled = false;
+                if (!_staySignedIn.Checked)
+                    await _browser.CoreWebView2.Profile.ClearBrowsingDataAsync();
+
+                // The signed-in signal must originate from the trusted NAVDECK site.
+                _browser.CoreWebView2.WebMessageReceived += (_, args) =>
+                {
+                    if (!Uri.TryCreate(args.Source, UriKind.Absolute, out var source) ||
+                        source.Scheme != Uri.UriSchemeHttps ||
+                        source.Host != "test.navdeck.online")
+                        return;
+                    try
+                    {
+                        using var document = System.Text.Json.JsonDocument.Parse(args.WebMessageAsJson);
+                        if (!document.RootElement.TryGetProperty("type", out var type) ||
+                            type.GetString() != "navdeck:auth") return;
+                        if (!document.RootElement.TryGetProperty("signedIn", out var signedIn) ||
+                            signedIn.ValueKind != System.Text.Json.JsonValueKind.True) return;
+                        if (_authenticated || _signingOut) return;
+                        _authenticated = true;
+                        loginHeader.Visible = false;
+                        toolbar.Visible = false;
+                        sidebar.Visible = true;
+                        signOutButton.Visible = true;
+                        if (_bridge is null || _bridge.IsDisposed)
+                            StartSimulatorBridge();
+                        foreach (var button in _navButtons.Values) button.Enabled = true;
+                        ShowBrowserWorkspace();
+                        _browser.CoreWebView2.Navigate("https://navdeck-desktop.local/map.html");
+                        SelectNavigation("◈   Overview");
+                    }
+                    catch (System.Text.Json.JsonException) { }
+                };
+                await _browser.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+                    """
+                    (() => {
+                      if (location.origin !== 'https://test.navdeck.online') return;
+                      // Continue monitoring while the user completes sign-in,
+                      // including slow sign-in, MFA and password recovery flows.
+                      const timer = setInterval(() => {
+                        const clerkSession = Boolean(
+                          window.Clerk?.user && window.Clerk?.session
+                        );
+                        // NAVDECK's protected pages only mount their navbar
+                        // after the Clerk signed-in check has passed.
+                        const protectedAppVisible = Boolean(
+                          document.querySelector('[data-testid="nav-logo"]')
+                        );
+                        if (clerkSession || protectedAppVisible) {
+                          clearInterval(timer);
+                          window.chrome.webview.postMessage({
+                            type:'navdeck:auth', signedIn:true
+                          });
+                        }
+                      }, 1000);
+                    })();
+                    """);
+
+                // Prevent unauthenticated navigation to local app content.
+                _browser.CoreWebView2.NavigationStarting += (_, navigation) =>
+                {
+                    if (_authenticated) return;
+                    if (Uri.TryCreate(navigation.Uri, UriKind.Absolute, out var destination) &&
+                        destination.Host == "navdeck-desktop.local")
+                        navigation.Cancel = true;
+                };
+
                 // Only the packaged desktop map may request simulator telemetry.
                 const string mapOrigin = "https://navdeck-desktop.local";
                 var mapFolder = Path.Combine(AppContext.BaseDirectory, "desktop-map");
@@ -226,28 +617,30 @@ internal sealed class DesktopForm : Form
                       if (location.origin !== 'https://navdeck-desktop.local') return;
                       let nextId = 0;
                       const pending = new Map();
-                      window.navdeckDesktop = {
-                        getTelemetry() {
-                          return new Promise(resolve => {
-                            const id = ++nextId;
-                            const timeout = setTimeout(() => {
-                              pending.delete(id);
-                              resolve(null);
-                            }, 3000);
-                            pending.set(id, value => {
-                              clearTimeout(timeout);
-                              resolve(value);
-                            });
-                            window.chrome.webview.postMessage({type:'navdeck:getTelemetry',id});
+                      function request(type, timeoutMs) {
+                        return new Promise(resolve => {
+                          const id = ++nextId;
+                          const timeout = setTimeout(() => {
+                            pending.delete(id);
+                            resolve(null);
+                          }, timeoutMs);
+                          pending.set(id, value => {
+                            clearTimeout(timeout);
+                            resolve(value);
                           });
-                        }
+                          window.chrome.webview.postMessage({type,id});
+                        });
+                      }
+                      window.navdeckDesktop = {
+                        getTelemetry() { return request('navdeck:getTelemetry', 3000); },
+                        getTraffic() { return request('navdeck:getTraffic', 16000); }
                       };
                       window.chrome.webview.addEventListener('message', event => {
-                        if (event.data?.type !== 'navdeck:telemetry') return;
+                        if (!['navdeck:telemetry','navdeck:traffic'].includes(event.data?.type)) return;
                         const resolve = pending.get(event.data.id);
                         if (resolve) {
                           pending.delete(event.data.id);
-                          resolve(event.data.telemetry ?? null);
+                          resolve(event.data.telemetry ?? event.data.aircraft ?? null);
                         }
                       });
                     })();
@@ -269,18 +662,29 @@ internal sealed class DesktopForm : Form
                             !id.TryGetInt32(out int requestId))
                             return;
 
-                        var sample = _bridge?.LiveAircraftSample;
-                        object? telemetry = sample is { } t
-                            ? new
-                            {
-                                lat = t.Lat,
-                                lon = t.Lon,
-                                altitude_ft = t.AltFt,
-                                groundspeed_kt = t.GroundSpeedKt,
-                                heading_deg = t.HeadingDeg,
-                                fuel_lb = t.FuelLb
-                            }
-                            : null;
+                        var sample = _authenticated ? _bridge?.LiveAircraftSample : null;
+                        var telemetry = new
+                        {
+                            lat = sample?.Lat,
+                            lon = sample?.Lon,
+                            altitude_ft = sample?.AltFt,
+                            groundspeed_kt = sample?.GroundSpeedKt,
+                            heading_deg = sample?.HeadingDeg,
+                            fuel_lb = sample?.FuelLb,
+                            aircraft = _bridge?.SimulatorAircraft,
+                            flight = _bridge?.LiveFlightCallsign,
+                            route = _bridge?.LiveFlightRoute,
+                            stage = _bridge?.LiveFlightStage,
+                            waypoints = _bridge?.LiveWaypointSummary,
+                            flight_plan = _bridge?.LivePendingWaypoints
+                                .Where(f => double.IsFinite(f.Lat) && double.IsFinite(f.Lon) &&
+                                    Math.Abs(f.Lat) <= 90 && Math.Abs(f.Lon) <= 180)
+                                .Take(300)
+                                .Select(f => new { ident = f.Ident, lat = f.Lat, lon = f.Lon })
+                                .ToArray(),
+                            sim_connected = _bridge?.SimulatorConnected == true,
+                            navdeck_connected = _bridge?.NavdeckConnected == true
+                        };
 
                         _browser.CoreWebView2.PostWebMessageAsJson(
                             System.Text.Json.JsonSerializer.Serialize(
@@ -289,6 +693,44 @@ internal sealed class DesktopForm : Form
                     catch (Exception)
                     {
                         // Ignore malformed or unrelated web messages.
+                    }
+                };
+
+                // Public VATSIM flight-simulation traffic is fetched by the
+                // native app, so the locally bundled map needs no cross-origin
+                // network permission or access to the user's login session.
+                _browser.CoreWebView2.WebMessageReceived += async (_, args) =>
+                {
+                    if (!_authenticated ||
+                        !Uri.TryCreate(args.Source, UriKind.Absolute, out var sender) ||
+                        sender.GetLeftPart(UriPartial.Authority) != mapOrigin)
+                        return;
+                    try
+                    {
+                        using var message = System.Text.Json.JsonDocument.Parse(
+                            args.WebMessageAsJson);
+                        var root = message.RootElement;
+                        if (!root.TryGetProperty("type", out var type) ||
+                            type.GetString() != "navdeck:getTraffic" ||
+                            !root.TryGetProperty("id", out var id) ||
+                            !id.TryGetInt32(out var requestId))
+                            return;
+
+                        var traffic = await _vatsimTraffic.GetAsync();
+                        if (!_authenticated || _browser.IsDisposed ||
+                            _browser.CoreWebView2 is null) return;
+
+                        _browser.CoreWebView2.PostWebMessageAsJson(
+                            System.Text.Json.JsonSerializer.Serialize(new
+                            {
+                                type = "navdeck:traffic",
+                                id = requestId,
+                                aircraft = traffic
+                            }));
+                    }
+                    catch (Exception)
+                    {
+                        // Network availability and WebView2 shutdown are nonfatal.
                     }
                 };
 
@@ -308,35 +750,64 @@ internal sealed class DesktopForm : Form
                         return;
 
                     const string desktopCss = """
+                        :root { color-scheme: dark; }
+
                         .navdeck-sidebar,
-                        .navdeck-topbar {
+                        .navdeck-topbar,
+                        header:has([data-testid="nav-logo"]) {
                             display: none !important;
                         }
 
-                        body {
+                        html, body, .App {
+                            background: #1c1c20 !important;
+                            color: #eeeeef;
                             margin: 0 !important;
-                            background: #111318 !important;
+                            min-height: 100%;
                         }
 
-                        /* Desktop workspace fills the application. */
+                        /* Website functions retain their React logic, but their
+                           workspace chrome follows the native desktop theme. */
                         main {
-                            margin-left: 0 !important;
-                            padding-top: 24px !important;
+                            margin: 0 !important;
+                            padding: 22px 22px 32px !important;
                             max-width: none !important;
                             width: 100% !important;
+                            min-width: 0 !important;
                             box-sizing: border-box !important;
+                            background: #1c1c20 !important;
                         }
 
-                        /* Remove website navigation spacing. */
                         .navdeck-sidebar + main,
                         .navdeck-topbar + main {
                             margin-left: 0 !important;
                         }
 
-                        /* Keep flight panels within the workspace. */
-                        main > * {
-                            min-width: 0;
+                        .App main > * { min-width: 0; }
+
+                        .App main div[class*="bg-gradient-to-"] {
+                            background-image: none !important;
+                            background-color: #2a2b30 !important;
+                            border: 1px solid #393a40 !important;
                         }
+
+                        .App main [class*="rounded-[28px]"],
+                        .App main [class*="rounded-[32px]"] {
+                            border-radius: 10px !important;
+                        }
+
+                        .App main button,
+                        .App main input,
+                        .App main select {
+                            border-radius: 6px !important;
+                        }
+
+                        .App main button:focus-visible,
+                        .App main a:focus-visible {
+                            outline: 2px solid #9c6bfa !important;
+                            outline-offset: 2px;
+                        }
+
+                        ::selection { background: #7e43c5; color: #fff; }
                         """;
 
                     var script = """
@@ -352,6 +823,7 @@ internal sealed class DesktopForm : Form
                             }
 
                             style.textContent = CSS_TEXT;
+                            document.documentElement.classList.add('dark');
                         })();
                         """;
 
@@ -370,10 +842,52 @@ internal sealed class DesktopForm : Form
                     }
                 };
 
+                _browser.CoreWebView2.SourceChanged += (_, _) =>
+                {
+                    if (!_authenticated || _simulatorWorkspace.Visible ||
+                        !Uri.TryCreate(_browser.CoreWebView2.Source,
+                            UriKind.Absolute, out var uri)) return;
+
+                    if (uri.Host == "navdeck-desktop.local")
+                    {
+                        SelectNavigation("◈   Overview");
+                        return;
+                    }
+                    if (uri.Host != "test.navdeck.online") return;
+                    var current = uri.AbsolutePath;
+                    if (current.StartsWith("/sign-in", StringComparison.OrdinalIgnoreCase) ||
+                        current.StartsWith("/sign-up", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // An expired web session must return to the login gate.
+                        _authenticated = false;
+                        _statusTimer.Stop();
+                        if (_bridge is { IsDisposed: false }) _bridge.Close();
+                        _bridge = null;
+                        loginHeader.Visible = true;
+                        sidebar.Visible = false;
+                        toolbar.Visible = false;
+                        signOutButton.Visible = false;
+                        _staySignedIn.Visible = true;
+                        _status.Text = "Sign in  /  NAVDECK Desktop";
+                        foreach (var button in _navButtons.Values) button.Enabled = false;
+                        return;
+                    }
+                    SelectNavigation(
+                        current.StartsWith("/flights", StringComparison.OrdinalIgnoreCase)
+                            ? "✈   My Flights"
+                        : current.StartsWith("/settings", StringComparison.OrdinalIgnoreCase)
+                            ? "▤   SimBrief"
+                        : current.StartsWith("/vatsim", StringComparison.OrdinalIgnoreCase)
+                            ? "◎   VATSIM"
+                        : current.StartsWith("/logbook", StringComparison.OrdinalIgnoreCase)
+                            ? "▣   Logbook"
+                        : "⌂   NAVDECK Home");
+                };
+
                 _browser.CoreWebView2.Navigate(
-                    "https://navdeck-desktop.local/map.html"
+                    "https://test.navdeck.online/sign-in"
                 );
-                _status.Text = "NAVDECK Desktop | Live map";
+                _status.Text = "Sign in  /  NAVDECK Desktop";
             }
             catch (Exception ex)
             {
