@@ -1,0 +1,44 @@
+// Landing: touchdown plotter, landing rate and the go-around log.
+import { S, h, fmtT, fmtAlt, num, setF } from '../core.js';
+import { drawTouchdown, lateralText, rateRating, rateClass, modal } from '../widgets.js';
+import { GO_AROUND_REASONS } from '../data.js';
+
+async function editReason(i) {
+  const g = S.flight.goArounds[i];
+  const select = h('select', { class: 'input' }, h('option', { value: '' }, 'Choose the reason…'), GO_AROUND_REASONS.map(r => h('option', { value: r, selected: r === g.reason }, r)));
+  const remark = h('input', { class: 'input', type: 'text', value: g.remark || '', placeholder: 'Remarks' });
+  const ok = await modal({ title: `Go-around at ${fmtT(g.time)}z`, body: h('div', { class: 'stack' }, select, remark), buttons: [{ label: 'Cancel', value: false }, { label: 'Save', value: true, primary: true }] });
+  if (!ok) return;
+  await setF(['goArounds', i, 'reason'], select.value);
+  await setF(['goArounds', i, 'remark'], remark.value.trim());
+}
+
+export default {
+  deps: ['flight', 'settings'],
+  render(root) {
+    const f = S.flight, l = f.landing;
+    const canvas = h('canvas', { style: { width: '100%', height: '260px', display: 'block', borderRadius: '10px' } });
+    root.append(h('div', { class: 'page-head' }, h('h2', null, 'Landing')),
+      h('div', { class: 'grid' },
+        h('div', { class: 'card c4' }, h('h3', null, 'Landing rate'),
+          h('div', { class: 'big mono ' + rateClass(l?.rate) }, l?.rate != null ? num(l.rate) + ' fpm' : '--'),
+          h('div', { class: 'muted', style: { marginTop: '6px' } }, l?.rate != null ? rateRating(l.rate) : 'Recorded automatically at touchdown')),
+        h('div', { class: 'card c8' }, h('h3', null, 'Touchdown'),
+          h('div', { class: 'kv' },
+            h('div', null, h('span', null, 'Runway'), h('b', null, l?.runway ? `${l.runway} ${l.airport || ''}` : '--')),
+            h('div', null, h('span', null, 'From threshold'), h('b', { class: 'mono' }, l?.distFt != null ? fmtAlt(l.distFt) : '--')),
+            h('div', null, h('span', null, 'Centreline'), h('b', null, l?.offsetFt != null ? lateralText(l.offsetFt) : '--')),
+            h('div', null, h('span', null, 'Ground speed'), h('b', { class: 'mono' }, l?.gsKt != null ? num(l.gsKt) + ' kt' : '--')),
+            h('div', null, h('span', null, 'Time'), h('b', { class: 'mono' }, fmtT(f.times.on) + (f.times.on ? 'z' : ''))))),
+        h('div', { class: 'card c12' }, h('h3', null, 'Touchdown plotter'), canvas),
+        h('div', { class: 'card c12' }, h('h3', null, 'Go-arounds'),
+          f.goArounds.length ? h('table', { class: 'tbl' },
+            h('thead', null, h('tr', null, ['Time', 'Height', 'Reason', 'Remarks', ''].map(x => h('th', null, x)))),
+            h('tbody', null, f.goArounds.map((g, i) => h('tr', null,
+              h('td', { class: 'mono' }, fmtT(g.time) + 'z'), h('td', { class: 'mono' }, g.raFt != null ? fmtAlt(Math.round(g.raFt)) + ' AGL' : '--'),
+              h('td', null, g.reason ? g.reason : h('span', { class: 'tag bad' }, 'Reason required')), h('td', null, g.remark || ''),
+              h('td', { style: { width: '90px' } }, !f.closed && h('button', { class: 'btn small', onclick: () => editReason(i) }, g.reason ? 'Edit' : 'Enter'))))))
+            : h('div', { class: 'empty' }, 'No go-arounds detected on this flight.'))));
+    requestAnimationFrame(() => drawTouchdown(canvas, l));
+  },
+};

@@ -1,0 +1,111 @@
+name: NAVDECK EFB Windows Build
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'efb/**'
+      - '.github/workflows/navdeck-efb.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'efb/**'
+      - '.github/workflows/navdeck-efb.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Check interface JavaScript syntax
+        shell: pwsh
+        run: |
+          Get-ChildItem efb/web/js -Recurse -Filter *.js | ForEach-Object { node --check $_.FullName; if ($LASTEXITCODE -ne 0) { exit 1 } }
+
+      - name: Bundle the PDF viewer (pdf.js) for charts and documents
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path efb/web/vendor, pdfjs-tmp | Out-Null
+          Push-Location pdfjs-tmp
+          npm pack pdfjs-dist@3.11.174 --silent
+          tar -xzf (Get-ChildItem *.tgz | Select-Object -First 1).Name
+          Pop-Location
+          Copy-Item pdfjs-tmp/package/legacy/build/pdf.min.js efb/web/vendor/pdf.min.js
+          Copy-Item pdfjs-tmp/package/legacy/build/pdf.worker.min.js efb/web/vendor/pdf.worker.min.js
+          Copy-Item pdfjs-tmp/package/LICENSE efb/web/vendor/pdfjs-LICENSE.txt
+
+      - name: Install .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore efb/host/NavdeckEFB.csproj -r win-x64
+
+      - name: Build Windows application
+        run: >
+          dotnet publish efb/host/NavdeckEFB.csproj
+          --configuration Release
+          --runtime win-x64
+          --self-contained true
+          --no-restore
+          --output efb-output
+
+      - name: Self-test (simulated flight through the real engine, storage and server)
+        shell: pwsh
+        run: |
+          $out = Join-Path $PWD 'efb-selftest'
+          $p = Start-Process -FilePath (Join-Path $PWD 'efb-output\NavdeckEFB.exe') -ArgumentList '--selftest', "`"$out`"" -Wait -PassThru
+          if (Test-Path "$out\selftest.txt") { Get-Content "$out\selftest.txt" } else { Write-Host 'No self-test report was written.' }
+          if ($p.ExitCode -ne 0) { throw "Self-test failed with exit code $($p.ExitCode)" }
+
+      - name: Upload self-test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: NAVDECK-EFB-SelfTest
+          path: efb-selftest/selftest.txt
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Install Inno Setup
+        shell: powershell
+        run: choco install innosetup --yes --no-progress
+
+      - name: Package Windows installer
+        shell: powershell
+        run: |
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (!(Test-Path $iscc)) { $iscc = Join-Path $env:ProgramFiles 'Inno Setup 6\ISCC.exe' }
+          if (!(Test-Path $iscc)) { throw 'Inno Setup compiler not found' }
+          & $iscc efb/host/installer.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: NAVDECK-EFB-Installer-x64
+          path: efb-installer/*.exe
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish installer to GitHub Releases
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "efb-" + "${{ github.run_number }}"
+          gh release create $tag (Get-Item efb-installer/*.exe).FullName --target $env:GITHUB_SHA --title "NAVDECK EFB $tag" --notes "NAVDECK EFB for Windows x64. Connects to the simulator through FSUIPC7 and records times, fuel and the touchdown automatically. Open it on an iPad or tablet on the same Wi-Fi using the address shown in Settings > Tablets."
