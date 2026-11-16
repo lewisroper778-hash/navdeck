@@ -203,7 +203,7 @@ function signed(v,suffix=''){return v===null||!Number.isFinite(v)?'—':(v>0?'+'
 
 const isDemo=new URL(location.href).searchParams.get('demo')==='1';
 let id=new URL(location.href).searchParams.get('id'),f=null,
-    section=location.hash==='#enroute'?'enroute':'briefing',
+    section=location.hash==='#enroute'?'enroute':location.hash==='#close'?'close':'briefing',
     pending=false,ink=false,latestSample=null,wpPage=0;
 function message(text,error=false){let x=d('statusMsg');x.hidden=false;x.className='message '+(error?'err':'good');x.textContent=text}
 function clear(){d('statusMsg').hidden=true}
