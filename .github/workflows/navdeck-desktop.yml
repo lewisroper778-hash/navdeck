@@ -5,6 +5,7 @@ on:
   pull_request:
     paths:
       - 'desktop/**'
+      - 'backend/**'
       - '.github/workflows/navdeck-desktop.yml'
 
 permissions:
@@ -22,6 +23,10 @@ jobs:
         shell: pwsh
         run: |
           python -m py_compile backend/bridge.py backend/server.py
+
+      - name: Test strict waypoint and fuel reporting rules
+        shell: pwsh
+        run: python -m unittest backend.tests.test_desktop_reporting_validation -v
 
       - name: Verify locally bundled dashboard JavaScript syntax
         shell: pwsh
