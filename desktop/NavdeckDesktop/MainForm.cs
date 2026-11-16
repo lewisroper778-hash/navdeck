@@ -1010,40 +1010,30 @@ internal sealed class MainForm : Form
 
     private void ToggleStartup()
     {
-        var ini = Fsuipc7Setup.FindIni();
-        if (ini is null)
-        {
-            using var pick = new OpenFileDialog { Title = "Find FSUIPC7.ini (in your FSUIPC7 folder)", Filter = "FSUIPC7.ini|FSUIPC7.ini" };
-            if (pick.ShowDialog(this) != DialogResult.OK) return;
-            ini = pick.FileName;
-        }
         try
         {
-            if (Fsuipc7Setup.IsInstalled(ini))
-            {
-                Fsuipc7Setup.Uninstall(ini);
-                Log("Removed from FSUIPC7 start-up");
-            }
-            else
-            {
-                Fsuipc7Setup.Install(ini, Application.ExecutablePath);
-                Log("Added to FSUIPC7: opens when MSFS is ready, closes with the sim");
-                MessageBox.Show(this, "Done. Restart FSUIPC7 (or MSFS) once so it picks this up.\n\nKeep NavdeckLink.exe where it is now; if you move it, click this button again.", "NAVDECK Link", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            }
+            var enabled = SimulatorAutostart.Toggle();
+            Log(enabled
+                ? "NAVDECK will open automatically when MSFS 2020/2024 starts"
+                : "Automatic simulator launch disabled");
+            MessageBox.Show(this, enabled
+                ? "NAVDECK will now start quietly with Windows and open automatically when MSFS 2020 or 2024 is running. No FSUIPC startup configuration or administrator access is required. The setting takes effect at your next Windows sign-in."
+                : "NAVDECK will no longer start automatically with the simulator.",
+                "NAVDECK Desktop", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
-            MessageBox.Show(this, $"Couldn't update FSUIPC7.ini: {ex.Message}\n\nIf FSUIPC7 is installed under Program Files, run NAVDECK Link as administrator once.", "NAVDECK Link", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, "Unable to update Windows startup settings: " + ex.Message,
+                "NAVDECK Desktop", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
         UpdateStartupButton();
     }
 
     private void UpdateStartupButton()
     {
-        var ini = Fsuipc7Setup.FindIni();
-        var on = ini is not null && Fsuipc7Setup.IsInstalled(ini);
-        _startup.Text = on ? "Opens with sim ✓" : "Open with simulator";
-        _startup.BackColor = on ? Theme.Green : Theme.Line;
+        var enabled = SimulatorAutostart.IsEnabled();
+        _startup.Text = enabled ? "Opens with MSFS ✓" : "Open with simulator";
+        _startup.BackColor = enabled ? Theme.Green : Theme.Line;
     }
 
     private void RefreshView()
