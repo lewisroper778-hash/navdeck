@@ -340,7 +340,8 @@ internal sealed class DesktopForm : Form
                         getLogbook: () => request('getLogbook'),
                         getProfile: () => request('getProfile'),
                         saveProfile: (payload) => request('saveProfile', payload),
-                        importSimbrief: () => request('importSimbrief')
+                        importSimbrief: () => request('importSimbrief'),
+                        openSimbrief: (payload) => request('openSimbrief', payload)
                       });
                       window.chrome.webview.addEventListener('message', event => {
                         if (event.data?.type !== 'navdeck:result') return;
@@ -393,6 +394,27 @@ internal sealed class DesktopForm : Form
                                     aircraft = _bridge?.SimulatorAircraft
                                 }
                                 : null;
+                        }
+                        else if (action == "openSimbrief")
+                        {
+                            if (!root.TryGetProperty("payload", out var payload) ||
+                                !payload.TryGetProperty("url", out var target) ||
+                                target.ValueKind != System.Text.Json.JsonValueKind.String ||
+                                !Uri.TryCreate(target.GetString(), UriKind.Absolute,
+                                    out var external) ||
+                                external.Scheme != Uri.UriSchemeHttps ||
+                                external.Host != "dispatch.simbrief.com" ||
+                                external.AbsolutePath != "/options/custom" ||
+                                external.AbsoluteUri.Length > 2048)
+                                throw new ArgumentException("Invalid SimBrief planner link");
+
+                            System.Diagnostics.Process.Start(
+                                new System.Diagnostics.ProcessStartInfo
+                                {
+                                    FileName = external.AbsoluteUri,
+                                    UseShellExecute = true
+                                });
+                            data = new { opened = true };
                         }
                         else if (action == "downloadReport")
                         {
