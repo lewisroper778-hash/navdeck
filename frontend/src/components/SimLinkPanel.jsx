@@ -45,6 +45,7 @@ export default function SimLinkPanel({ api }) {
         {STEPS.map((s) => <li key={s}>{s}</li>)}
       </ol>
       <div className="mt-4 flex flex-wrap gap-2">
+        <a data-testid="navdeck-desktop-download" href="https://github.com/lewisroper778-hash/navdeck/releases/latest/download/NAVDECK-Desktop-Redesign-Setup-x64.exe" className={btnPrimary}><Download className="h-4 w-4" /> Download NAVDECK Desktop (Windows)</a>
         <a data-testid="sim-link-download" href="/downloads/NavdeckLink.exe" download className={btnGhost}><Download className="h-4 w-4" /> Download NAVDECK Link (Windows, 70 MB)</a>
         <button data-testid="sim-link-create" onClick={create} className={btnPrimary}><RefreshCw className="h-4 w-4" /> {status?.paired ? "New connection code" : "Create connection code"}</button>
         {status?.paired && <button data-testid="sim-link-unlink" onClick={unlink} className={btnGhost}><Unlink className="h-4 w-4" /> Disconnect</button>}
