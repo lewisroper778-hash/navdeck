@@ -492,8 +492,9 @@ function closeFlight(){
  panel('Archive and export','<p class="muted">Closed flights are saved to NAVDECK Logbook. A signed PDF report can be saved directly to your PC.</p><div class="mini-actions"><button class="button ghost" id="print">Print flight summary</button>'+
  (closed?'<button class="button primary" id="pdf">Download signed PDF</button>':'')+'</div>');
 }
+let liveRefreshBusy=false;
 async function refreshLive(){
- if(!f||section!=='enroute'||!d('liveConnection'))return;
+ if(liveRefreshBusy||!f||section!=='enroute'||!d('liveConnection'))return;
  if(isDemo){
    d('liveConnection').textContent='DEMO / NO SIM';
    d('liveConnection').className='disconnected';
@@ -505,6 +506,7 @@ async function refreshLive(){
  }
  const utc=new Date().toISOString().slice(11,19)+'Z';
  d('liveUtc').textContent=utc;
+ liveRefreshBusy=true;
  try{
    const t=await api('getTelemetry');
    latestSample=t||null;
@@ -519,7 +521,7 @@ async function refreshLive(){
  }catch{
    latestSample=null;
    if(d('liveConnection')){d('liveConnection').textContent='Unavailable';d('liveConnection').className='disconnected';}
- }
+ }finally{liveRefreshBusy=false;}
 }
 function bind(){
  if(section==='briefing'){
