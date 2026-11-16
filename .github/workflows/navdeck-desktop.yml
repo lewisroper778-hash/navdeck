@@ -35,6 +35,29 @@ jobs:
           --no-restore
           --output desktop-output
 
+
+      - name: Install Inno Setup
+        shell: powershell
+        run: |
+          choco install innosetup --yes --no-progress
+
+      - name: Package Windows installer
+        shell: powershell
+        run: |
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (!(Test-Path $iscc)) { $iscc = Join-Path $env:ProgramFiles 'Inno Setup 6\ISCC.exe' }
+          if (!(Test-Path $iscc)) { throw 'Inno Setup compiler not found' }
+          & $iscc desktop/NavdeckDesktop/installer.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: NAVDECK-Desktop-Redesign-Installer-x64
+          path: installer-output/*.exe
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Upload Windows application
         uses: actions/upload-artifact@v4
         with:
