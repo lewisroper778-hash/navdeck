@@ -1,0 +1,33 @@
+name: NAVDECK frontend build check
+
+on:
+  push:
+    branches: [main, 'feature/**']
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/navdeck-frontend-check.yml'
+  pull_request:
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/navdeck-frontend-check.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout NAVDECK
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm install --no-audit --no-fund
+      - name: Build Clerk desktop handoff and website
+        working-directory: frontend
+        env:
+          CI: 'false'
+          REACT_APP_BACKEND_URL: https://navdeck-backend.onrender.com
+        run: npm run build
