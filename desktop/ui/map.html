@@ -229,7 +229,7 @@
       const response=await window.navdeckDesktop.getFlight();
       const f=response?.flight;
       if(!f){
-        cloudFlightId=null;el('openFlight').disabled=true;
+        cloudFlightId=null;
         el('routeStatus').textContent='No active flight';
         el('routeSub').textContent='Import an OFP from SimBrief';
         el('nextFix').textContent='Next fix: —';
@@ -254,7 +254,8 @@
   };
   setupMap();
   syncCloudFlight();setInterval(syncCloudFlight,30000);
-  pollTelemetry();setInterval(pollTelemetry,1200);
+  pollTelemetry();
+  setInterval(()=>{if(!document.hidden)pollTelemetry();},1800);
 
 })();
 </script>
