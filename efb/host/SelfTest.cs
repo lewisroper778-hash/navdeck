@@ -35,6 +35,18 @@ internal static class SelfTest
             using var store = new Store(dataDir);
             var engine = new FlightEngine(store, Task.FromResult(db));
 
+            // bundled QRH and FCOM manuals are added to Documents once, and a deleted one is not re-added
+            var docsDir = Path.Combine(store.LibraryDir, "docs");
+            var manuals = Directory.Exists(docsDir) ? Directory.GetFiles(docsDir, "*.pdf", SearchOption.AllDirectories) : Array.Empty<string>();
+            Check(manuals.Count(m => m.EndsWith(" QRH.pdf")) >= 30 && manuals.Count(m => m.EndsWith(" FCOM.pdf")) >= 30, $"QRH and FCOM manuals in Documents ({manuals.Length} files)");
+            var sample = manuals.FirstOrDefault(m => m.Contains("A320neo QRH"));
+            Check(sample is not null, "A320neo QRH is filed under its family folder");
+            if (sample is not null)
+            {
+                File.Delete(sample);
+                Check(store.SeedManuals(Path.Combine(AppContext.BaseDirectory, "manuals")) == 0 && !File.Exists(sample), "a deleted manual is not added back");
+            }
+
             // flight plan: two fixes on the way, then the arrival airport
             var runwayBearing = Bearing(thr.Lat, thr.Lon, thr.OtherLat, thr.OtherLon);
             var takeoffPoint = MoveBy(gat.Lat, gat.Lon, 80, 600);

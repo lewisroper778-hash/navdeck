@@ -1,5 +1,6 @@
 // App shell: navigation, top bar, themes, airline profiles, notifications and automatic company messages.
 import { S, on, loadState, connectEvents, h, fmtT, now, usingSimClock, fmtW, fmtAlt, num, stageName, flightTitle, setF, setS, onError, addNotice, nowIso } from './core.js';
+import { airlinesReady, airlineCode } from './airlines.js';
 import { ALL_TABS, OCC_TEMPLATES } from './data.js';
 import { toast, modal } from './widgets.js';
 import flight from './tabs/flight.js';
@@ -69,7 +70,7 @@ view.addEventListener('focusout', () => setTimeout(() => { if (dirty) refresh('f
 export function activeProfile() {
   const list = S.settings.profiles || [];
   return list.find(p => p.id === S.flight.profile)
-    || list.find(p => p.icao && S.flight.airline && p.icao.toUpperCase() === S.flight.airline.toUpperCase())
+    || list.find(p => p.icao && airlineCode(S.flight) && p.icao.toUpperCase() === airlineCode(S.flight))
     || list.find(p => p.id === S.settings.activeProfile) || null;
 }
 function applyTheme() {
@@ -201,7 +202,7 @@ async function start() {
     if (!bell.querySelector('.dot')) bell.append(h('span', { class: 'dot' }, '!'));
   });
   for (let attempt = 0; ; attempt++) {
-    try { await loadState(); break; } catch (e) {
+    try { await Promise.all([loadState(), airlinesReady]); break; } catch (e) {
       document.getElementById('boot').textContent = 'Waiting for the NAVDECK EFB host…';
       await new Promise(r => setTimeout(r, 1500));
     }

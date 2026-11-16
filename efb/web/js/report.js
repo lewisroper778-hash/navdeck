@@ -4,6 +4,7 @@ import { drawTouchdown, lateralText, rateRating } from './widgets.js';
 import { navTimes } from './tabs/navlog.js';
 import { loadSheetText, loadFigures } from './tabs/loads.js';
 import { SPECIAL_CODES } from './data.js';
+import { airlinesReady, airlineOf } from './airlines.js';
 
 const q = new URLSearchParams(location.search);
 const section = (title, ...kids) => h('div', { class: 'section' }, h('h2', null, title), ...kids);
@@ -12,18 +13,19 @@ const td = (v, cls) => h('td', { class: cls || '' }, v);
 
 function build() {
   const f = S.flight, t = f.times, fu = f.fuel, st = S.settings;
-  const profile = (st.profiles || []).find(p => p.id === f.profile) || (st.profiles || []).find(p => p.icao && p.icao.toUpperCase() === (f.airline || '').toUpperCase());
+  const airline = airlineOf(f);
+  const profile = (st.profiles || []).find(p => p.id === f.profile) || (st.profiles || []).find(p => p.icao && p.icao.toUpperCase() === (airline?.icao || ''));
   const burn = fu.out != null && fu.in != null ? fu.out - fu.in : null;
   const page = document.getElementById('page');
   const parts = [];
 
   parts.push(h('div', { class: 'band' }, profile?.logo ? h('img', { class: 'airline', src: profile.logo, alt: '' }) : h('img', { src: 'img/logo.svg', alt: '' }),
-    h('h1', null, profile?.name || st.company || 'NAVDECK'), h('div', { class: 'right' }, 'JOURNEY LOG', h('br'), fmtDate(t.out || t.off || f.created))));
+    h('h1', null, profile?.name || airline?.name || st.company || 'NAVDECK'), h('div', { class: 'right' }, 'JOURNEY LOG', h('br'), fmtDate(t.out || t.off || f.created))));
 
   const body = h('div', { class: 'body' });
   body.append(
     h('div', { class: 'route' }, f.dep || '----', h('span', null, '→'), f.diversion ? f.diversion.to : (f.arr || '----')),
-    h('div', { class: 'sub' }, [f.flightNo || f.callsign, [f.type, f.reg].filter(Boolean).join(' '), f.depName && f.arrName ? `${f.depName} to ${f.arrName}` : '', f.closed ? '' : 'DRAFT, NOT SIGNED'].filter(Boolean).join('   |   ')),
+    h('div', { class: 'sub' }, [f.flightNo || f.callsign, airline && [airline.name, [airline.iata, airline.icao].filter(Boolean).join(' / ')].filter(Boolean).join(' '), [f.type, f.reg].filter(Boolean).join(' '), f.depName && f.arrName ? `${f.depName} to ${f.arrName}` : '', f.closed ? '' : 'DRAFT, NOT SIGNED'].filter(Boolean).join('   |   ')),
     h('div', { class: 'tiles' },
       h('div', { class: 'tile' }, h('span', null, 'Block time'), h('b', null, fmtDur(diffMs(t.out, t.in))), h('small', null, 'Plan ' + (t.planBlockMin != null ? fmtDur(t.planBlockMin * 60000) : '--'))),
       h('div', { class: 'tile' }, h('span', null, 'Flight time'), h('b', null, fmtDur(diffMs(t.off, t.on))), h('small', null, 'Plan ' + (t.planAirMin != null ? fmtDur(t.planAirMin * 60000) : '--'))),
@@ -109,7 +111,7 @@ function build() {
 async function start() {
   if (q.get('embed')) document.body.classList.add('embed');
   try {
-    await loadState();
+    await Promise.all([loadState(), airlinesReady]);
     const id = q.get('id');
     if (id && id !== 'current' && id !== S.flight.id) useFlight(await api('/api/history/' + encodeURIComponent(id)));
     build();

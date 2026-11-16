@@ -5,6 +5,13 @@ import { modal, toast, confirmBox } from '../widgets.js';
 const COLORS = ['#9a9aa8', '#a78bfa', '#34d399', '#fbbf24', '#f87171', '#a78bfa', '#fb923c'];
 const SECTIONS = ['GND', 'SID', 'STAR', 'APP', 'ENR', 'OTHER'];
 const isPdf = path => /\.pdf$/i.test(path);
+// ICAO aircraft type -> folder of the bundled NAVDECK QRH and FCOM, shown first in Documents.
+const MANUAL_FOLDERS = [
+  [/^(BCS1|BCS3|A22\d)/, 'Airbus A220'], [/^(A318|A319|A320|A321|A19N|A20N|A21N)/, 'Airbus A320 family'],
+  [/^A33/, 'Airbus A330'], [/^A34/, 'Airbus A340'], [/^A35/, 'Airbus A350'],
+  [/^(B73|B37M|B38M|B39M|B3XM)/, 'Boeing 737'], [/^B75/, 'Boeing 757'], [/^B76/, 'Boeing 767'], [/^B77/, 'Boeing 777'], [/^B78/, 'Boeing 787'],
+];
+const manualFolder = type => { const t = String(type || '').toUpperCase().trim(); return (MANUAL_FOLDERS.find(([re]) => re.test(t)) || [])[1]; };
 const baseName = path => path.split('/').pop().replace(/\.(pdf|png|jpe?g)$/i, '');
 
 function makeLibrary(kind) {
@@ -34,7 +41,7 @@ function makeLibrary(kind) {
       if (!map.get(group).has(sub)) map.get(group).set(sub, []);
       map.get(group).get(sub).push(file);
     }
-    const flightAirports = isCharts ? [f.dep, f.arr, f.diversion?.to, f.altn].filter(Boolean) : [];
+    const flightAirports = isCharts ? [f.dep, f.arr, f.diversion?.to, f.altn].filter(Boolean) : [manualFolder(f.type)].filter(Boolean);
     const names = [...map.keys()].sort((a, b) => {
       const ia = flightAirports.indexOf(a), ib = flightAirports.indexOf(b);
       if (ia !== ib) return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);

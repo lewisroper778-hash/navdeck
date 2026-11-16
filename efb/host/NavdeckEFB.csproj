@@ -11,7 +11,7 @@
     <AssemblyName>NavdeckEFB</AssemblyName>
     <RootNamespace>NavdeckEfb</RootNamespace>
     <ApplicationIcon>navdeck-efb.ico</ApplicationIcon>
-    <Version>1.1.1</Version>
+    <Version>1.2.0</Version>
     <Product>NAVDECK EFB</Product>
     <Company>NAVDECK</Company>
     <Authors>NAVDECK</Authors>
@@ -43,6 +43,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Data/runways.csv" LogicalName="NavdeckEfb.Data.runways.csv" />
+    <Content Include="../manuals/**/*.pdf" Link="manuals/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
     <Content Include="../web/**/*" Link="web/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
   </ItemGroup>
 

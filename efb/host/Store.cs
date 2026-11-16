@@ -28,12 +28,42 @@ internal sealed class Store : IDisposable
         LibraryDir = Path.Combine(_dir, "library");
         Directory.CreateDirectory(_flightsDir);
         Directory.CreateDirectory(Path.Combine(LibraryDir, "docs"));
+        SeedManuals(Path.Combine(AppContext.BaseDirectory, "manuals"));
 
         Flight = Load("flight") ?? NewFlight();
         Settings = Load("settings") ?? new JsonObject();
         Library = Load("library") ?? new JsonObject();
         LoadHistory();
         _saveTimer = new System.Threading.Timer(_ => Flush(), null, 2000, 2000);
+    }
+
+    // Copies the bundled NAVDECK QRH and FCOM PDFs into the Documents library. Each file is copied once:
+    // a pilot who deletes one does not get it back, and new manuals from an update are added.
+    public int SeedManuals(string source)
+    {
+        if (!Directory.Exists(source)) return 0;
+        var docs = Path.Combine(LibraryDir, "docs");
+        var record = Path.Combine(LibraryDir, "manuals-added.txt");
+        var done = new HashSet<string>(File.Exists(record) ? File.ReadAllLines(record) : Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+        var added = new List<string>();
+        foreach (var file in Directory.EnumerateFiles(source, "*.pdf", SearchOption.AllDirectories))
+        {
+            var rel = Path.GetRelativePath(source, file).Replace('\\', '/');
+            if (done.Contains(rel)) continue;
+            try
+            {
+                var target = Path.Combine(docs, rel.Replace('/', Path.DirectorySeparatorChar));
+                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                if (!File.Exists(target)) File.Copy(file, target);
+                added.Add(rel);
+            }
+            catch (IOException)
+            {
+                // Try again next start.
+            }
+        }
+        if (added.Count > 0) File.AppendAllLines(record, added);
+        return added.Count;
     }
 
     public static JsonObject NewFlight() => new()
