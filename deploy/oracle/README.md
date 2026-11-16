@@ -107,3 +107,44 @@ verified.
   deployment permission is stored in this repository.
 - Render may be disabled after confirming the Oracle service and any
   required data migration. It is not automatically deleted or migrated.
+
+## EFB journey logs by email
+
+NAVDECK EFB uploads each signed journey log (PDF) to `/api/efb/reports`. The backend emails it to
+`inflightreports@navdeck.online`. The mail login stays on this server only.
+
+1. Create `/opt/navdeck/email.env` with the SMTP details of the mailbox that sends the reports
+   (your email provider shows these as "SMTP" or "outgoing mail" settings):
+
+   ```bash
+   sudo install -m 600 /dev/null /opt/navdeck/email.env
+   sudo nano /opt/navdeck/email.env
+   ```
+
+   ```
+   EFB_SMTP_HOST=smtp.your-provider.com
+   EFB_SMTP_PORT=587
+   EFB_SMTP_SECURITY=starttls
+   EFB_SMTP_USER=inflightreports@navdeck.online
+   EFB_SMTP_PASSWORD=your-mailbox-or-app-password
+   EFB_REPORTS_TO=inflightreports@navdeck.online
+   ```
+
+   Use `EFB_SMTP_PORT=465` with `EFB_SMTP_SECURITY=ssl` if your provider asks for SSL instead.
+
+2. Allow uploads of up to 12 MB in the host Nginx site for `test.navdeck.online` (inside its
+   `server { ... }` block), then reload Nginx:
+
+   ```
+   client_max_body_size 12m;
+   ```
+
+   ```bash
+   sudo nginx -t && sudo systemctl reload nginx
+   ```
+
+3. Deploy as usual (`git pull --ff-only origin main` then `sudo bash deploy/oracle/deploy.sh`).
+   Check it with `curl -s https://test.navdeck.online/api/efb/reports/status`, which should
+   show `{"configured":true}`.
+
+Until this is set up, the EFB keeps each journey log in its outbox and sends it once the server accepts it.

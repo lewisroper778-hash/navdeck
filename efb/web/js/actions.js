@@ -154,8 +154,9 @@ export async function signAndClose() {
   if (!sig) return;
   await setF(['closed'], { time: nowIso(), name: sig.name, signature: sig.image });
   if (!S.settings.picName) setS(['picName'], sig.name);
+  let closing = null;
   try {
-    await api('/api/flight/close', { method: 'POST', body: {} });
+    closing = await api('/api/flight/close', { method: 'POST', body: {} });
   } catch (e) {
     await setF(['closed'], null);
     toast(e.message, 'bad', 'The flight could not be closed');
@@ -164,7 +165,9 @@ export async function signAndClose() {
   addNotice({ title: 'Flight closed', text: `${f.flightNo || f.callsign} signed by ${sig.name}.`, kind: 'good' });
   const next = await modal({
     title: 'Flight signed and closed',
-    body: h('p', { class: 'muted' }, 'The journey log is saved in the logbook. You can export it as a PDF now or later from the Report tab.'),
+    body: h('div', { class: 'stack' },
+      h('p', { class: 'muted' }, 'The journey log is saved in the logbook. You can export it as a PDF now or later from the Report tab.'),
+      closing?.sending && h('p', null, 'It is also being emailed to NAVDECK (inflightreports@navdeck.online). If this PC is offline, it is sent automatically later.')),
     buttons: [{ label: 'Done', value: null }, { label: 'Open report', value: 'report' }, { label: 'Export PDF', value: 'pdf', primary: true }],
   });
   if (next === 'pdf') exportPdf(f.id);

@@ -15,7 +15,7 @@ namespace NavdeckEfb;
 // load the same pages from it and stay in step through /api/events.
 internal sealed class EfbServer : IAsyncDisposable
 {
-    public const string Version = "1.0.0";
+    public const string Version = "1.1.0";
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(20) };
     private readonly Store _store;
     private readonly FlightEngine _engine;
@@ -26,6 +26,7 @@ internal sealed class EfbServer : IAsyncDisposable
 
     public int Port { get; private set; }
     public Func<string, Task<byte[]>>? PdfRenderer { get; set; }
+    public ReportOutbox? Outbox { get; set; }
 
     public EfbServer(Store store, FlightEngine engine)
     {
@@ -127,6 +128,7 @@ internal sealed class EfbServer : IAsyncDisposable
                     ["info"] = new JsonObject
                     {
                         ["version"] = Version,
+                        ["outbox"] = Outbox?.Pending ?? 0,
                         ["urls"] = new JsonArray(LanUrls().Select(u => (JsonNode?)JsonValue.Create(u)).ToArray()),
                     },
                 };
@@ -187,7 +189,15 @@ internal sealed class EfbServer : IAsyncDisposable
         app.MapPost("/api/flight/close", async ctx =>
         {
             var error = _store.CloseFlight();
-            if (error is null) await Json(ctx, new JsonObject { ["ok"] = true });
+            var sending = false;
+            if (error is null && Outbox is not null && J.Bool(_store.Settings["sendReports"], true))
+            {
+                JsonObject closed;
+                lock (_store.Gate) closed = (JsonObject)_store.Flight.DeepClone();
+                Outbox.Enqueue(closed);
+                sending = true;
+            }
+            if (error is null) await Json(ctx, new JsonObject { ["ok"] = true, ["sending"] = sending });
             else await Json(ctx, new JsonObject { ["error"] = error }, 400);
         });
 

@@ -1035,6 +1035,9 @@ async def client_error(body: ClientError):
 
 app.include_router(clerk_router)
 
+from efb_reports import build_efb_reports_router  # noqa: E402
+app.include_router(build_efb_reports_router())
+
 
 class SelectiveGZip:
     # Compress JSON/HTML but never the AI SSE streams, which must flush token by token

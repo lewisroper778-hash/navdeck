@@ -145,6 +145,46 @@ internal static class SelfTest
             Check(store.CloseFlight() is null, "closes once signed and the reason is entered");
             Check(store.History.Count == 1, "closed flight added to the logbook");
 
+            // journey log goes to the NAVDECK server (a stand-in here): first "not set up yet", then accepted
+            {
+                var port = 18700 + Environment.ProcessId % 200;
+                using var listener = new System.Net.HttpListener();
+                listener.Prefixes.Add($"http://localhost:{port}/");
+                listener.Start();
+                var bodies = new List<string>();
+                var answers = new Queue<int>(new[] { 503, 200 });
+                var serving = Task.Run(async () =>
+                {
+                    while (listener.IsListening)
+                    {
+                        System.Net.HttpListenerContext ctx;
+                        try { ctx = await listener.GetContextAsync(); } catch (Exception) { return; }
+                        using (var reader = new StreamReader(ctx.Request.InputStream, Encoding.Latin1))
+                            lock (bodies) bodies.Add(ctx.Request.Url?.AbsolutePath + "\n" + reader.ReadToEnd());
+                        ctx.Response.StatusCode = answers.Count > 0 ? answers.Dequeue() : 200;
+                        ctx.Response.Close();
+                    }
+                });
+                using var outbox = new ReportOutbox(store, $"http://localhost:{port}")
+                {
+                    PdfRenderer = _ => Task.FromResult(Encoding.ASCII.GetBytes("%PDF-1.7 selftest journey log")),
+                };
+                JsonObject closedFlight;
+                lock (store.Gate) closedFlight = (JsonObject)store.Flight.DeepClone();
+                outbox.Enqueue(closedFlight);
+                Check(outbox.Pending == 1, "closed flight's journey log queued for NAVDECK");
+                var first = outbox.SendDueAsync().GetAwaiter().GetResult();
+                Check(first == 0 && outbox.Pending == 1, "kept in the outbox while the server is not ready");
+                var second = outbox.SendDueAsync(ignoreSchedule: true).GetAwaiter().GetResult();
+                Check(second == 1 && outbox.Pending == 0, "sent once the server accepts it");
+                string last;
+                lock (bodies) last = bodies.Count > 0 ? bodies[^1] : "";
+                Check(last.StartsWith("/api/efb/reports") && last.Contains("%PDF-1.7 selftest journey log") && last.Contains("BAW123") && last.Contains("EGKK-EGLL"),
+                    "upload carries the PDF, flight and route");
+                listener.Stop();
+                serving.Wait(2000);
+            }
+
             // local server answers
             var server = new EfbServer(store, engine);
             server.StartAsync(18640).GetAwaiter().GetResult();
