@@ -246,13 +246,14 @@ async function init(){
    draw();return;
  }
  if(!id){
-   // The reporting sidebar and dashboard button resolve the current flight,
-   // so users don't have to pass through the flight library every time.
+   // One authenticated round trip returns the complete paired flight.
+   // This avoids the old getFlight summary + getFlightDetails chain.
    try{
-     const active=await api('getFlight');
-     id=active?.flight?.id||null;
+     const active=await api('getActiveFlightDetails');
+     if(active?.flight){id=active.flight.id;f=active.flight;draw();return;}
    }catch(err){
-     message('Could not connect to the live flight: '+err.message,true);
+     if(!String(err?.message||'').includes('Not Found'))
+       message('Unable to load paired reporting flight: '+err.message,true);
    }
  }
  if(!id){
