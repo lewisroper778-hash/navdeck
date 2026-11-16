@@ -51,6 +51,12 @@ class DesktopFlightAction(BaseModel):
     payload: dict = Field(default_factory=dict)
 
 
+class DesktopImportRequest(BaseModel):
+    # An explicitly entered Pilot ID can be used without waiting for profile
+    # sync, while still using the same SimBrief parser and flight ownership.
+    pilot_id: Optional[str] = Field(default=None, pattern=r"^\d{1,16}$")
+
+
 class DesktopPilotUpdate(BaseModel):
     simbrief_pilot_id: Optional[str] = Field(default=None, pattern=r"^\d{1,16}$")
     display_name: Optional[str] = Field(default=None, max_length=80)
@@ -191,10 +197,11 @@ def build_bridge_router(db, simbrief_import=None, flight_ops=None) -> APIRouter:
         return await desktop_profile(link)
 
     @r.post("/desktop/import")
-    async def desktop_import_flight(link: dict = Depends(bridge_user)):
+    async def desktop_import_flight(body: DesktopImportRequest,
+                                    link: dict = Depends(bridge_user)):
         if simbrief_import is None:
             raise HTTPException(status_code=503, detail="SimBrief import not configured")
-        flight = await simbrief_import(link["user_id"])
+        flight = await simbrief_import(link["user_id"], body.pilot_id)
         return {"flight": {k: getattr(flight, k, None) for k in
             ("id", "callsign", "origin", "destination", "aircraft")}}
 
