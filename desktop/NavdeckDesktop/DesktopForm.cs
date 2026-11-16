@@ -292,14 +292,6 @@ internal sealed class DesktopForm : Form
 
         Shown += async (_, _) =>
         {
-            _bridge = new MainForm(false);
-            _bridge.ShowInTaskbar = false;
-            _bridge.Opacity = 0;
-            _bridge.Show(this);
-            _bridge.Hide();
-            _bridge.Opacity = 1;
-            _statusTimer.Start();
-
             try
             {
                 await _browser.EnsureCoreWebView2Async();
@@ -482,6 +474,31 @@ internal sealed class DesktopForm : Form
                     "https://navdeck-desktop.local/map.html"
                 );
                 _status.Text = "NAVDECK Desktop | Live map";
+                // Initialise the FSUIPC bridge after the main UI is loaded.
+                // This prevents the large WinForms simulator control panel
+                // from blocking the first paint of the desktop dashboard.
+                BeginInvoke(new Action(() =>
+                {
+                    if (IsDisposed || _bridge is not null)
+                        return;
+                    try
+                    {
+                        _bridge = new MainForm(false)
+                        {
+                            ShowInTaskbar = false,
+                            Opacity = 0
+                        };
+                        _bridge.Show(this);
+                        _bridge.Hide();
+                        _bridge.Opacity = 1;
+                        _statusTimer.Start();
+                    }
+                    catch (Exception bridgeError)
+                    {
+                        _simStatus.Text =
+                            "Simulator controls unavailable: " + bridgeError.Message;
+                    }
+                }));
             }
             catch (Exception ex)
             {
