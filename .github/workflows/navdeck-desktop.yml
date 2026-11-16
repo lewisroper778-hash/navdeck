@@ -130,7 +130,9 @@ jobs:
           $source = (Resolve-Path "desktop-output/desktop-map/map.html").Path.Replace('\', '/')
           $url = "file:///$source"
           $shot = Join-Path $PWD "desktop-ui-preview.png"
-          & $edge --headless --disable-gpu --no-first-run --hide-scrollbars --virtual-time-budget=6000 "--window-size=1600,950" "--screenshot=$shot" "$url"
+          $profile = Join-Path $env:RUNNER_TEMP "navdeck-edge-preview"
+          & $edge --headless=new --disable-gpu --no-first-run --no-sandbox --hide-scrollbars "--user-data-dir=$profile" --virtual-time-budget=6000 "--window-size=1600,950" "--screenshot=$shot" "$url"
+          Start-Sleep -Seconds 8
           if (Test-Path $shot) {
             Write-Host "UI preview captured."
           } else {
