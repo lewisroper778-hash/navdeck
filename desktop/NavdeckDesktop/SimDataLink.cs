@@ -7,6 +7,7 @@ internal sealed class SimDataLink : IDisposable
     private readonly SimConnectLink _direct = new();
     private readonly FsuipcLink _fsuipc = new();
     private bool _usingDirect;
+    private DateTime _retryDirectAt = DateTime.MinValue;
 
     public bool IsOpen => _usingDirect ? _direct.IsOpen : _fsuipc.IsOpen;
     public string? AircraftTitle =>
@@ -16,7 +17,7 @@ internal sealed class SimDataLink : IDisposable
     public bool TryOpen()
     {
         if (IsOpen) return true;
-        if (_direct.TryOpen())
+        if (DateTime.UtcNow >= _retryDirectAt && _direct.TryOpen())
         {
             _usingDirect = true;
             return true;
@@ -29,8 +30,18 @@ internal sealed class SimDataLink : IDisposable
         return false;
     }
 
-    public Sample? Read() =>
-        _usingDirect ? _direct.Read() : _fsuipc.Read();
+    public Sample? Read()
+    {
+        if (!_usingDirect) return _fsuipc.Read();
+        var sample = _direct.Read();
+        if (!_direct.IsOpen)
+        {
+            // A runtime that connects but cannot supply valid telemetry
+            // should not trap the app in a repeated SimConnect loop.
+            _retryDirectAt = DateTime.UtcNow.AddMinutes(2);
+        }
+        return sample;
+    }
 
     public void Dispose()
     {
