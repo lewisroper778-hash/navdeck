@@ -47,7 +47,7 @@ const call=(name,args)=>window.navdeckDesktop&&typeof window.navdeckDesktop[name
 const format=n=>Number.isFinite(Number(n))?Number(n).toLocaleString('en-GB'):'—';
 const short=v=>{let x=String(v??'—');return x.length>28?x.slice(0,28)+'…':x};
 const statusEl=$('cloudStatus');
-let lastFlight=null,lastFlights=[];
+let lastFlight=null,lastFlights=[],flightCache=null,flightCacheAt=0;
 function notice(msg,kind=''){return '<div class="notice '+kind+'">'+safe(msg)+'</div>'}
 function setCloud(ok,text){statusEl.className='status '+(ok?'ok':'error');statusEl.querySelector('span').textContent=text}
 function action(id,fn){const node=$(id);if(node)node.onclick=fn}
@@ -60,18 +60,19 @@ function stripFlight(f){
  const closed=f.status==='closed';
  return '<button type="button" data-flight-id="'+safe(f.id||'')+'" aria-label="Open flight '+safe(f.callsign||'')+'" class="flight"><div class="flight-head"><b>'+safe(short(f.callsign||'Flight'))+'</b><span class="chip '+(closed?'closed':'')+'">'+safe(closed?'Closed':f.status||'Open')+'</span></div><div class="flight-route"><b>'+safe(f.origin||'—')+'</b><span>✈</span><b>'+safe(f.destination||'—')+'</b></div><div class="flight-footer"><span>'+safe(short(f.aircraft||'Aircraft unavailable'))+'</span><span>'+safe(f.distance?String(f.distance)+' NM':f.imported_at?.slice(0,10)||'No distance')+'</span></div><div class="flight-footer"><span>Open flight operations</span><span>↗</span></div></button>'
 }
-async function loadFlights(){
- try{const data=await call('getFlights');if(!Array.isArray(data?.flights))throw Error('Missing cloud flight list');lastFlights=data.flights;setCloud(true,'NAVDECK cloud linked');return {flights:data.flights,full:true};}
+async function loadFlights(force=false){
+ if(!force&&flightCache&&Date.now()-flightCacheAt<45000)return flightCache;
+ try{const data=await call('getFlights');if(!Array.isArray(data?.flights))throw Error('Missing cloud flight list');lastFlights=data.flights;setCloud(true,'NAVDECK cloud linked');flightCache={flights:data.flights,full:true};flightCacheAt=Date.now();return flightCache;}
  catch(err){
-  try{const data=await call('getFlight');setCloud(true,'NAVDECK bridge linked');const f=data?.flight;lastFlights=f?[{...f,status:'open'}]:[];return {flights:lastFlights,full:false};}
+  try{const data=await call('getFlight');setCloud(true,'NAVDECK bridge linked');const f=data?.flight;lastFlights=f?[{...f,status:'open'}]:[];flightCache={flights:lastFlights,full:false};flightCacheAt=Date.now();return flightCache;}
   catch{setCloud(false,'Pairing required');return {flights:[],full:false,error:'Pair NAVDECK using Simulator Connection to sync your flight data.'};}
  }
 }
-async function renderFlights(){
+async function renderFlights(force=false){
  const top=template('My flights','A dedicated desktop flight centre. Flight data comes from your NAVDECK connection, not the website.','Flights on record','—',btn('reloadFlights','↻  Refresh flights',true));
  $('content').innerHTML=top+'<div class="metric-grid" id="flightMetrics"></div><div class="toolbar"><div class="section-kicker" style="margin:0">FLIGHT LIBRARY</div><input class="search" id="flightSearch" placeholder="Search flight number or airport" aria-label="Search flights"></div><div id="flightNotice"></div><div class="cards" id="flightCards"></div>';
- action('reloadFlights',renderFlights);
- const result=await loadFlights(),flights=result.flights;
+ action('reloadFlights',()=>renderFlights(true));
+ const result=await loadFlights(force),flights=result.flights;
  $('flightMetrics').innerHTML=metric('Flights available',flights.length,'From paired NAVDECK')+metric('Flights in progress',flights.filter(x=>x.status!=='closed').length,'Open flight plans',true)+metric('Closed flights',flights.filter(x=>x.status==='closed').length,'Archived flights')+metric('Last import',flights[0]?.imported_at?.slice(0,10)||'—','Latest NAVDECK record');
  $('flightNotice').innerHTML=result.error?notice(result.error,'error'):(!result.full?notice('Showing the current paired flight only. Deploy the updated NAVDECK bridge server to list your full cloud flight history.'):'');
  const draw=()=>{const term=$('flightSearch').value.trim().toLowerCase();const found=flights.filter(f=>[f.callsign,f.origin,f.destination,f.aircraft].some(v=>String(v||'').toLowerCase().includes(term)));$('flightCards').innerHTML=found.length?found.map(stripFlight).join(''):empty('No matching flights','Import a flight from SimBrief or change your search terms.')};
@@ -90,7 +91,7 @@ async function renderSimbrief(){
  '<section class="panel">'+header('How it connects','A true desktop integration instead of an embedded website')+'<div class="inline-callout">NAVDECK Desktop talks directly to the cloud API using your simulator pairing token. No website screen or browser login is displayed here.</div><ul class="bullet-list"><li>Pair once through Simulator Connection.</li><li>Enter your SimBrief Pilot ID.</li><li>Save, then import your latest OFP.</li><li>Open My Flights to view your records.</li></ul><p style="color:var(--dim);font-size:11px;margin-top:18px">The new cloud import endpoints must be deployed to your NAVDECK server first.</p></section></div>';
  action('importOFP',async()=>{
   const b=$('importOFP');b.disabled=true;let label=b.textContent;b.textContent='Importing…';
-  try{const data=await call('importSimbrief');$('profileNotice').innerHTML=notice('Imported '+String(data?.flight?.callsign||'the latest flight')+' successfully.','good');}
+  try{const data=await call('importSimbrief');flightCache=null;$('profileNotice').innerHTML=notice('Imported '+String(data?.flight?.callsign||'the latest flight')+' successfully.','good');}
   catch(e){$('profileNotice').innerHTML=notice('Import unavailable: '+e.message,'error')}
   finally{b.disabled=false;b.textContent=label}
  });
