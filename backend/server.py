@@ -834,9 +834,11 @@ async def reopen_flight(flight_id: str, user: dict = Depends(require_user)):
 
 app.include_router(api_router)
 app.include_router(build_router(db, _owned_flight, _editable_flight))
-async def _desktop_simbrief_import(user_id: str):
-    # Reuse the same importer, validation and user ownership as the web app.
-    return await import_from_simbrief(ImportRequest(), {"user_id": user_id})
+async def _desktop_simbrief_import(user_id: str, pilot_id: Optional[str] = None):
+    # Use the existing parser and flight ownership rules. A Pilot ID entered
+    # in the desktop importer can be used before cloud profile sync completes.
+    return await import_from_simbrief(ImportRequest(pilot_id=pilot_id),
+                                      {"user_id": user_id})
 
 
 async def _desktop_flight_ops(user_id: str, flight_id: str,
