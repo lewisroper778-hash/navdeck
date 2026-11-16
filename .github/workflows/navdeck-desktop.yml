@@ -66,6 +66,10 @@ jobs:
         shell: pwsh
         run: node desktop/tests/flight-ui-smoke.cjs
 
+      - name: Smoke-test SimBrief import routing and account sign-out
+        shell: pwsh
+        run: node desktop/tests/workspace-account-smoke.cjs
+
       - name: Install .NET SDK
         uses: actions/setup-dotnet@v4
         with:
