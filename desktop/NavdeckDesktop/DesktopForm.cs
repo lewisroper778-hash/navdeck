@@ -488,6 +488,18 @@ internal sealed class DesktopForm : Form
                                 root.TryGetProperty("payload", out var p)
                                     ? p.Clone() : null;
 
+                            if (action == "flightAction" &&
+                                payload is { ValueKind: System.Text.Json.JsonValueKind.Object } instruction &&
+                                instruction.TryGetProperty("operation", out var op) &&
+                                op.ValueKind == System.Text.Json.JsonValueKind.String &&
+                                (op.GetString() is "signReport" or "closeFlight") &&
+                                instruction.TryGetProperty("flight_id", out var fid) &&
+                                fid.ValueKind == System.Text.Json.JsonValueKind.String &&
+                                _bridge?.HasPendingGoAround(fid.GetString() ?? "") == true)
+                                throw new InvalidOperationException(
+                                    "A go-around was detected but has not yet synced to NAVDECK. " +
+                                    "Keep the simulator connection open and retry before signing or closing.");
+
                             if (!Config.IsValidCode(config.Code))
                             {
                                 // Offline profile changes are stored only on
