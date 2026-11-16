@@ -82,7 +82,7 @@ internal sealed class MainForm : Form
     }
 
     private readonly Config _config = Config.Load();
-    private readonly FsuipcLink _sim = new();
+    private readonly SimDataLink _sim = new();
     private readonly FlightTracker _tracker = new();
     private readonly GoAroundDetector _goAroundDetector = new();
     private readonly Queue<(string FlightId, DetectedGoAround Event)> _goAroundQueue = new();
@@ -112,7 +112,7 @@ internal sealed class MainForm : Form
     private DateTime _lastRoute = DateTime.MinValue;
     private readonly Label _nextFix = Theme.Label("", 10f, Theme.Muted);
 
-    private readonly Label _simStatus = Theme.Label("Waiting for FSUIPC7…", 10, Theme.Amber, true);
+    private readonly Label _simStatus = Theme.Label("Waiting for SimConnect / MSFS…", 10, Theme.Amber, true);
     private readonly Label _navStatus = Theme.Label("Not connected to NAVDECK", 10, Theme.Amber, true);
     private readonly Label _stage = Theme.Label("Parked", 18, bold: true);
     private readonly Label _times = Theme.Label("", 10.5f);
@@ -206,7 +206,7 @@ internal sealed class MainForm : Form
 
         connections.Controls.Add(
             CreateCard("SIMULATOR CONNECTION",
-                Theme.Label("FSUIPC7 / MICROSOFT FLIGHT SIMULATOR",
+                Theme.Label("SIMCONNECT / MICROSOFT FLIGHT SIMULATOR",
                     9, Theme.Muted, true), _simStatus), 0, 0);
 
         connections.Controls.Add(
@@ -736,7 +736,7 @@ internal sealed class MainForm : Form
         {
             _latestTelemetry = null;
             _goAroundDetector.Reset();
-            SetStatus(_simStatus, "Sim disconnected · waiting for FSUIPC7…", Theme.Amber);
+            SetStatus(_simStatus, "Simulator disconnected · retrying SimConnect…", Theme.Amber);
             return;
         }
         _latestTelemetry = s;
@@ -869,7 +869,7 @@ internal sealed class MainForm : Form
             {
                 _sim.Read();
                 SetStatus(_simStatus, $"Sim connected · {_sim.AircraftTitle}", Theme.Green);
-                Log("Connected to MSFS through FSUIPC7");
+                Log("Connected to MSFS through " + _sim.ConnectionName);
             }
         }
         if (_api is null && Config.IsValidCode(_config.Code) && _navStatus.ForeColor != Theme.Red) await Connect();
