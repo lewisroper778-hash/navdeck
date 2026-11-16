@@ -67,6 +67,9 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
+      - name: Test automatic go-around detector
+        run: dotnet run --project desktop/GoAroundDetector.Tests/GoAroundDetector.Tests.csproj --configuration Release
+
       - name: Restore dependencies
         run: dotnet restore desktop/NavdeckDesktop/NavdeckDesktop.csproj -r win-x64
 
