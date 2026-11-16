@@ -18,7 +18,13 @@ import server
 from fastapi.testclient import TestClient
 from pymongo.errors import ServerSelectionTimeoutError
 
-ORIGIN = "https://navdeck-frontend.onrender.com"
+ORIGINS = [
+    "https://test.navdeck.online",
+    "https://navdeck.online",
+    "https://www.navdeck.online",
+    "https://navdeck-frontend.onrender.com",
+]
+ORIGIN = ORIGINS[0]
 
 
 class LoginReadinessTests(unittest.TestCase):
@@ -46,16 +52,18 @@ class LoginReadinessTests(unittest.TestCase):
         self.assertEqual(response.headers["retry-after"], "5")
 
     def test_desktop_clerk_preflight_cors(self):
-        response = self.client.options(
-            "/api/bridge/link",
-            headers={
-                "Origin": ORIGIN,
-                "Access-Control-Request-Method": "POST",
-                "Access-Control-Request-Headers": "authorization",
-            },
-        )
-        self.assertEqual(response.status_code, 200, response.text)
-        self.assertEqual(response.headers.get("access-control-allow-origin"), ORIGIN)
+        for origin in ORIGINS:
+            with self.subTest(origin=origin):
+                response = self.client.options(
+                    "/api/bridge/link",
+                    headers={
+                        "Origin": origin,
+                        "Access-Control-Request-Method": "POST",
+                        "Access-Control-Request-Headers": "authorization",
+                    },
+                )
+                self.assertEqual(response.status_code, 200, response.text)
+                self.assertEqual(response.headers.get("access-control-allow-origin"), origin)
 
     def test_database_error_returns_cors_safe_json(self):
         @server.app.get("/__smoke_test_database_error")
