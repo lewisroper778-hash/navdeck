@@ -341,7 +341,8 @@ internal sealed class DesktopForm : Form
                         getProfile: () => request('getProfile'),
                         saveProfile: (payload) => request('saveProfile', payload),
                         importSimbrief: () => request('importSimbrief'),
-                        openSimbrief: (payload) => request('openSimbrief', payload)
+                        openSimbrief: (payload) => request('openSimbrief', payload),
+                        openVatsim: (payload) => request('openVatsim', payload)
                       });
                       window.chrome.webview.addEventListener('message', event => {
                         if (event.data?.type !== 'navdeck:result') return;
@@ -394,6 +395,27 @@ internal sealed class DesktopForm : Form
                                     aircraft = _bridge?.SimulatorAircraft
                                 }
                                 : null;
+                        }
+                        else if (action == "openVatsim")
+                        {
+                            if (!root.TryGetProperty("payload", out var payload) ||
+                                !payload.TryGetProperty("url", out var target) ||
+                                target.ValueKind != System.Text.Json.JsonValueKind.String ||
+                                !Uri.TryCreate(target.GetString(), UriKind.Absolute,
+                                    out var external) ||
+                                external.Scheme != Uri.UriSchemeHttps ||
+                                external.Host != "my.vatsim.net" ||
+                                external.AbsolutePath != "/pilots/flightplan" ||
+                                external.AbsoluteUri.Length > 5000)
+                                throw new ArgumentException("Invalid VATSIM flight-plan link");
+
+                            System.Diagnostics.Process.Start(
+                                new System.Diagnostics.ProcessStartInfo
+                                {
+                                    FileName = external.AbsoluteUri,
+                                    UseShellExecute = true
+                                });
+                            data = new { opened = true };
                         }
                         else if (action == "openSimbrief")
                         {
