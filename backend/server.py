@@ -12,10 +12,11 @@ from typing import List, Literal, Optional
 import requests
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
+from fastapi.responses import JSONResponse
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, field_validator
 from pymongo import ASCENDING, DESCENDING, IndexModel
-from pymongo.errors import DuplicateKeyError
+from pymongo.errors import DuplicateKeyError, PyMongoError
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.cors import CORSMiddleware
 from starlette.middleware.gzip import GZipMiddleware
@@ -36,7 +37,15 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
 
 mongo_url = os.environ["MONGO_URL"]
-client = AsyncIOMotorClient(mongo_url)
+client = AsyncIOMotorClient(
+    mongo_url,
+    # Fail clearly instead of hanging a Clerk sign-in for MongoDB's default
+    # 30-second server-selection timeout when Atlas is unreachable.
+    serverSelectionTimeoutMS=6000,
+    connectTimeoutMS=5000,
+    socketTimeoutMS=10000,
+    maxPoolSize=50,
+)
 db = client[os.environ["DB_NAME"]]
 
 INDEXES: dict[str, list[IndexModel]] = {
@@ -980,7 +989,34 @@ app.include_router(build_bridge_router(
 
 @app.get("/health")
 async def health():
+    # Liveness: don't restart the API because Atlas is temporarily down.
     return {"status": "ok"}
+
+
+@app.get("/health/ready")
+async def health_ready():
+    # Readiness: used to distinguish an awake API from a working database.
+    try:
+        await asyncio.wait_for(db.command("ping"), timeout=7)
+    except (PyMongoError, asyncio.TimeoutError):
+        return JSONResponse(
+            status_code=503,
+            content={"status": "degraded", "database": "unavailable"},
+            headers={"Retry-After": "5", "Cache-Control": "no-store"},
+        )
+    return {"status": "ok", "database": "connected"}
+
+
+@app.exception_handler(PyMongoError)
+async def database_unavailable(_request, _error):
+    # Keep DB errors out of browser/desktop responses and return a real HTTP
+    # status so CORS and the login UI can explain the problem.
+    logger.error("Database unavailable during API request: %s", type(_error).__name__)
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "NAVDECK database temporarily unavailable. Please retry shortly."},
+        headers={"Retry-After": "5", "Cache-Control": "no-store"},
+    )
 
 
 class ClientError(BaseModel):
