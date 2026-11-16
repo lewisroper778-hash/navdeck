@@ -60,6 +60,8 @@ const sandbox = {
 };
 
 vm.runInNewContext(patched, sandbox, {timeout:2500});
+assert.match(element('stage').innerHTML, /Go-around review/,
+  'A direct #close link did not open Close & Sign');
 const phaseNames = ['briefing','departure','enroute','arrival','close'];
 for (const phase of phaseNames) {
   const html = window.__navdeckPhaseTest(phase);
