@@ -24,10 +24,12 @@ try:
     from backend.clerk_auth import clerk_router, require_user
     from backend.extras import build_router, kick_vatsim_refresh, store_report
     from backend.bridge import build_bridge_router
+    from backend.reporting_validation import desktop_report_blockers, desktop_signoff_blockers
 except ModuleNotFoundError:
     from clerk_auth import clerk_router, require_user
     from extras import build_router, kick_vatsim_refresh, store_report
     from bridge import build_bridge_router
+    from reporting_validation import desktop_report_blockers, desktop_signoff_blockers
 
 
 ROOT_DIR = Path(__file__).parent
@@ -859,8 +861,22 @@ async def _desktop_flight_ops(user_id: str, flight_id: str,
     if action == "saveArrival":
         return await update_arrival(flight_id, ArrivalUpdate(**payload), user)
     if action == "signReport":
+        doc = await _editable_flight(flight_id, user_id)
+        blockers = desktop_signoff_blockers(doc)
+        if blockers:
+            raise HTTPException(status_code=400,
+                detail="Complete in-flight reporting before signing: " +
+                ", ".join(blockers[:12]) +
+                (" and more" if len(blockers) > 12 else ""))
         return await sign_report(flight_id, SignRequest(**payload), user)
     if action == "closeFlight":
+        doc = await _owned_flight(flight_id, user_id)
+        blockers = desktop_signoff_blockers(doc)
+        if blockers:
+            raise HTTPException(status_code=400,
+                detail="Complete reporting before closing: " +
+                ", ".join(blockers[:12]) +
+                (" and more" if len(blockers) > 12 else ""))
         return await close_flight(flight_id, user)
     if action == "reopenFlight":
         return await reopen_flight(flight_id, user)
