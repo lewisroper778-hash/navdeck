@@ -25,7 +25,25 @@ const darkAppearance = {
   captcha: { theme: "dark" },
 };
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const BACKEND_URL = (process.env.REACT_APP_BACKEND_URL || "").replace(/\/$/, "");
+const CONFIG_CACHE_KEY = "navdeck-clerk-public-config-v1";
+const CONFIG_CACHE_AGE_MS = 24 * 60 * 60 * 1000;
+
+// Only the PUBLIC Clerk publishable key and proxy path are cached. Never
+// store a Clerk JWT, secret key or desktop bridge token in browser storage.
+function validConfig(cfg) {
+  return !!cfg?.enabled && typeof cfg.publishable_key === "string" &&
+    cfg.publishable_key.length > 20 &&
+    (cfg.publishable_key.startsWith("pk_live_") ||
+      cfg.publishable_key.startsWith("pk_test_"));
+}
+function readCachedConfig() {
+  try {
+    const entry = JSON.parse(localStorage.getItem(CONFIG_CACHE_KEY) || "null");
+    return entry && Date.now() - entry.savedAt < CONFIG_CACHE_AGE_MS &&
+      validConfig(entry.config) ? entry.config : null;
+  } catch { return null; }
+}
 
 function FailedScreen() {
   useEffect(() => reportError("Clerk failed to load"), []);
@@ -48,7 +66,7 @@ function SlowSignIn() {
 export default function ClerkAuthProvider({ children }) {
   const navigate = useNavigate();
   const { theme } = useTheme();
-  const [config, setConfig] = useState(null);
+  const [config, setConfig] = useState(readCachedConfig);
   const [unavailable, setUnavailable] = useState(false);
   const [slow, setSlow] = useState(false);
 
@@ -63,19 +81,44 @@ export default function ClerkAuthProvider({ children }) {
 
   useEffect(() => {
     let cancelled = false;
-    const load = async (attempt = 0) => {
-      try {
-        const cfg = await (await fetch(`${BACKEND_URL}/api/clerk/config`)).json();
-        if (cfg.enabled) return cancelled || setConfig(cfg);
-      } catch {}
-      if (cancelled) return;
-      if (attempt >= 20) return setUnavailable(true);
-      setTimeout(() => load(attempt + 1), 1500);
+    const cached = readCachedConfig();
+    const load = async () => {
+      // A cached public key lets returning users reach Clerk immediately,
+      // even while a free Render backend is waking up.
+      for (let attempt = 0; attempt < 5 && !cancelled; attempt++) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 7000);
+        try {
+          const response = await fetch(`${BACKEND_URL}/api/clerk/config`, {
+            signal: controller.signal,
+            cache: "no-store",
+          });
+          if (!response.ok) throw new Error("Clerk configuration unavailable");
+          const cfg = await response.json();
+          if (!validConfig(cfg)) throw new Error("Clerk configuration is disabled");
+          if (cancelled) return;
+          try {
+            localStorage.setItem(CONFIG_CACHE_KEY, JSON.stringify({
+              savedAt: Date.now(), config: cfg,
+            }));
+          } catch {}
+          setConfig(cfg);
+          setUnavailable(false);
+          return;
+        } catch {
+          // A network error is not an invalid account. Keep the login
+          // usable from the last known public Clerk configuration.
+        } finally {
+          clearTimeout(timeout);
+        }
+        if (attempt < 4) {
+          await new Promise(resolve => setTimeout(resolve, Math.min(1500 + attempt * 1000, 4500)));
+        }
+      }
+      if (!cancelled && !cached) setUnavailable(true);
     };
     load();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
   if (unavailable)
