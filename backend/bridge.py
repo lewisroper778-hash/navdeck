@@ -1,16 +1,20 @@
 import hashlib
 import re
 import secrets
+import requests
 from datetime import datetime, timezone
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Response
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
 try:
     from backend.clerk_auth import require_user
+    from backend.pdf_report import build_report_pdf
 except ModuleNotFoundError:
     from clerk_auth import require_user
+    from pdf_report import build_report_pdf
 
 LB_PER_KG = 2.20462
 
@@ -40,11 +44,31 @@ class BridgeTarget(BaseModel):
     flight_id: str
 
 
+class DesktopFlightAction(BaseModel):
+    action: Literal["toggleWaypoint", "skipWaypoint", "directTo", "undoDirect",
+                    "saveWaypoint", "saveTimes", "saveActuals", "saveArrival",
+                    "signReport", "closeFlight", "reopenFlight", "resetFlight", "saveNotes"]
+    payload: dict = Field(default_factory=dict)
+
+
+class DesktopImportRequest(BaseModel):
+    # An explicitly entered Pilot ID can be used without waiting for profile
+    # sync, while still using the same SimBrief parser and flight ownership.
+    pilot_id: Optional[str] = Field(default=None, pattern=r"^\d{1,16}$")
+
+
+class DesktopPilotUpdate(BaseModel):
+    simbrief_pilot_id: Optional[str] = Field(default=None, pattern=r"^\d{1,16}$")
+    display_name: Optional[str] = Field(default=None, max_length=80)
+    vatsim_cid: Optional[str] = Field(default=None, pattern=r"^\d{6,8}$")
+    vatsim_friends: Optional[list[str]] = Field(default=None, max_length=50)
+
+
 def _hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def build_bridge_router(db) -> APIRouter:
+def build_bridge_router(db, simbrief_import=None, flight_ops=None) -> APIRouter:
     r = APIRouter(prefix="/api/bridge")
 
     async def bridge_user(x_bridge_token: str = Header(default="")) -> dict:
@@ -62,6 +86,124 @@ def build_bridge_router(db) -> APIRouter:
             if f:
                 return f
         return await db.flights.find_one(q, {"_id": 0}, sort=[("imported_at", -1)])
+
+    @r.get("/desktop/active")
+    async def desktop_active_flight(link: dict = Depends(bridge_user)):
+        # One database lookup and one desktop round-trip for the primary
+        # in-flight reporting screen, instead of a summary request followed
+        # by a second detail request.
+        flight = await target_flight(link)
+        return {"flight": flight}
+
+    @r.get("/desktop/flights/{flight_id}")
+    async def desktop_flight_detail(flight_id: str, link: dict = Depends(bridge_user)):
+        f = await db.flights.find_one(
+            {"id": flight_id, "user_id": link["user_id"]}, {"_id": 0})
+        if not f:
+            raise HTTPException(status_code=404, detail="Flight not found")
+        return {"flight": f}
+
+    @r.post("/desktop/flights/{flight_id}/action")
+    async def desktop_flight_action(
+        flight_id: str, body: DesktopFlightAction,
+        link: dict = Depends(bridge_user)
+    ):
+        if flight_ops is None:
+            raise HTTPException(status_code=503, detail="Desktop operations unavailable")
+        # The shared flight operations enforce existing ownership, edit locks,
+        # close-flight validation and Pydantic field validators.
+        result = await flight_ops(
+            link["user_id"], flight_id, body.action, body.payload)
+        return {"flight": result.model_dump()}
+
+    @r.get("/desktop/metar/{icao}")
+    async def desktop_metar(icao: str, link: dict = Depends(bridge_user)):
+        if not re.fullmatch(r"[A-Za-z]{4}", icao):
+            raise HTTPException(status_code=400, detail="Invalid airport ICAO")
+        try:
+            response = await run_in_threadpool(
+                requests.get, "https://aviationweather.gov/api/data/metar",
+                params={"ids": icao.upper(), "format": "raw"}, timeout=8)
+        except requests.RequestException:
+            raise HTTPException(status_code=502, detail="METAR service unavailable")
+        if response.status_code == 204:
+            return {"icao": icao.upper(), "metar": None}
+        if response.status_code != 200:
+            raise HTTPException(status_code=502, detail="METAR service unavailable")
+        return {"icao": icao.upper(), "metar": response.text[:5000].strip() or None}
+
+    @r.get("/desktop/reports/{flight_id}")
+    async def desktop_report_pdf(flight_id: str,
+                                 link: dict = Depends(bridge_user)):
+        f = await db.flights.find_one(
+            {"id": flight_id, "user_id": link["user_id"]}, {"_id": 0})
+        if not f:
+            raise HTTPException(status_code=404, detail="Flight not found")
+        if f.get("status") != "closed":
+            raise HTTPException(status_code=409, detail="Close the flight before downloading the signed report")
+        data = await run_in_threadpool(build_report_pdf, f)
+        return Response(content=data, media_type="application/pdf",
+                        headers={"Content-Disposition": "attachment; filename=NavdeckReport.pdf"})
+
+    # Read-only desktop clients use the existing revocable pairing token. All
+    # queries are scoped to the user who created the token. The desktop never
+    # receives Clerk credentials or a direct database connection.
+    @r.get("/desktop/flights")
+    async def desktop_flights(link: dict = Depends(bridge_user)):
+        docs = await db.flights.find(
+            {"user_id": link["user_id"]},
+            {"_id": 0, "id": 1, "callsign": 1, "origin": 1,
+             "destination": 1, "aircraft": 1, "status": 1,
+             "imported_at": 1, "distance": 1, "ete": 1,
+             "landing_rate": 1, "times": 1}
+        ).sort("imported_at", -1).to_list(100)
+        return {"flights": docs}
+
+    @r.get("/desktop/logbook")
+    async def desktop_logbook(link: dict = Depends(bridge_user)):
+        docs = await db.flights.find(
+            {"user_id": link["user_id"], "status": "closed"},
+            {"_id": 0, "id": 1, "callsign": 1, "origin": 1,
+             "destination": 1, "aircraft": 1, "closed_at": 1,
+             "landing_rate": 1, "times": 1}
+        ).sort("closed_at", -1).to_list(200)
+        return {"flights": docs}
+
+    @r.get("/desktop/profile")
+    async def desktop_profile(link: dict = Depends(bridge_user)):
+        p = await db.pilots.find_one({"user_id": link["user_id"]}, {"_id": 0,
+            "simbrief_pilot_id": 1, "display_name": 1,
+            "vatsim_cid": 1, "vatsim_friends": 1})
+        return {"profile": p or {}}
+
+    @r.put("/desktop/profile")
+    async def desktop_update_profile(body: DesktopPilotUpdate,
+                                     link: dict = Depends(bridge_user)):
+        update = body.model_dump(exclude_unset=True)
+        if "display_name" in update and update["display_name"] is not None:
+            update["display_name"] = update["display_name"].strip() or None
+        if "simbrief_pilot_id" in update and update["simbrief_pilot_id"] == "":
+            update["simbrief_pilot_id"] = None
+        if "vatsim_friends" in update and update["vatsim_friends"] is not None:
+            friends = list(dict.fromkeys(
+                str(x).strip().upper() for x in update["vatsim_friends"]))
+            if any(not re.fullmatch(r"[A-Z0-9_-]{2,12}", x) for x in friends):
+                raise HTTPException(status_code=400, detail="Invalid VATSIM friend identifier")
+            update["vatsim_friends"] = friends
+        if update:
+            update["updated_at"] = datetime.now(timezone.utc).isoformat()
+            await db.pilots.update_one({"user_id": link["user_id"]},
+                {"$set": update}, upsert=True)
+        return await desktop_profile(link)
+
+    @r.post("/desktop/import")
+    async def desktop_import_flight(body: Optional[DesktopImportRequest] = None,
+                                    link: dict = Depends(bridge_user)):
+        if simbrief_import is None:
+            raise HTTPException(status_code=503, detail="SimBrief import not configured")
+        flight = await simbrief_import(link["user_id"], body.pilot_id if body else None)
+        return {"flight": {k: getattr(flight, k, None) for k in
+            ("id", "callsign", "origin", "destination", "aircraft")}}
 
     @r.post("/link")
     async def create_link(user: dict = Depends(require_user)):

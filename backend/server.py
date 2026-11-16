@@ -24,10 +24,12 @@ try:
     from backend.clerk_auth import clerk_router, require_user
     from backend.extras import build_router, kick_vatsim_refresh, store_report
     from backend.bridge import build_bridge_router
+    from backend.reporting_validation import desktop_report_blockers, desktop_signoff_blockers
 except ModuleNotFoundError:
     from clerk_auth import clerk_router, require_user
     from extras import build_router, kick_vatsim_refresh, store_report
     from bridge import build_bridge_router
+    from reporting_validation import desktop_report_blockers, desktop_signoff_blockers
 
 
 ROOT_DIR = Path(__file__).parent
@@ -832,7 +834,77 @@ async def reopen_flight(flight_id: str, user: dict = Depends(require_user)):
 
 app.include_router(api_router)
 app.include_router(build_router(db, _owned_flight, _editable_flight))
-app.include_router(build_bridge_router(db))
+async def _desktop_simbrief_import(user_id: str, pilot_id: Optional[str] = None):
+    # Use the existing parser and flight ownership rules. A Pilot ID entered
+    # in the desktop importer can be used before cloud profile sync completes.
+    return await import_from_simbrief(ImportRequest(pilot_id=pilot_id),
+                                      {"user_id": user_id})
+
+
+async def _desktop_flight_ops(user_id: str, flight_id: str,
+                              action: str, payload: dict):
+    # Use the original NAVDECK workflows, validation and permission checks;
+    # only explicitly listed operations may be called by a paired desktop app.
+    user = {"user_id": user_id}
+    if action == "toggleWaypoint":
+        return await toggle_waypoint(flight_id, WaypointToggle(**payload), user)
+    if action == "skipWaypoint":
+        return await skip_waypoint(flight_id, WaypointSkip(**payload), user)
+    if action == "directTo":
+        return await direct_to(flight_id, DirectTo(**payload), user)
+    if action == "undoDirect":
+        return await undo_direct(flight_id, DirectUndo(**payload), user)
+    if action == "saveWaypoint":
+        return await log_waypoint(flight_id, WaypointLog(**payload), user)
+    if action == "saveTimes":
+        return await update_times(flight_id, TimesUpdate(**payload), user)
+    if action == "saveActuals":
+        return await update_actuals(flight_id, ActualsUpdate(**payload), user)
+    if action == "saveArrival":
+        return await update_arrival(flight_id, ArrivalUpdate(**payload), user)
+    if action == "signReport":
+        doc = await _editable_flight(flight_id, user_id)
+        blockers = desktop_signoff_blockers(doc)
+        if blockers:
+            raise HTTPException(status_code=400,
+                detail="Complete in-flight reporting before signing: " +
+                ", ".join(blockers[:12]) +
+                (" and more" if len(blockers) > 12 else ""))
+        return await sign_report(flight_id, SignRequest(**payload), user)
+    if action == "closeFlight":
+        doc = await _owned_flight(flight_id, user_id)
+        blockers = desktop_signoff_blockers(doc)
+        if blockers:
+            raise HTTPException(status_code=400,
+                detail="Complete reporting before closing: " +
+                ", ".join(blockers[:12]) +
+                (" and more" if len(blockers) > 12 else ""))
+        return await close_flight(flight_id, user)
+    if action == "reopenFlight":
+        return await reopen_flight(flight_id, user)
+    if action == "saveNotes":
+        doc = await _editable_flight(flight_id, user_id)
+        # Only accept arrival note fields supported by the existing web app.
+        allowed = {"metar", "runway", "notes"}
+        if not set(payload).issubset(allowed):
+            raise HTTPException(status_code=400, detail="Invalid notes fields")
+        notes = (doc.get("arrival_notes") or {}).copy()
+        for key, value in payload.items():
+            if value is not None and (not isinstance(value, str) or len(value) > 8000):
+                raise HTTPException(status_code=400, detail="Invalid note value")
+            notes[key] = value.strip() if isinstance(value, str) else None
+        await db.flights.update_one(
+            {"id": flight_id, "user_id": user_id},
+            {"$set": {"arrival_notes": notes}})
+        doc["arrival_notes"] = notes
+        return Flight(**doc)
+    if action == "resetFlight":
+        return await reset_tracker(flight_id, user)
+    raise HTTPException(status_code=400, detail="Unsupported desktop operation")
+
+
+app.include_router(build_bridge_router(
+    db, _desktop_simbrief_import, _desktop_flight_ops))
 
 
 @app.get("/health")

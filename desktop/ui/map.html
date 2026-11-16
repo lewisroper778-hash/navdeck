@@ -1,50 +1,263 @@
-<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>NAVDECK Live Map</title>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NAVDECK · Flight Operations</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
-*{box-sizing:border-box}html,body,#map{height:100%;width:100%;margin:0}body{background:#101722;color:#e5edf8;font:14px 'Segoe UI',sans-serif}
-#map{background:#111827}.panel{position:absolute;z-index:1000;background:#101827ee;border:1px solid #344258;border-radius:12px;box-shadow:0 8px 30px #0008;padding:14px 18px}
-#status{top:20px;left:20px}.eyebrow{color:#9db0ce;letter-spacing:2px;font-size:11px;font-weight:700;margin-bottom:8px}#connection{font-weight:700}
-#metrics{bottom:20px;left:20px;right:20px;display:flex;gap:28px;flex-wrap:wrap}#follow{top:20px;right:20px;cursor:pointer;color:white;font-weight:700}
-.metric b{color:#6dd8ff}.leaflet-control-attribution{background:#101827cc!important;color:#abb9cc!important}.leaflet-control-attribution a{color:#91c7e9!important}
-.aircraft{width:38px;height:38px;filter:drop-shadow(0 2px 4px #000a)}.aircraft svg{width:38px;height:38px}
-</style></head><body>
-<div id="map"></div><div id="status" class="panel"><div class="eyebrow">NAVDECK LIVE MAP</div><div id="connection">○ Awaiting simulator telemetry</div></div>
-<button id="follow" class="panel" type="button">Following aircraft</button>
-<div id="metrics" class="panel"><span class="metric">ALT <b id="alt">—</b> FT</span><span class="metric">GS <b id="gs">—</b> KT</span><span class="metric">HDG <b id="hdg">—</b>°</span><span class="metric">GPS <b id="gps">—</b></span></div>
+:root{color-scheme:dark;--base:#19191c;--card:#252529;--raised:#303034;--border:#3a3a40;--ink:#f4f3f6;--secondary:#a2a0aa;--faint:#74737b;--accent:#8b45fa;--accent2:#b185ff;--green:#8ce4ac}
+*{box-sizing:border-box}html,body{height:100%;width:100%;margin:0;overflow:hidden}body{background:var(--base);color:var(--ink);font:13px/1.45 "Segoe UI",Inter,Arial,sans-serif}button,input,select{font:inherit}button{cursor:pointer}button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent2);outline-offset:2px}
+.workspace{display:grid;grid-template-columns:minmax(300px,348px) minmax(0,1fr);width:100%;height:100%;min-height:500px}
+.details{display:flex;flex-direction:column;min-height:0;overflow-y:auto;overscroll-behavior:contain;background:#262629;border-right:1px solid #414047;z-index:500}
+.details::-webkit-scrollbar{width:7px}.details::-webkit-scrollbar-thumb{background:#414148;border-radius:8px}
+.details-head{display:flex;justify-content:space-between;align-items:center;padding:20px 21px 12px;gap:8px}
+.flight-label{display:flex;align-items:center;gap:9px;min-width:0;letter-spacing:.1px;font-weight:650;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.flight-label:before{content:"";width:3px;height:18px;background:#d4ef70;border-radius:4px;flex:none}
+.icon-btn{border:0;background:transparent;color:#b9b7be;border-radius:7px;padding:5px 7px;font-size:18px;line-height:1}.icon-btn:hover{background:#39383f;color:#fff}
+.hero{height:152px;flex:none;position:relative;overflow:hidden;background:radial-gradient(ellipse at 58% 35%,#555662 0,#33343b 38%,#27282c 73%);margin:0 12px 8px;border:1px solid #39383e;border-radius:8px}
+.hero:after{content:"";position:absolute;inset:0;background:linear-gradient(0deg,#202025b8,transparent 48%);pointer-events:none}
+.hero .orb{position:absolute;border:1px solid #ffffff10;border-radius:50%;width:270px;height:270px;left:20px;top:-112px}
+.hero svg{position:absolute;left:10%;top:6px;width:84%;height:140px;transform:rotate(-15deg);filter:drop-shadow(8px 13px 9px #0008)}
+.hero-foot{position:absolute;z-index:2;bottom:11px;left:15px;right:15px;display:flex;justify-content:space-between;gap:8px;align-items:center;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:#dedee5}
+.signal{display:inline-flex;gap:6px;align-items:center;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase}.signal:before{content:"";width:7px;height:7px;border-radius:100%;background:#7c7b84}.signal.live:before{background:#61d893;box-shadow:0 0 7px #61d89366}
+.route-card{padding:5px 12px 8px}
+.route-grid{display:grid;grid-template-columns:minmax(0,1fr) 30px minmax(0,1fr);align-items:stretch;gap:0}
+.airport{background:#35353a;min-width:0;min-height:91px;padding:12px 8px 10px;text-align:center;border:1px solid #404048}.airport:first-child{border-radius:5px 0 0 5px}.airport:last-child{border-radius:0 5px 5px 0}
+.airport b{display:block;font-size:28px;font-weight:650;line-height:1.25;letter-spacing:1px}.airport span{color:#bdbbc4;font-size:11px}.airport small{color:#8b8993;font-size:10px;display:block}
+.airport-plane{align-self:center;justify-self:center;z-index:2;margin:0 -8px;width:30px;height:30px;display:grid;place-items:center;border-radius:100%;background:#515058;font-size:18px}
+.route-meta{display:grid;grid-template-columns:1fr 1fr;gap:8px;border-bottom:1px solid #46444c;padding:12px 3px;color:#a9a7b0}
+.route-meta strong{display:block;font-size:12px;color:#f4f3f6;font-weight:600}.route-meta span{display:block;font-size:11px}
+.route-meta>div:last-child{text-align:right}
+.small-action{display:flex;align-items:center;gap:5px;color:#c8b7f8;border:0;background:none;padding:5px 0;font-size:11px;font-weight:650}
+.edit-route{display:none;grid-template-columns:1fr 1fr auto;gap:7px;padding:9px 0 4px}.edit-route.visible{display:grid}
+.edit-route input{width:100%;min-width:0;border:1px solid #55525e;color:#fff;background:#1e1e22;border-radius:5px;padding:7px 8px;text-transform:uppercase}.edit-route button{border:0;border-radius:5px;background:var(--accent);color:white;padding:7px 12px;font-weight:650}
+.section-title{margin:3px 12px 7px;padding:10px 9px 0;font-size:12px;font-weight:650;color:#f0edf5}
+.section-title:before{content:"";display:inline-block;margin-right:8px;width:3px;height:15px;border-radius:5px;background:#ffa466;vertical-align:-3px}
+.plane-summary{margin:0 12px 10px;background:linear-gradient(105deg,#2d2d32,#28282e);border:1px solid #3b3a43;border-radius:7px;padding:10px 11px 5px}
+.summary-row{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:7px}
+.data-cell{display:flex;justify-content:space-between;align-items:center;gap:5px;background:#37373c;border:1px solid #46454e;border-radius:4px;padding:8px 9px;min-width:0;font-size:11px}
+.data-cell.wide{grid-column:1/-1}.data-cell span{color:#afadb6;white-space:nowrap}.data-cell b{font-weight:650;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.open-flight{margin-top:12px;width:100%;background:#5f398e;border:1px solid #8962b7;color:#f8f4ff;border-radius:7px;padding:10px 12px;text-align:center;font-weight:650}.open-flight:hover{background:#7443b3}.open-flight:disabled{opacity:.45;cursor:default}
+.progress-wrap{padding:15px 0 5px}.progress-label{display:flex;justify-content:space-between;font-size:11px;color:#c7c4ce}.progress-track{height:5px;border-radius:20px;background:#45414c;margin-top:12px;position:relative;overflow:hidden}.progress-track>div{height:100%;width:0%;border-radius:20px;background:linear-gradient(90deg,#ae8bfb,#7e36f3);transition:width .7s}
+.details-bottom{margin-top:auto;padding:10px 12px 14px}.action-strip{display:flex;background:#34343a;border:1px solid #46444b;border-radius:7px;overflow:hidden}.action-strip button{flex:1;display:grid;justify-items:center;gap:2px;border:0;border-right:1px solid #46444b;background:none;color:#ccc9d2;padding:11px 6px;font-size:10px}.action-strip button:last-child{border-right:0}.action-strip button:hover{background:#40364e;color:#fff}.action-strip .glyph{font-size:17px}
+.map-wrap{position:relative;min-width:0;overflow:hidden;background:#23252b}.map-fill{position:absolute;inset:0;z-index:1;background:repeating-linear-gradient(45deg,#26282e,#26282e 10px,#24262b 10px,#24262b 20px)}.map-top{position:absolute;top:17px;left:19px;right:20px;z-index:650;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;pointer-events:none}.map-top>*{pointer-events:auto}
+.map-brand{display:inline-flex;align-items:center;gap:9px;padding:10px 14px;background:#212126dc;border:1px solid #53505c70;box-shadow:0 6px 22px #0004;border-radius:8px;backdrop-filter:blur(14px);font-weight:700;font-size:12px}.map-brand .pin{width:8px;height:8px;border-radius:50%;background:#a770fe;box-shadow:0 0 0 4px #8a47ff28}
+.top-actions{display:flex;align-items:center;gap:8px}.pill-btn{border:1px solid #494850;border-radius:22px;background:#232329e8;padding:8px 13px;color:#e4e2ea;box-shadow:0 3px 12px #0005}.pill-btn:hover{background:#35323d}.pill-btn select{border:0;background:transparent;color:inherit;cursor:pointer;outline:0}.pill-btn option{background:#24242a}
+.map-controls{position:absolute;top:88px;right:19px;display:flex;flex-direction:column;gap:10px;z-index:650}.control{border:1px solid #48464f;background:#25252aeb;color:#eee;display:grid;place-items:center;width:41px;height:41px;border-radius:50%;box-shadow:0 5px 15px #0006;font-size:22px}.control:hover{background:#44355d}.control.on{background:#603b99}
+.leaflet-container{font-family:inherit;background:#1d2026}.leaflet-control-attribution{background:#202126d9!important;color:#bab8c0!important;font-size:9px!important}.leaflet-control-attribution a{color:#bdb0ec!important}.leaflet-top.leaflet-left{display:none}
+.map-message{position:absolute;top:80px;left:20px;z-index:650;background:#212126ee;border:1px solid #5a485b;color:#dfdbe5;padding:10px 14px;border-radius:8px;max-width:310px;display:none}
+.telemetry-strip{position:absolute;bottom:16px;left:16px;right:16px;z-index:650;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;pointer-events:none}
+.telemetry-tile{background:#202024ed;border:1px solid #393841;border-radius:9px;padding:14px 17px;box-shadow:0 8px 24px #0008;min-width:0}
+.telemetry-tile span{display:block;color:#9c99a6;font-size:10px;letter-spacing:1px;text-transform:uppercase;margin-bottom:5px}
+.telemetry-tile b{font-weight:700;font-size:20px;white-space:nowrap}
+.plane-icon{filter:drop-shadow(0 2px 5px #000c)}
+#mapNotice{display:none}
+@media(max-width:1150px){.workspace{grid-template-columns:300px 1fr}.telemetry-strip{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:830px){.workspace{grid-template-columns:278px 1fr}.hero{height:165px}.hero svg{height:156px}}
+@media(max-height:750px){.hero{height:130px}.hero svg{height:125px}.airport{min-height:75px}.airport b{font-size:23px}.plane-summary{padding-bottom:2px}.progress-wrap{padding:8px 0 0}}
+</style>
+</head>
+<body>
+<div class="workspace">
+  <aside class="details">
+    <div class="details-head">
+      <div class="flight-label" id="flightTitle">MY AIRCRAFT · SIMULATOR</div>
+      <span class="signal" id="connectionIndicator">AWAITING SIM</span>
+    </div>
+    <div class="hero">
+      <div class="orb"></div>
+      <svg viewBox="0 0 500 245" aria-hidden="true"><defs><linearGradient id="bodyTone" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff"/><stop offset=".54" stop-color="#e3e5ef"/><stop offset="1" stop-color="#9fa8b8"/></linearGradient></defs>
+      <path d="M60 194c12 3 48-4 95-13l51-60-48-70c-9-14-5-23 7-18l103 72 97-12 78 40 5 13-112 5-73 24-67 55c-16 10-23 4-18-9l24-48-52 14-50 29c-17 8-25 0-16-12z" fill="url(#bodyTone)" stroke="#a9b0bd" stroke-width="3"/>
+      <path d="M94 187l116-30 61-25 165 8-106 9-68 24-66 40 14-40-90 23z" fill="#6e7580" opacity=".42"/>
+      <path d="M167 34l100 75-55 8-44-73" fill="#f4f5fa"/><path d="M365 94l77 39-69-1-46-29" fill="#c1c5d0"/>
+      <path d="M221 120l34-9 14 5-35 12" fill="#323946"/><path d="M241 123l20-6" stroke="#8290a7" stroke-width="4"/>
+      <path d="M286 139l65-1" stroke="#5140a1" stroke-width="4" opacity=".65"/>
+      </svg>
+      <div class="hero-foot"><span id="heroAircraft">MICROSOFT FLIGHT SIMULATOR</span><span id="heroStatus">STANDBY</span></div>
+    </div>
+
+    <section class="route-card">
+      <div class="route-grid">
+        <div class="airport"><b id="depCode">--- </b><span>Departure</span><small id="depName">Not selected</small></div>
+        <div class="airport-plane">✈</div>
+        <div class="airport"><b id="arrCode">--- </b><span>Arrival</span><small id="arrName">Not selected</small></div>
+      </div>
+      <div class="route-meta">
+        <div><strong>Paired NAVDECK flight</strong><span id="routeSub">Connect to sync your flight</span></div>
+        <div><strong id="routeStatus">No active flight</strong><span id="nextFix">Next fix: —</span></div>
+      </div>
+      <button class="open-flight" id="openFlight" type="button">▤ &nbsp; Open In-Flight Reporting</button>
+    </section>
+
+    <div class="section-title">Flight information</div>
+    <section class="plane-summary">
+      <div class="summary-row"><div class="data-cell wide"><span>Aircraft</span><b id="aircraftName">Not connected</b></div></div>
+      <div class="summary-row"><div class="data-cell"><span>Speed</span><b id="groundspeed">— KT</b></div><div class="data-cell"><span>Altitude</span><b id="altitude">— FT</b></div></div>
+      <div class="summary-row"><div class="data-cell"><span>Heading</span><b id="heading">—°</b></div><div class="data-cell"><span>Fuel</span><b id="fuel">— LB</b></div></div>
+      <div class="summary-row"><div class="data-cell wide"><span>GPS position</span><b id="coordinates">Waiting for simulator</b></div></div>
+    </section>
+
+    <div class="details-bottom">
+      <div class="action-strip">
+        <button type="button" id="recenterBtn"><span class="glyph">◎</span>Locate</button>
+        <button type="button" id="followBtn"><span class="glyph">⌖</span><span id="followLabel">Following</span></button>
+        <button type="button" id="copyBtn"><span class="glyph">▣</span><span id="copyLabel">Copy GPS</span></button>
+        <button type="button" id="resetBtn"><span class="glyph">↺</span>Reset map</button>
+      </div>
+    </div>
+  </aside>
+  <main class="map-wrap" aria-label="Live aviation map">
+    <div id="map" class="map-fill"></div>
+    <div class="map-top">
+      <div class="map-brand"><span class="pin"></span>LIVE FLIGHT MAP <span style="font-weight:400;color:#b5b0be" id="mapStatus">· Connecting</span></div>
+      <div class="top-actions">
+        <label class="pill-btn">Map view&nbsp; <select id="layerSelect" aria-label="Map layer"><option value="dark">Dark map</option><option value="satellite">Satellite</option></select></label>
+      </div>
+    </div>
+    <div class="map-controls">
+      <button class="control" type="button" id="zoomIn" aria-label="Zoom in">+</button>
+      <button class="control" type="button" id="zoomOut" aria-label="Zoom out">−</button>
+      <button class="control on" type="button" id="focusAircraft" aria-label="Follow simulator aircraft">⌖</button>
+    </div>
+    <div class="map-message" id="mapNotice" role="status"></div>
+    <div class="telemetry-strip" aria-label="Simulator telemetry">
+      <div class="telemetry-tile"><span>Groundspeed</span><b id="mapSpeed">— KT</b></div>
+      <div class="telemetry-tile"><span>Altitude</span><b id="mapAlt">— FT</b></div>
+      <div class="telemetry-tile"><span>Heading</span><b id="mapHdg">—°</b></div>
+      <div class="telemetry-tile"><span>Fuel on board</span><b id="mapFuel">— LB</b></div>
+    </div>
+  </main>
+</div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-(() => {
-  const status=document.getElementById('connection');
-  if(!window.L){status.textContent='Map library unavailable — check internet connection';return;}
-  const map=L.map('map',{zoomControl:true}).setView([51.5,-0.12],5);
-  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',{attribution:'Tiles &copy; Esri',maxZoom:18}).addTo(map);
-  let marker=null,follow=true,busy=false;
-  const button=document.getElementById('follow');
-  button.onclick=()=>{follow=!follow;button.textContent=follow?'Following aircraft':'Follow aircraft';};
-  const format=(n,d=0)=>Number.isFinite(n)?n.toFixed(d):'—';
-  async function update(){
-    if(busy)return;
-    if(typeof window.navdeckDesktop?.getTelemetry!=='function'){status.textContent='○ Native simulator bridge unavailable';return;}
-    busy=true;
-    try{
-      const t=await window.navdeckDesktop.getTelemetry();
-      if(!t||!Number.isFinite(t.lat)||!Number.isFinite(t.lon)||Math.abs(t.lat)>90||Math.abs(t.lon)>180){
-        status.textContent='○ Awaiting simulator telemetry';if(marker){map.removeLayer(marker);marker=null;}return;
-      }
-      status.textContent='● Aircraft tracking live';
-      const heading=Number.isFinite(t.heading_deg)?t.heading_deg:0;
-      const icon=L.divIcon({className:'',html:`<div class="aircraft" style="transform:rotate(${heading}deg)"><svg viewBox="0 0 24 24"><path d="M12 2 L15 10 L22 14 L22 17 L13.5 14.5 L13.5 20 L16 22 L16 23 L12 22 L8 23 L8 22 L10.5 20 L10.5 14.5 L2 17 L2 14 L9 10 Z" fill="#38bdf8" stroke="#e0f2fe" stroke-width=".7"/></svg></div>`,iconSize:[38,38],iconAnchor:[19,19]});
-      if(!marker){marker=L.marker([t.lat,t.lon],{icon}).addTo(map).bindTooltip('Live simulator aircraft');map.setView([t.lat,t.lon],9);}
-      else{marker.setLatLng([t.lat,t.lon]);marker.setIcon(icon);if(follow)map.panTo([t.lat,t.lon],{animate:true});}
-      document.getElementById('alt').textContent=format(t.altitude_ft);
-      document.getElementById('gs').textContent=format(t.groundspeed_kt);
-      document.getElementById('hdg').textContent=format(heading);
-      document.getElementById('gps').textContent=format(t.lat,3)+', '+format(t.lon,3);
-    }catch{status.textContent='○ Simulator telemetry unavailable';}
-    finally{busy=false;}
+(function(){
+  'use strict';
+  const el=id=>document.getElementById(id);
+  const valid=(n,min,max)=>Number.isFinite(n)&&n>=min&&n<=max;
+  const format=(n,d=0)=>Number.isFinite(n)?Number(n).toLocaleString('en-GB',{maximumFractionDigits:d,minimumFractionDigits:d}):'—';
+  const cleanCode=(s)=>String(s||'').replace(/[^a-zA-Z0-9]/g,'').slice(0,4).toUpperCase();
+  let map=null,marker=null,trail=null,layer=null,latest=null,follow=true,mapStarted=false,busy=false;
+  const tracks=[];
+  let cloudFlightId=null, lastIconHeading=null;
+  const layers={
+    dark:{url:'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',attribution:'Tiles &copy; Esri'},
+    satellite:{url:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',attribution:'Imagery &copy; Esri'}
+  };
+  function planeIcon(heading,color,size){
+    const angle=Number.isFinite(heading)?heading:0;
+    return L.divIcon({className:'plane-icon',html:'<div style="transform:rotate('+angle+'deg);width:'+size+'px;height:'+size+'px"><svg width="'+size+'" height="'+size+'" viewBox="0 0 32 32"><path d="M16 2l3.8 11.1L29 19v4l-11-4v7l4 3v1l-6-1.5L10 30v-1l4-3v-7L3 23v-4l9.2-5.9z" fill="'+color+'" stroke="#f3f1f9" stroke-width="1.2"/></svg></div>',iconSize:[size,size],iconAnchor:[size/2,size/2]});
   }
-  update();setInterval(update,1000);
+  function notify(message){
+    const notice=el('mapNotice');notice.textContent=message;notice.style.display='block';
+    clearTimeout(notify.timeout);notify.timeout=setTimeout(()=>{notice.style.display='none'},4300);
+  }
+  function changeLayer(name){
+    if(!map)return;
+    if(layer)map.removeLayer(layer);
+    const selected=layers[name]||layers.dark;layer=L.tileLayer(selected.url,{attribution:selected.attribution,maxZoom:18,updateWhenIdle:true,keepBuffer:2}).addTo(map);
+  }
+  function updateFollow(){
+    el('followLabel').textContent=follow?'Following':'Follow off';
+    el('focusAircraft').classList.toggle('on',follow);
+  }
+  function setFollow(value,center){
+    follow=value;updateFollow();
+    if(center&&latest&&marker)map.flyTo([latest.lat,latest.lon],Math.max(map.getZoom(),9),{duration:.55});
+  }
+  function setupMap(){
+    if(!window.L){el('mapStatus').textContent='· Map unavailable';notify('Map library could not load. Check your internet connection.');return;}
+    map=L.map('map',{zoomControl:false,worldCopyJump:true,preferCanvas:true}).setView([46.5,4.5],5);
+    changeLayer('dark');mapStarted=true;
+    el('zoomIn').onclick=()=>map.zoomIn();
+    el('zoomOut').onclick=()=>map.zoomOut();
+    el('focusAircraft').onclick=()=>setFollow(true,true);
+    el('layerSelect').onchange=e=>changeLayer(e.target.value);
+    el('resetBtn').onclick=()=>{setFollow(false);map.flyTo([46.5,4.5],5,{duration:.7});};
+    el('recenterBtn').onclick=()=>latest?setFollow(true,true):notify('Connect your simulator to locate your aircraft.');
+    el('followBtn').onclick=()=>setFollow(!follow,true);
+    map.on('dragstart',()=>{setFollow(false);});
+  }
+  el('copyBtn').onclick=async()=>{
+    if(!latest){notify('No simulator GPS coordinates available.');return;}
+    const coords=latest.lat.toFixed(5)+', '+latest.lon.toFixed(5);
+    try{await navigator.clipboard.writeText(coords);el('copyLabel').textContent='Copied';setTimeout(()=>el('copyLabel').textContent='Copy GPS',2000);}catch{notify(coords);}
+  };
+  function showTelemetry(t){
+    const ok=t&&valid(Number(t.lat),-90,90)&&valid(Number(t.lon),-180,180)&&!(Number(t.lat)===0&&Number(t.lon)===0);
+    if(!ok){latest=null;el('connectionIndicator').textContent='AWAITING SIM';el('connectionIndicator').classList.remove('live');el('heroStatus').textContent='STANDBY';el('mapStatus').textContent='· Simulator offline';el('aircraftName').textContent='Not connected';
+      for(const k of ['groundspeed','altitude','heading','fuel'])el(k).textContent='—';
+      for(const k of ['mapSpeed','mapAlt','mapHdg','mapFuel'])el(k).textContent='—';
+      el('coordinates').textContent='Waiting for simulator';
+      if(marker&&map){map.removeLayer(marker);marker=null;}if(trail&&map){map.removeLayer(trail);trail=null;}tracks.length=0;lastIconHeading=null;return;
+    }
+    const lat=Number(t.lat),lon=Number(t.lon),head=Number(t.heading_deg)||0;
+    latest={...t,lat,lon};
+    el('connectionIndicator').textContent='LIVE SIM';
+    el('connectionIndicator').classList.add('live');
+    el('heroStatus').textContent='TRACKING';
+    el('mapStatus').textContent='· Simulator connected';
+    let aircraft=String(t.aircraft||'Microsoft Flight Simulator').slice(0,70);
+    el('heroAircraft').textContent=aircraft;el('aircraftName').textContent=aircraft;
+    el('groundspeed').textContent=format(Number(t.groundspeed_kt))+' KT';
+    el('altitude').textContent=format(Number(t.altitude_ft))+' FT';
+    el('heading').textContent=format(head)+'°';
+    el('fuel').textContent=format(Number(t.fuel_lb))+' LB';
+    el('coordinates').textContent=lat.toFixed(4)+'°, '+lon.toFixed(4)+'°';
+    el('mapSpeed').textContent=format(Number(t.groundspeed_kt))+' KT';
+    el('mapAlt').textContent=format(Number(t.altitude_ft))+' FT';
+    el('mapHdg').textContent=format(head)+'°';
+    el('mapFuel').textContent=format(Number(t.fuel_lb))+' LB';
+    if(!map)return;
+    const pt=[lat,lon];
+    if(!marker){marker=L.marker(pt,{icon:planeIcon(head,'#c395ff',38),zIndexOffset:1000}).addTo(map).bindTooltip('My simulator aircraft');map.flyTo(pt,9,{duration:.6});}
+    else{marker.setLatLng(pt);if(lastIconHeading===null||Math.abs(head-lastIconHeading)>1.5){marker.setIcon(planeIcon(head,'#c395ff',38));lastIconHeading=head;}if(follow&&map.distance(map.getCenter(),pt)>900)map.panTo(pt,{animate:false});}
+    if(!tracks.length||Math.abs(tracks[tracks.length-1][0]-lat)+Math.abs(tracks[tracks.length-1][1]-lon)>.0001){tracks.push(pt);if(tracks.length>240)tracks.shift();}
+    if(trail)trail.setLatLngs(tracks);else trail=L.polyline(tracks,{color:'#ac78fd',weight:3,opacity:.8}).addTo(map);
+
+  }
+  async function pollTelemetry(){
+    if(busy)return;busy=true;
+    try{
+      if(typeof window.navdeckDesktop?.getTelemetry!=='function'){showTelemetry(null);return;}
+      const t=await window.navdeckDesktop.getTelemetry();showTelemetry(t);
+    }catch{showTelemetry(null);}finally{busy=false;}
+  }
+  async function syncCloudFlight(){
+    if(typeof window.navdeckDesktop?.getFlight!=='function')return;
+    try{
+      const response=await window.navdeckDesktop.getFlight();
+      const f=response?.flight;
+      if(!f){
+        cloudFlightId=null;
+        el('routeStatus').textContent='No active flight';
+        el('routeSub').textContent='Import an OFP from SimBrief';
+        el('nextFix').textContent='Next fix: —';
+        return;
+      }
+      el('depCode').textContent=cleanCode(f.origin)||'—';
+      el('arrCode').textContent=cleanCode(f.destination)||'—';
+      el('depName').textContent='NAVDECK route';
+      el('arrName').textContent='NAVDECK route';
+      el('routeSub').textContent=(f.origin||'—')+' → '+(f.destination||'—');
+      el('routeStatus').textContent=f.callsign||'Active flight';
+      el('nextFix').textContent='Next fix: '+(f.waypoints?.find(w=>!w.done)?.ident||'—');
+      cloudFlightId=f.id;
+      if(f.callsign)el('flightTitle').textContent=String(f.callsign).slice(0,26)+' · LIVE';
+      if(f.aircraft)el('heroAircraft').textContent=String(f.aircraft).slice(0,60);
+    }catch{ /* A simulator can still be tracked before cloud pairing. */ }
+  }
+  el('openFlight').onclick=()=>{
+    location.href=cloudFlightId?
+      'flight.html?id='+encodeURIComponent(cloudFlightId)+'#enroute':
+      'flight.html?active=1#enroute';
+  };
+  setupMap();
+  syncCloudFlight();setInterval(syncCloudFlight,30000);
+  pollTelemetry();
+  setInterval(()=>{if(!document.hidden)pollTelemetry();},1800);
+
 })();
-</script></body></html>
+</script>
+</body>
+</html>

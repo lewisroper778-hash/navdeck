@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>NAVDECK · Operations Workspace</title>
+<style>
+:root{--bg:#18191d;--panel:#25262b;--panel2:#2d2d33;--line:#3b3b46;--text:#f5f4fa;--muted:#a19fad;--dim:#787583;--accent:#985cff;--accent2:#b991ff;--green:#87dfa3;--amber:#fac879;--red:#f39898}
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font:14px/1.45 'Segoe UI',Arial,sans-serif}body{min-width:560px}button,input{font:inherit}button{cursor:pointer}button:focus-visible,input:focus-visible{outline:2px solid var(--accent2);outline-offset:2px}button:disabled{cursor:wait;opacity:.5}main{max-width:1600px;margin:auto;padding:33px 42px 70px}
+.top{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:32px}.crumb{display:flex;align-items:center;gap:8px;color:var(--dim);font-size:12px;letter-spacing:1px;text-transform:uppercase}.crumb b{color:var(--accent2);font-weight:650}.topright{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:12px}.status{border:1px solid var(--line);border-radius:30px;background:var(--panel);padding:8px 13px;color:#d3d1db;display:flex;align-items:center;gap:7px}.status i{display:block;width:7px;height:7px;background:#92909a;border-radius:50%}.status.ok i{background:var(--green);box-shadow:0 0 6px #87dfa3bb}.status.error i{background:var(--red)}.avatar{display:grid;place-items:center;width:34px;height:34px;border-radius:50%;background:#59438c;color:#fff;font-weight:800}
+.hero{position:relative;display:flex;align-items:end;justify-content:space-between;min-height:196px;gap:28px;overflow:hidden;padding:31px 34px;background:radial-gradient(ellipse at 92% 20%,#553b81a0,transparent 46%),linear-gradient(125deg,#2b253e,#272630 70%);border:1px solid #50435d;border-radius:15px;box-shadow:0 16px 30px #0002;margin-bottom:24px}.hero:before{content:"";position:absolute;border:1px solid #a58de01c;border-radius:50%;width:490px;height:490px;top:-290px;right:-95px}.hero>div{z-index:1}.eyebrow{font-size:10px;font-weight:750;letter-spacing:2px;color:#c7b4eb;text-transform:uppercase}.hero h1{font-size:35px;line-height:1.12;letter-spacing:-1px;margin:12px 0 8px;font-weight:720}.hero p{color:#bdb5c9;max-width:660px;margin:0;font-size:13px}.hero-stat{display:grid;gap:2px;min-width:175px;background:#1e1b267a;padding:16px 18px;border:1px solid #67577978;border-radius:11px}.hero-stat b{font-size:25px}.hero-stat span{font-size:11px;color:#b9adc9}
+.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.row.right{justify-content:flex-end}.button{border:1px solid #595369;background:#352c44;color:#eae1ff;border-radius:8px;padding:10px 16px;font-size:12px;font-weight:650;transition:background .14s}.button:hover{background:#49375f}.button.primary{background:#8745eb;border-color:#9a5cf5;color:#fff}.button.primary:hover{background:#9b63f7}.button.ghost{background:#28282e;border-color:#464550;color:#dfdde5}.button.ghost:hover{background:#35353f}.button.small{padding:7px 11px}
+.panel{min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:21px;margin-bottom:18px;box-shadow:0 6px 22px #00000010}.panel.tight{padding:0;overflow:hidden}.panel-head{display:flex;align-items:start;justify-content:space-between;gap:15px;margin-bottom:16px}.panel-head h2{margin:0;font-size:14px;font-weight:700;letter-spacing:.1px}.panel-head p{margin:5px 0 0;font-size:12px;color:var(--muted)}.toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px;flex-wrap:wrap}
+.search{min-width:260px;max-width:360px;flex:1;border:1px solid #4e4d56;background:#232329;color:#fff;border-radius:8px;padding:10px 13px;outline:none}.search::placeholder{color:#8a8794}.search:focus{border-color:#975bfa}
+.metric-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:23px}.metric{background:var(--panel);border:1px solid var(--line);padding:18px 20px;border-radius:11px}.metric .label{font-size:11px;color:var(--muted);letter-spacing:.3px}.metric strong{display:block;font-size:26px;font-weight:710;margin:9px 0 2px;font-variant-numeric:tabular-nums}.metric small{display:block;color:var(--dim);font-size:11px}.metric.purple{border-color:#71539a;background:linear-gradient(135deg,#3a2f52,#2b2934)}
+.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:15px}.flight{width:100%;padding:17px 17px 14px;border:1px solid #474451;border-radius:11px;background:linear-gradient(115deg,#303038,#28282f);text-align:left;min-width:0;color:var(--text)}button.flight:hover{border-color:#a070eb;background:#383142}.flight-head{display:flex;justify-content:space-between;align-items:center;gap:10px}.flight-head b{font-size:14px}.chip{padding:4px 9px;border:1px solid #5a4a75;background:#3f3552;border-radius:20px;color:#d7bffc;font-size:10px;white-space:nowrap}.chip.closed{background:#324839;border-color:#45634d;color:#9be9af}.flight-route{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:19px 0 13px}.flight-route b{font-size:27px;font-weight:670;letter-spacing:1px}.flight-route span{color:#ab78f6;font-size:22px}.flight-footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid #494752;padding-top:10px;color:#aeadb8;font-size:11px}
+.two-col{display:grid;grid-template-columns:1.18fr .82fr;gap:17px}.setting-group{margin-bottom:18px}.setting-group label{display:block;margin-bottom:8px;color:#c9c5d1;font-weight:650;font-size:12px}.setting-group input{width:100%;padding:11px 13px;background:#1d1e23;border:1px solid #514e5d;border-radius:7px;color:#fff}.setting-group small{display:block;margin-top:7px;color:var(--dim)}.setting-group input:focus{border-color:#9257ed}.inline-callout{border:1px solid #514866;background:#312c3b;border-radius:9px;padding:13px 14px;color:#c4b4d8;font-size:12px;margin:15px 0}
+.empty{padding:45px 20px;text-align:center;color:#afabb9;line-height:1.65}.empty .symbol{font-size:26px;color:#af8af3;margin-bottom:8px}.empty strong{display:block;font-size:15px;color:#efedf5}.empty p{max-width:480px;margin:6px auto;font-size:12px}
+.table-wrap{overflow:auto}.table{width:100%;border-collapse:collapse;white-space:nowrap}.table thead{color:#9896a4;background:#222228;text-align:left;font-size:10px;letter-spacing:1px;text-transform:uppercase}.table th,.table td{padding:15px 19px;border-bottom:1px solid #35353e}.table tbody tr:hover{background:#2e2e37}.table td{font-size:12px;color:#d8d6df}.table td:first-child{font-weight:700;color:#fff}.table .muted{color:#a09eaa}
+.mini-icon{display:inline-grid;place-items:center;background:#50397d;color:#d5bbff;border-radius:9px;width:36px;height:36px;font-size:17px;margin-right:10px}.bullet-list{margin:12px 0 0;padding-left:20px;color:#b7b3c1;font-size:12px;line-height:2}
+.notice{border:1px solid #705e48;background:#372d25;color:#f2c886;border-radius:9px;padding:14px 16px;font-size:12px;margin-bottom:15px}.notice.error{border-color:#754950;background:#3c292f;color:#f4a9b0}.notice.good{border-color:#457051;background:#253b2d;color:#aadcb5}
+.section-kicker{font-size:11px;letter-spacing:1.5px;color:#b5a6ce;font-weight:800;text-transform:uppercase;margin:23px 0 12px}
+.loader{color:#aba8b5;font-size:12px;padding:26px 0}
+@media(max-width:1250px){main{padding:26px 25px}.cards{grid-template-columns:repeat(2,minmax(0,1fr))}.two-col{grid-template-columns:1fr}.hero h1{font-size:30px}}
+@media(max-width:960px){.metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.cards{grid-template-columns:1fr}.hero-stat{display:none}.hero{padding:26px}}
+@media(max-width:720px){main{padding:20px 17px}.top{margin-bottom:19px}.topright .label{display:none}.metric-grid{grid-template-columns:1fr 1fr}.hero h1{font-size:26px}}
+</style>
+</head>
+<body>
+<main>
+  <header class="top">
+    <div class="crumb"><span>NAVDECK</span><span>›</span><b id="breadcrumb">Workspace</b></div>
+    <div class="topright">
+      <span class="status" id="cloudStatus"><i></i><span>Connecting to NAVDECK</span></span>
+      <div class="avatar" title="NAVDECK Desktop">N</div>
+    </div>
+  </header>
+  <div id="content"></div>
+</main>
+<script>
+(function(){
+'use strict';
+const $=id=>document.getElementById(id);
+const safe=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const call=(name,args)=>window.navdeckDesktop&&typeof window.navdeckDesktop[name]==='function' ? window.navdeckDesktop[name](args):Promise.reject(Error('Desktop bridge unavailable'));
+const format=n=>Number.isFinite(Number(n))?Number(n).toLocaleString('en-GB'):'—';
+const short=v=>{let x=String(v??'—');return x.length>28?x.slice(0,28)+'…':x};
+const statusEl=$('cloudStatus');
+let lastFlight=null,lastFlights=[],flightCache=null,flightCacheAt=0;
+function notice(msg,kind=''){return '<div class="notice '+kind+'">'+safe(msg)+'</div>'}
+function setCloud(ok,text){statusEl.className='status '+(ok?'ok':'error');statusEl.querySelector('span').textContent=text}
+function action(id,fn){const node=$(id);if(node)node.onclick=fn}
+function template(title,subtitle,statlabel,statvalue,actions=''){return '<div class="hero"><div><div class="eyebrow">NAVDECK · FLIGHT OPERATIONS</div><h1>'+safe(title)+'</h1><p>'+safe(subtitle)+'</p><div class="row" style="margin-top:19px">'+actions+'</div></div><div class="hero-stat"><b>'+safe(statvalue)+'</b><span>'+safe(statlabel)+'</span></div></div>'}
+function btn(id,title,primary=false){return '<button class="button '+(primary?'primary':'ghost')+'" id="'+id+'">'+safe(title)+'</button>'}
+function empty(title,body){return '<div class="empty"><div class="symbol">✈</div><strong>'+safe(title)+'</strong><p>'+safe(body)+'</p></div>'}
+function metric(label,value,sub='',special=false){return '<div class="metric '+(special?'purple':'')+'"><div class="label">'+safe(label)+'</div><strong>'+safe(value)+'</strong><small>'+safe(sub)+'</small></div>'}
+function header(label,description,actionMarkup=''){return '<div class="panel-head"><div><h2>'+safe(label)+'</h2><p>'+safe(description)+'</p></div>'+actionMarkup+'</div>'}
+function stripFlight(f){
+ const closed=f.status==='closed';
+ return '<button type="button" data-flight-id="'+safe(f.id||'')+'" aria-label="Open flight '+safe(f.callsign||'')+'" class="flight"><div class="flight-head"><b>'+safe(short(f.callsign||'Flight'))+'</b><span class="chip '+(closed?'closed':'')+'">'+safe(closed?'Closed':f.status||'Open')+'</span></div><div class="flight-route"><b>'+safe(f.origin||'—')+'</b><span>✈</span><b>'+safe(f.destination||'—')+'</b></div><div class="flight-footer"><span>'+safe(short(f.aircraft||'Aircraft unavailable'))+'</span><span>'+safe(f.distance?String(f.distance)+' NM':f.imported_at?.slice(0,10)||'No distance')+'</span></div><div class="flight-footer"><span>Open flight operations</span><span>↗</span></div></button>'
+}
+async function loadFlights(force=false){
+ if(!force&&flightCache&&Date.now()-flightCacheAt<45000)return flightCache;
+ try{const data=await call('getFlights');if(!Array.isArray(data?.flights))throw Error('Missing cloud flight list');lastFlights=data.flights;setCloud(true,'NAVDECK cloud linked');flightCache={flights:data.flights,full:true};flightCacheAt=Date.now();return flightCache;}
+ catch(err){
+  try{const data=await call('getFlight');setCloud(true,'NAVDECK bridge linked');const f=data?.flight;lastFlights=f?[{...f,status:'open'}]:[];flightCache={flights:lastFlights,full:false};flightCacheAt=Date.now();return flightCache;}
+  catch{setCloud(false,'Pairing required');return {flights:[],full:false,error:'Pair NAVDECK using Simulator Connection to sync your flight data.'};}
+ }
+}
+async function renderFlights(force=false){
+ const top=template('My flights','A dedicated desktop flight centre. Flight data comes from your NAVDECK connection, not the website.','Flights on record','—',btn('reloadFlights','↻  Refresh flights',true));
+ $('content').innerHTML=top+'<div class="metric-grid" id="flightMetrics"></div><div class="toolbar"><div class="section-kicker" style="margin:0">FLIGHT LIBRARY</div><input class="search" id="flightSearch" placeholder="Search flight number or airport" aria-label="Search flights"></div><div id="flightNotice"></div><div class="cards" id="flightCards"></div>';
+ action('reloadFlights',()=>renderFlights(true));
+ const result=await loadFlights(force),flights=result.flights;
+ $('flightMetrics').innerHTML=metric('Flights available',flights.length,'From paired NAVDECK')+metric('Flights in progress',flights.filter(x=>x.status!=='closed').length,'Open flight plans',true)+metric('Closed flights',flights.filter(x=>x.status==='closed').length,'Archived flights')+metric('Last import',flights[0]?.imported_at?.slice(0,10)||'—','Latest NAVDECK record');
+ $('flightNotice').innerHTML=result.error?notice(result.error,'error'):(!result.full?notice('Showing the current paired flight only. Deploy the updated NAVDECK bridge server to list your full cloud flight history.'):'');
+ const draw=()=>{const term=$('flightSearch').value.trim().toLowerCase();const found=flights.filter(f=>[f.callsign,f.origin,f.destination,f.aircraft].some(v=>String(v||'').toLowerCase().includes(term)));$('flightCards').innerHTML=found.length?found.map(stripFlight).join(''):empty('No matching flights','Import a flight from SimBrief or change your search terms.')};
+ $('flightSearch').oninput=draw;draw();
+ $('flightCards').addEventListener('click',event=>{
+   const target=event.target.closest('[data-flight-id]');
+   if(!target)return;
+   const id=target.dataset.flightId;
+   if(!/^[0-9a-fA-F-]{36}$/.test(id))return;
+   location.href='flight.html?id='+encodeURIComponent(id);
+ });
+}
+async function renderSimbrief(){
+ $('content').innerHTML=template('SimBrief connection','Link your SimBrief pilot identifier, save it to NAVDECK and import your latest operational flight plan.','Integration','API link',btn('importOFP','↻  Import latest OFP',true)+' <button type="button" class="button ghost" id="previewOFP">Preview sample reporting</button>')+
+ '<section class="panel">'+header('Create a flight plan','Enter the flight details and launch SimBrief dispatch in your browser. NAVDECK will import the completed OFP.')+
+ '<form id="simbriefPlanForm"><div class="grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:12px;margin-bottom:15px">'+
+ '<div class="setting-group"><label for="planOrig">Departure ICAO</label><input id="planOrig" required maxlength="4" placeholder="EGLL"></div>'+
+ '<div class="setting-group"><label for="planDest">Arrival ICAO</label><input id="planDest" required maxlength="4" placeholder="LFPG"></div>'+
+ '<div class="setting-group"><label for="planType">Aircraft type</label><input id="planType" required maxlength="8" placeholder="A320"></div>'+
+ '<div class="setting-group"><label for="planAirline">Airline</label><input id="planAirline" maxlength="3" placeholder="BAW"></div>'+
+ '<div class="setting-group"><label for="planFlight">Flight number</label><input id="planFlight" maxlength="5" placeholder="304"></div>'+
+ '<div class="setting-group"><label for="planHour">Departure UTC hour</label><input id="planHour" maxlength="2" placeholder="14" inputmode="numeric"></div>'+
+ '<div class="setting-group"><label for="planMinute">Departure minute</label><input id="planMinute" maxlength="2" placeholder="30" inputmode="numeric"></div></div>'+
+ '<div class="row"><button type="submit" class="button primary">Generate on SimBrief</button><span class="muted">SimBrief opens externally; NAVDECK stays in its own app window.</span></div></form><div id="plannerNotice"></div></section>'+
+ '<div class="two-col"><section class="panel">'+header('SimBrief integration','Connect using your existing NAVDECK pairing code')+'<div id="profileNotice"></div><form id="profileForm"><div class="setting-group"><label for="pilotId">SimBrief Pilot ID</label><input id="pilotId" inputmode="numeric" maxlength="16" placeholder="Your numeric SimBrief Pilot ID" pattern="[0-9]{1,16}"><small>The pilot identifier from your SimBrief account settings.</small></div><div class="setting-group"><label for="displayName">Pilot display name</label><input id="displayName" maxlength="80" placeholder="Your display name"></div><div class="row right"><button class="button primary" type="submit">Save NAVDECK settings</button></div></form></section>'+
+ '<section class="panel">'+header('How it connects','A true desktop integration instead of an embedded website')+'<div class="inline-callout">NAVDECK Desktop talks directly to the cloud API using your simulator pairing token. No website screen or browser login is displayed here.</div><ul class="bullet-list"><li>Pair once through Simulator Connection.</li><li>Enter your SimBrief Pilot ID.</li><li>Save, then import your latest OFP.</li><li>Open My Flights to view your records.</li></ul><p style="color:var(--dim);font-size:11px;margin-top:18px">The new cloud import endpoints must be deployed to your NAVDECK server first.</p></section></div>';
+ $('simbriefPlanForm').onsubmit=async event=>{
+  event.preventDefault();
+  const value=id=>String($(id)?.value||'').trim().toUpperCase();
+  const orig=value('planOrig'),dest=value('planDest'),type=value('planType');
+  if(!/^[A-Z]{4}$/.test(orig)||!/^[A-Z]{4}$/.test(dest)||!/^[A-Z0-9-]{3,8}$/.test(type)){
+    $('plannerNotice').innerHTML=notice('Enter valid four-letter airport ICAOs and an aircraft type.','error');return;
+  }
+  const hour=value('planHour'),minute=value('planMinute');
+  if((hour&&!/^(?:[01]?\d|2[0-3])$/.test(hour))||(minute&&!/^[0-5]?\d$/.test(minute))){
+    $('plannerNotice').innerHTML=notice('Departure hour and minute must be valid UTC times.','error');return;
+  }
+  const values={orig,dest,type,airline:value('planAirline'),fltnum:value('planFlight'),deph:hour,depm:minute};
+  const query=new URLSearchParams(Object.entries(values).filter(([,v])=>v));
+  try{
+    await call('openSimbrief',{url:'https://dispatch.simbrief.com/options/custom?'+query.toString()});
+    $('plannerNotice').innerHTML=notice('SimBrief opened. Generate your plan there, then return here and import it.','good');
+  }catch(e){$('plannerNotice').innerHTML=notice('Could not open SimBrief: '+e.message,'error')}
+ };
+ action('previewOFP',()=>{location.href='flight.html?demo=1#enroute';});
+ action('importOFP',async()=>{
+  const b=$('importOFP'),pilotId=$('pilotId').value.trim();
+  if(pilotId&&!/^[0-9]{1,16}$/.test(pilotId)){
+    $('profileNotice').innerHTML=notice('Enter a numeric SimBrief Pilot ID first.','error');return;
+  }
+  b.disabled=true;const label=b.textContent;b.textContent='Importing OFP…';
+  $('profileNotice').innerHTML=notice('Checking your latest SimBrief OFP. If the NAVDECK server was sleeping, its first request may take longer.');
+  try{
+    const data=await call('importSimbrief',{pilot_id:pilotId||null});
+    flightCache=null;flightCacheAt=0;
+    $('profileNotice').innerHTML=notice('Imported '+String(data?.flight?.callsign||'the latest flight')+'. Opening In-Flight Reporting…','good');
+    if(data?.flight?.id&&/^[0-9a-fA-F-]{36}$/.test(data.flight.id))
+      location.href='flight.html?id='+encodeURIComponent(data.flight.id)+'#enroute';
+  }catch(e){
+    const err=String(e.message||'');
+    const extra=/Not Found|404/i.test(err)
+      ?' The NAVDECK backend needs the new desktop import endpoint deployed.'
+      : /No SimBrief Pilot ID/i.test(err)?' Save or enter your SimBrief Pilot ID first.':'';
+    $('profileNotice').innerHTML=notice('Import unavailable: '+err+'.'+extra,'error');
+  }finally{b.disabled=false;b.textContent=label}
+ });
+ $('profileForm').onsubmit=async e=>{
+  e.preventDefault();
+  const btn=e.submitter;
+  btn.disabled=true;
+  try{
+    const pilotId=$('pilotId').value.trim();
+    if(pilotId&&!/^[0-9]{1,16}$/.test(pilotId))
+      throw Error('SimBrief Pilot ID must be 1–16 digits.');
+    const payload={simbrief_pilot_id:pilotId||null,display_name:$('displayName').value.trim()||null};
+    const saved=await call('saveProfile',payload);
+    if(saved?.sync_status==='local_only'){
+      setCloud(false,'SimBrief settings saved locally');
+      $('profileNotice').innerHTML=notice('Saved on this PC only. The NAVDECK server does not yet support desktop profile saving. Your settings will be synced when the desktop API is available and you next open this page.');
+    }else{
+      setCloud(true,'NAVDECK cloud linked');
+      $('profileNotice').innerHTML=notice('SimBrief Pilot ID and display name saved to your NAVDECK account.','good');
+    }
+  }catch(err){
+    $('profileNotice').innerHTML=notice('Could not save your SimBrief settings: '+err.message,'error');
+  }finally{btn.disabled=false}
+ };
+ try{
+   const data=await call('getProfile'),p=data?.profile||{};
+   $('pilotId').value=p.simbrief_pilot_id||'';
+   $('displayName').value=p.display_name||'';
+   if(data?.sync_status==='local_only'){
+     setCloud(false,'SimBrief profile pending cloud sync');
+     $('profileNotice').innerHTML=notice('Your SimBrief settings are stored on this PC and are waiting to sync. Importing an OFP into NAVDECK still requires the updated cloud backend.');
+   }else if(data?.sync_status==='server_upgrade_required'){
+     setCloud(false,'Desktop cloud API needs updating');
+     $('profileNotice').innerHTML=notice('This NAVDECK server does not yet offer desktop profile saving. You can save your Pilot ID here locally, or use the online NAVDECK SimBrief settings until the server is updated.');
+   }else{
+     setCloud(true,'NAVDECK cloud linked');
+   }
+ }catch(e){
+   setCloud(false,'SimBrief profile unavailable');
+   $('profileNotice').innerHTML=notice('Unable to read cloud settings: '+e.message+'. Check your simulator pairing code and backend connection.','error');
+ }
+}
+async function renderVatsim(isCommunity=false){
+ const title=isCommunity?'Flight community':'VATSIM network',desc=isCommunity?'Explore active pilots on the public VATSIM network. NAVDECK social messages are not yet available in the desktop bridge.':'Live aviation network activity presented in your own NAVDECK desktop interface.';
+ $('content').innerHTML=template(title,desc,'Network source','VATSIM',btn('refreshTraffic','↻  Refresh traffic',true))+
+ '<div class="metric-grid" id="networkMetrics"></div>'+
+ '<section class="panel">'+header('File a flight plan','Prefill a VATSIM flight plan from a NAVDECK flight. Review and submit it on myVATSIM.')+
+ '<div class="row"><select id="vatsimFlight" class="search" style="max-width:380px" aria-label="Choose open flight"><option value="">Select an open NAVDECK flight</option></select>'+
+ '<button type="button" id="vatsimPrefile" class="button primary">Open VATSIM prefile</button></div>'+
+ '<div id="prefileNotice" style="margin-top:12px"></div></section>'+
+ '<section class="panel tight">'+
+ '<div style="padding:21px 20px 14px">'+header(isCommunity?'Pilot activity':'Live pilots','Real flights from public VATSIM data — not simulated or invented traffic.')+
+ '<input class="search" id="trafficSearch" placeholder="Search callsign, origin or destination" aria-label="Filter network traffic"></div>'+
+ '<div id="trafficNotice" style="padding:0 20px"></div><div class="table-wrap"><table class="table"><thead><tr><th>Callsign</th><th>Departure</th><th>Destination</th><th>Altitude</th><th>Groundspeed</th><th>Aircraft</th></tr></thead><tbody id="trafficTable"><tr><td colspan="6">Loading VATSIM traffic…</td></tr></tbody></table></div></section>';
+ let pilots=[];
+ const draw=()=>{
+  const term=$('trafficSearch').value.trim().toLowerCase();
+  const rows=pilots.filter(p=>[p.callsign,p.flight_plan?.departure,p.flight_plan?.arrival,p.flight_plan?.aircraft_short].some(v=>String(v||'').toLowerCase().includes(term))).slice(0,80);
+  $('trafficTable').innerHTML=rows.length?rows.map(p=>'<tr><td>'+safe(p.callsign)+'</td><td>'+safe(p.flight_plan?.departure||'—')+'</td><td>'+safe(p.flight_plan?.arrival||'—')+'</td><td class="muted">'+safe(format(p.altitude))+' FT</td><td class="muted">'+safe(format(p.groundspeed))+' KT</td><td class="muted">'+safe(p.flight_plan?.aircraft_short||'—')+'</td></tr>').join(''):'<tr><td colspan="6" class="muted">No matching live network flights.</td></tr>';
+ };
+ $('trafficSearch').oninput=draw;
+ const refresh=async()=>{
+  const b=$('refreshTraffic');b.disabled=true;
+  try{const r=await fetch('https://data.vatsim.net/v3/vatsim-data.json',{cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);
+  const d=await r.json();if(!Array.isArray(d.pilots))throw Error('Invalid feed');
+  pilots=d.pilots;
+  $('networkMetrics').innerHTML=metric('Pilots online',pilots.length,'Live VATSIM feed',true)+metric('ATC positions',Array.isArray(d.controllers)?d.controllers.length:'—','Controllers online')+
+  metric('Filed flight plans',pilots.filter(p=>p.flight_plan?.departure).length,'Live submissions')+metric('Data source','VATSIM','Community feed, not NAVDECK messages');
+  $('trafficNotice').innerHTML='';draw();
+  }catch(e){$('trafficNotice').innerHTML=notice('Could not load VATSIM traffic. Check your connection. '+e.message,'error');$('trafficTable').innerHTML='<tr><td colspan="6">Network traffic unavailable.</td></tr>';}
+  finally{b.disabled=false}
+ };
+
+ action('refreshTraffic',refresh);refresh();
+ try{
+   const [flightData,profileData]=await Promise.allSettled([call('getFlights'),call('getProfile')]);
+   const available=flightData.status==='fulfilled'?(flightData.value?.flights||[]):[];
+   const open=available.filter(x=>x.status!=='closed'&&x.id);
+   $('vatsimFlight').innerHTML='<option value="">Select an open NAVDECK flight</option>'+open.map(f=>'<option value="'+safe(f.id)+'">'+safe((f.callsign||'Flight')+' · '+(f.origin||'—')+' → '+(f.destination||'—'))+'</option>').join('');
+   const cid=profileData.status==='fulfilled'?String(profileData.value?.profile?.vatsim_cid||''):'';
+   action('vatsimPrefile',async()=>{
+     const id=$('vatsimFlight').value;
+     if(!id){$('prefileNotice').innerHTML=notice('Choose a flight first.','error');return;}
+     const button=$('vatsimPrefile');button.disabled=true;
+     try{
+       const data=await call('getFlightDetails',{flight_id:id});
+       const f=data?.flight;
+       if(!f)throw Error('Flight details unavailable');
+       const cruise=Math.round(Number(f.cruise_level||0)/100);
+       const route=String(f.route||'').slice(0,1200);
+       const depTime=String(f.times?.sched_off||'00:00').replace(':','');
+       const eteSeconds=Number(f.ete||0);
+       const toHHMM=n=>{n=Math.max(0,Math.round(n));return String(Math.floor(n/3600)).padStart(2,'0')+String(Math.floor((n%3600)/60)).padStart(2,'0')};
+       const firstCruise=(f.waypoints||[]).find(w=>Number(w.altitude)>=Number(f.cruise_level||0)-100)||{};
+       const speed='N'+String(firstCruise.tas||450).padStart(4,'0');
+       const raw='(FPL-'+String(f.callsign||'')+'-IS -'+String(f.aircraft||'')+'/M-SDE3FGHIRWY/LB1 -'+
+         String(f.origin||'')+depTime+' -'+speed+'F'+String(cruise).padStart(3,'0')+' '+route+
+         ' -'+String(f.destination||'')+toHHMM(eteSeconds)+' '+String(f.alternate||'')+
+         ' -PBN/A1B1C1D1O1S1 RMK/TCAS FILED VIA NAVDECK)';
+       const q=new URLSearchParams({raw,cid,callsign:String(f.callsign||''),aircraft:String(f.aircraft||''),
+         departure:String(f.origin||''),arrival:String(f.destination||''),alternate:String(f.alternate||''),
+         altitude:String(f.cruise_level||''),speed,route,deptime:depTime,enroute_time:toHHMM(eteSeconds),
+         fuel_time:toHHMM(eteSeconds+3600),flight_rules:'I',remarks:'TCAS FILED VIA NAVDECK'});
+       await call('openVatsim',{url:'https://my.vatsim.net/pilots/flightplan?'+q.toString()});
+       $('prefileNotice').innerHTML=notice('Prefiled form opened in your browser. Review the route and equipment before submitting.','good');
+     }catch(err){$('prefileNotice').innerHTML=notice('Could not prefile: '+err.message,'error')}
+     finally{button.disabled=false}
+   });
+ }catch(e){$('prefileNotice').innerHTML=notice('Flight selector unavailable; ensure the updated NAVDECK API is deployed.','error')}
+}
+
+async function renderCommunity(){
+ $('content').innerHTML=template('Pilot community','Follow your VATSIM friends and see who is flying, without loading another map.','Network friends','Linked',btn('reloadFriends','↻  Refresh network',true))+
+ '<div class="two-col"><section class="panel">'+header('Friends list','Save friends by VATSIM callsign or CID')+
+ '<div id="friendNotice"></div><form id="addFriend" class="row"><input id="friendIdent" maxlength="12" class="search" placeholder="Callsign or VATSIM CID" aria-label="Friend callsign or CID"><button type="submit" class="button primary">Add friend</button></form>'+
+ '<div id="friendList" style="margin-top:17px"></div></section>'+
+ '<section class="panel">'+header('My VATSIM identity','Pair your VATSIM CID to NAVDECK')+
+ '<form id="saveCid"><div class="setting-group"><label for="vatsimCID">VATSIM CID</label><input id="vatsimCID" inputmode="numeric" maxlength="8" placeholder="6–8 digits" pattern="[0-9]{6,8}"></div><div class="row right"><button type="submit" class="button primary">Save CID</button></div></form>'+
+ '<div class="inline-callout">Friends are saved to your NAVDECK pilot profile. The VATSIM feed is public, but it only indicates pilots currently online.</div></section></div>'+
+ '<section class="panel tight"><div style="padding:21px 20px 14px">'+header('Friends online','Live VATSIM positions, shown as a list')+'</div><div class="table-wrap">'+
+ '<table class="table"><thead><tr><th>Callsign</th><th>Departure</th><th>Destination</th><th>Altitude</th><th>Ground speed</th></tr></thead><tbody id="friendOnline"><tr><td colspan="5">Loading friends…</td></tr></tbody></table></div></section>';
+ let friends=[],cid='',feed=[];
+ const normalize=v=>String(v||'').trim().toUpperCase();
+ const renderFriends=()=>{
+  $('friendList').innerHTML=friends.length?friends.map((f,i)=>'<div style="display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #41404a;padding:10px 0"><b>'+safe(f)+'</b><button class="button small ghost" data-remove-friend="'+i+'">Remove</button></div>').join(''):empty('No friends added','Add a VATSIM callsign or CID to follow pilots on the network.');
+  $('friendList').querySelectorAll('[data-remove-friend]').forEach(x=>x.onclick=async()=>{
+    const next=friends.filter((_,index)=>index!==Number(x.dataset.removeFriend));
+    try{await call('saveProfile',{vatsim_friends:next});friends=next;renderFriends();renderOnline();}
+    catch(err){$('friendNotice').innerHTML=notice('Could not update friends: '+err.message,'error');}
+  });
+ };
+ const renderOnline=()=>{
+  const online=feed.filter(p=>friends.includes(normalize(p.callsign))||friends.includes(String(p.cid||'')));
+  $('friendOnline').innerHTML=online.length?online.slice(0,70).map(p=>'<tr><td>'+safe(p.callsign)+'</td><td>'+safe(p.flight_plan?.departure||'—')+'</td><td>'+safe(p.flight_plan?.arrival||'—')+'</td><td>'+safe(format(p.altitude))+' FT</td><td>'+safe(format(p.groundspeed))+' KT</td></tr>').join(''):'<tr><td colspan="5">No saved friends currently online.</td></tr>';
+ };
+ $('addFriend').onsubmit=async event=>{
+  event.preventDefault();const value=normalize($('friendIdent').value);
+  if(!/^[A-Z0-9_-]{2,12}$/.test(value)){$('friendNotice').innerHTML=notice('Enter a valid VATSIM callsign or CID.','error');return;}
+  if(friends.includes(value))return;
+  if(friends.length>=50){$('friendNotice').innerHTML=notice('The friends list supports up to 50 entries.','error');return;}
+  try{const next=[...friends,value];await call('saveProfile',{vatsim_friends:next});friends=next;$('friendIdent').value='';renderFriends();renderOnline();$('friendNotice').innerHTML=notice('Friend saved to NAVDECK.','good')}
+  catch(err){$('friendNotice').innerHTML=notice('Could not add friend: '+err.message,'error')}
+ };
+ $('saveCid').onsubmit=async event=>{
+  event.preventDefault();cid=$('vatsimCID').value.trim();
+  if(!/^\d{6,8}$/.test(cid)){$('friendNotice').innerHTML=notice('VATSIM CID must be 6–8 digits.','error');return;}
+  try{await call('saveProfile',{vatsim_cid:cid});$('friendNotice').innerHTML=notice('VATSIM CID saved to NAVDECK.','good')}
+  catch(err){$('friendNotice').innerHTML=notice('Could not save CID: '+err.message,'error')}
+ };
+ const refresh=async()=>{
+  const button=$('reloadFriends');button.disabled=true;
+  try{const response=await fetch('https://data.vatsim.net/v3/vatsim-data.json',{cache:'no-store'});if(!response.ok)throw Error('Network unavailable');const info=await response.json();feed=Array.isArray(info.pilots)?info.pilots:[];renderOnline()}
+  catch(err){$('friendOnline').innerHTML='<tr><td colspan="5">VATSIM network data unavailable.</td></tr>'}
+  finally{button.disabled=false}
+ };
+ action('reloadFriends',refresh);
+ try{const data=await call('getProfile');let p=data?.profile||{};friends=Array.isArray(p.vatsim_friends)?p.vatsim_friends.map(normalize):[];cid=p.vatsim_cid||'';$('vatsimCID').value=cid;setCloud(true,'NAVDECK cloud linked');}
+ catch(err){$('friendNotice').innerHTML=notice('Cloud profile not available. The desktop API must be deployed and paired.','error')}
+ renderFriends();refresh();
+}
+function hhmmDistance(a,b){
+ if(!a||!b)return 0;
+ const t=x=>{let m=String(x).match(/^(\d\d):(\d\d)$/);return m?Number(m[1])*60+Number(m[2]):NaN};
+ const s=t(a),e=t(b);return Number.isFinite(s)&&Number.isFinite(e)?(e-s+1440)%1440:0;
+}
+function hours(minutes){return Math.floor(minutes/60)+'h '+String(minutes%60).padStart(2,'0')+'m'}
+async function renderLogbook(){
+ $('content').innerHTML=template('Pilot logbook','A clean desktop history of your completed flights and operational records.','Cloud logbook','Synced',btn('refreshLogbook','↻  Refresh logbook',true))+
+ '<div class="metric-grid" id="logMetrics"></div><div id="logNotice"></div><section class="panel tight"><div style="padding:21px 20px 14px">'+header('Completed flights','Closed flights stored on your linked NAVDECK account')+'</div><div class="table-wrap"><table class="table"><thead><tr><th>Date</th><th>Callsign</th><th>Route</th><th>Block time</th><th>Air time</th><th>Landing rate</th></tr></thead><tbody id="logRows"><tr><td colspan="6">Loading logbook…</td></tr></tbody></table></div></section>';
+ action('refreshLogbook',renderLogbook);
+ try{
+ const d=await call('getLogbook'),records=d?.flights||[];if(!Array.isArray(records))throw Error('Invalid logbook result');
+ const block=records.reduce((n,f)=>n+hhmmDistance(f.times?.off,f.times?.on),0);
+ const air=records.reduce((n,f)=>n+hhmmDistance(f.times?.takeoff,f.times?.landing),0);
+ const rates=records.map(f=>Math.abs(Number(f.landing_rate))).filter(n=>Number.isFinite(n)&&n>0);
+ $('logMetrics').innerHTML=metric('Flights logged',records.length,'Closed flights on NAVDECK',true)+metric('Total block time',hours(block),'Gate to gate')+metric('Total air time',hours(air),'Wheels off to touchdown')+metric('Average landing rate',rates.length?'-'+Math.round(rates.reduce((a,b)=>a+b,0)/rates.length)+' FPM':'—','Recorded landings');
+ $('logRows').innerHTML=records.length?records.map(f=>'<tr><td>'+safe(f.closed_at?.slice(0,10)||'—')+'</td><td><button class="button small ghost" data-log-flight="'+safe(f.id||'')+'">'+safe(f.callsign||'—')+' ↗</button></td><td>'+safe((f.origin||'—')+' → '+(f.destination||'—'))+'</td><td class="muted">'+safe(hours(hhmmDistance(f.times?.off,f.times?.on)))+'</td><td class="muted">'+safe(hours(hhmmDistance(f.times?.takeoff,f.times?.landing)))+'</td><td>'+safe(f.landing_rate?'-'+Math.abs(Number(f.landing_rate))+' FPM':'—')+'</td></tr>').join(''):'<tr><td colspan="6">No closed flights yet.</td></tr>';
+ $('logRows').querySelectorAll('[data-log-flight]').forEach(x=>x.onclick=()=>{
+    if(/^[a-f0-9-]{36}$/i.test(x.dataset.logFlight))
+       location.href='flight.html?id='+encodeURIComponent(x.dataset.logFlight);
+ });
+ setCloud(true,'NAVDECK cloud linked');
+ }catch(e){
+ $('logMetrics').innerHTML=metric('Flights logged','—')+metric('Block time','—')+metric('Air time','—')+metric('Landings','—');
+ $('logNotice').innerHTML=notice('Cloud logbook not available yet. The new NAVDECK bridge API must be deployed and the app paired.','error');
+ $('logRows').innerHTML='<tr><td colspan="6">No cloud logbook data available.</td></tr>';
+ }
+}
+async function renderSettings(){
+ $('content').innerHTML=template('Desktop settings','Configure your dedicated NAVDECK workspace and check its cloud connection.','Client','Windows',btn('testConnection','↻  Test connection',true))+
+ '<div class="two-col"><section class="panel">'+header('Connection diagnostics','Uses your existing revocable simulator pairing code')+'<div id="diagInfo" class="loader">Checking the connection…</div>'+
+ '<div class="inline-callout">To change the connection code or simulator settings, use the <b>Simulator Connection</b> button in the permanent left sidebar. Your pairing token is handled by the Windows app and is never exposed to these pages.</div></section>'+
+ '<section class="panel">'+header('About this application','NAVDECK Desktop · Native shell + local interface')+
+ '<ul class="bullet-list"><li>All application pages are packaged locally.</li><li>NAVDECK is used as a data service, never as an embedded website.</li><li>The simulator runs through the existing FSUIPC7 bridge.</li><li>Map tiles and VATSIM traffic require internet access.</li><li>Cloud account features need the matching backend API deployed.</li></ul></section></div>';
+ const test=async()=>{try{const x=await call('getFlight');$('diagInfo').innerHTML=notice('Paired NAVDECK cloud connection is working. '+(x?.flight?'Current flight: '+(x.flight.callsign||'available'):'No active flight.'),'good');setCloud(true,'NAVDECK bridge linked')}
+ catch(e){$('diagInfo').innerHTML=notice('Pairing unsuccessful: '+e.message,'error');setCloud(false,'Pairing required')}};
+ action('testConnection',test);test();
+}
+const pages={flights:renderFlights,simbrief:renderSimbrief,vatsim:()=>renderVatsim(false),community:renderCommunity,logbook:renderLogbook,settings:renderSettings};
+function showPage(){
+  const page=location.hash.slice(1).toLowerCase()||'flights';
+  $('breadcrumb').textContent=({flights:'My Flights',simbrief:'SimBrief',vatsim:'VATSIM Network',community:'Flight Community',logbook:'Pilot Logbook',settings:'Desktop Settings'})[page]||'My Flights';
+  (pages[page]||renderFlights)();
+}
+window.addEventListener('hashchange',showPage);
+showPage();
+})();
+</script>
+</body>
+</html>

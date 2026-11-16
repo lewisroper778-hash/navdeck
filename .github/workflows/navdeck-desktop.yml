@@ -5,10 +5,18 @@ on:
   pull_request:
     paths:
       - 'desktop/**'
+      - 'backend/**'
+      - '.github/workflows/navdeck-desktop.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'desktop/**'
+      - 'backend/**'
       - '.github/workflows/navdeck-desktop.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -17,6 +25,42 @@ jobs:
     steps:
       - name: Checkout NAVDECK
         uses: actions/checkout@v4
+
+      - name: Check NAVDECK backend Python syntax
+        shell: pwsh
+        run: |
+          python -m py_compile backend/bridge.py backend/server.py
+
+      - name: Test strict waypoint and fuel reporting rules
+        shell: pwsh
+        run: python -m unittest backend.tests.test_desktop_reporting_validation -v
+
+      - name: Verify locally bundled dashboard JavaScript syntax
+        shell: pwsh
+        run: |
+          @'
+          import pathlib
+          import re
+          import subprocess
+          import tempfile
+          pages = ("map.html", "workspace.html", "flight.html")
+          for name in pages:
+              html = (pathlib.Path("desktop/ui") / name).read_text(encoding="utf-8")
+              parts = re.findall(r"<script(?:\\s+[^>]*)?>(.*?)</script>", html, re.S | re.I)
+              if not parts:
+                  raise RuntimeError(f"No inline JS in {name}")
+              for index, script in enumerate(parts):
+                  if not script.strip():
+                      continue
+                  with tempfile.NamedTemporaryFile(mode="w", suffix=".js", encoding="utf-8", delete=False) as tmp:
+                      tmp.write(script)
+                      js_path = tmp.name
+                  try:
+                      subprocess.run(["node", "--check", js_path], check=True)
+                  finally:
+                      pathlib.Path(js_path).unlink(missing_ok=True)
+              print("Validated:", name)
+          '@ | python -
 
       - name: Install .NET SDK
         uses: actions/setup-dotnet@v4
@@ -35,6 +79,29 @@ jobs:
           --no-restore
           --output desktop-output
 
+
+      - name: Install Inno Setup
+        shell: powershell
+        run: |
+          choco install innosetup --yes --no-progress
+
+      - name: Package Windows installer
+        shell: powershell
+        run: |
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (!(Test-Path $iscc)) { $iscc = Join-Path $env:ProgramFiles 'Inno Setup 6\ISCC.exe' }
+          if (!(Test-Path $iscc)) { throw 'Inno Setup compiler not found' }
+          & $iscc desktop/NavdeckDesktop/installer.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: NAVDECK-Desktop-Redesign-Installer-x64
+          path: installer-output/*.exe
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Upload Windows application
         uses: actions/upload-artifact@v4
         with:
@@ -42,3 +109,11 @@ jobs:
           path: desktop-output/
           if-no-files-found: error
           retention-days: 7
+      - name: Publish Windows installer to GitHub Releases
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "desktop-" + "${{ github.run_number }}"
+          gh release create $tag installer-output/*.exe --target $env:GITHUB_SHA --title "NAVDECK Desktop $tag" --prerelease --notes "NAVDECK Desktop installer for Windows x64. Includes In-Flight Reporting, SimBrief integration and an offline sample flight. The connected NAVDECK backend must be deployed for live cloud features. Test with your simulator before relying on live records."

@@ -47,6 +47,167 @@ internal sealed class NavdeckApi
         return doc.RootElement.TryGetProperty("applied", out var a) ? a.EnumerateArray().Select(x => x.GetString() ?? "").ToArray() : [];
     }
 
+    // Desktop-only cloud requests use the same revocable pairing token as
+    // telemetry. Never forward the token to the local HTML interface.
+    public async Task<JsonElement> RequestDesktopAsync(
+        string action, JsonElement? payload = null)
+    {
+        string flightId = "";
+        string airportId = "";
+        if (action is "getFlightDetails" or "flightAction")
+        {
+            if (payload is not { } info ||
+                info.ValueKind != JsonValueKind.Object ||
+                !info.TryGetProperty("flight_id", out var id) ||
+                id.ValueKind != JsonValueKind.String ||
+                !Guid.TryParse(id.GetString(), out var flightGuid))
+                throw new ArgumentException("Invalid flight identifier");
+
+            flightId = Uri.EscapeDataString(flightGuid.ToString());
+        }
+
+        if (action == "getMetar")
+        {
+            if (payload is not { } p ||
+                !p.TryGetProperty("icao", out var raw) ||
+                raw.ValueKind != JsonValueKind.String)
+                throw new ArgumentException("Enter an airport ICAO");
+            airportId = (raw.GetString() ?? "").Trim().ToUpperInvariant();
+            if (airportId.Length != 4 || !airportId.All(char.IsLetter))
+                throw new ArgumentException("Invalid airport ICAO");
+        }
+
+        string path = action switch
+        {
+            "getFlight" => "flight",
+            "getActiveFlightDetails" => "desktop/active",
+            "getFlights" => "desktop/flights",
+            "getLogbook" => "desktop/logbook",
+            "getProfile" => "desktop/profile",
+            "saveProfile" => "desktop/profile",
+            "importSimbrief" => "desktop/import",
+            "getFlightDetails" => $"desktop/flights/{flightId}",
+            "flightAction" => $"desktop/flights/{flightId}/action",
+            "getMetar" => $"desktop/metar/{airportId}",
+            _ => throw new ArgumentException("Unsupported desktop request")
+        };
+
+        using var request = new HttpRequestMessage(
+            action == "saveProfile" ? HttpMethod.Put :
+            action is "importSimbrief" or "flightAction"
+                ? HttpMethod.Post : HttpMethod.Get,
+            path);
+
+        if (action == "saveProfile")
+        {
+            if (payload is not { } p || p.ValueKind != JsonValueKind.Object)
+                throw new ArgumentException("Missing profile update fields");
+
+            var update = new Dictionary<string, object?>();
+            foreach (var key in new[] { "simbrief_pilot_id", "display_name", "vatsim_cid" })
+            {
+                if (!p.TryGetProperty(key, out var field))
+                    continue;
+                if (field.ValueKind == JsonValueKind.Null)
+                    update[key] = null;
+                else if (field.ValueKind == JsonValueKind.String)
+                    update[key] = field.GetString();
+                else
+                    throw new ArgumentException("Invalid profile update field");
+            }
+            if (p.TryGetProperty("vatsim_friends", out var friends))
+            {
+                if (friends.ValueKind != JsonValueKind.Array)
+                    throw new ArgumentException("Invalid VATSIM friends list");
+                var names = new List<string>();
+                foreach (var item in friends.EnumerateArray())
+                {
+                    if (item.ValueKind != JsonValueKind.String)
+                        throw new ArgumentException("Invalid VATSIM friend identifier");
+                    var value = (item.GetString() ?? "").Trim().ToUpperInvariant();
+                    if (value.Length < 2 || value.Length > 12 ||
+                        value.Any(c => !char.IsLetterOrDigit(c) && c != '_' && c != '-'))
+                        throw new ArgumentException("Invalid VATSIM friend identifier");
+                    if (!names.Contains(value))
+                        names.Add(value);
+                }
+                if (names.Count > 50)
+                    throw new ArgumentException("Limit of 50 VATSIM friends");
+                update["vatsim_friends"] = names;
+            }
+            request.Content = JsonContent.Create(update);
+        }
+
+        if (action == "importSimbrief")
+        {
+            string? pilotId = null;
+            if (payload is { ValueKind: JsonValueKind.Object } requestBody &&
+                requestBody.TryGetProperty("pilot_id", out var entered) &&
+                entered.ValueKind != JsonValueKind.Null)
+            {
+                if (entered.ValueKind != JsonValueKind.String)
+                    throw new ArgumentException("Invalid SimBrief Pilot ID");
+                pilotId = entered.GetString()?.Trim();
+                if (!string.IsNullOrEmpty(pilotId) &&
+                    (pilotId.Length > 16 || pilotId.Any(c => c < '0' || c > '9')))
+                    throw new ArgumentException("SimBrief Pilot ID must be digits");
+            }
+            request.Content = JsonContent.Create(new { pilot_id = pilotId });
+        }
+
+        if (action == "flightAction")
+        {
+            if (payload is not { } instruction ||
+                !instruction.TryGetProperty("operation", out var op) ||
+                op.ValueKind != JsonValueKind.String ||
+                !instruction.TryGetProperty("values", out var values) ||
+                values.ValueKind != JsonValueKind.Object)
+                throw new ArgumentException("Invalid flight operation");
+
+            string operation = op.GetString() ?? "";
+            var allowed = new HashSet<string>(StringComparer.Ordinal)
+            {
+                "toggleWaypoint", "skipWaypoint", "directTo", "undoDirect",
+                "saveWaypoint", "saveTimes", "saveActuals", "saveArrival",
+                "signReport", "closeFlight", "reopenFlight", "resetFlight",
+                "saveNotes"
+            };
+            if (!allowed.Contains(operation))
+                throw new ArgumentException("Unsupported flight operation");
+
+            request.Content = JsonContent.Create(new
+            {
+                action = operation,
+                payload = values
+            });
+        }
+
+        // Bound UI wait times: browsing the desktop workspace must not stall
+        // when a cloud endpoint is offline. SimBrief import takes longer.
+        using var timeout = new CancellationTokenSource(
+            action == "importSimbrief"
+                ? TimeSpan.FromSeconds(40) : TimeSpan.FromSeconds(18));
+        using var response = await _http.SendAsync(request, timeout.Token);
+        await EnsureOk(response);
+        using var document = JsonDocument.Parse(
+            await response.Content.ReadAsStringAsync(timeout.Token));
+        return document.RootElement.Clone();
+    }
+
+    public async Task<byte[]> GetReportPdfAsync(string id)
+    {
+        if (!Guid.TryParse(id, out var guid))
+            throw new ArgumentException("Invalid report flight ID");
+        using var response = await _http.GetAsync(
+            "desktop/reports/" + Uri.EscapeDataString(guid.ToString()));
+        await EnsureOk(response);
+        var bytes = await response.Content.ReadAsByteArrayAsync();
+        if (bytes.Length < 4 || bytes[0] != '%' || bytes[1] != 'P' ||
+            bytes[2] != 'D' || bytes[3] != 'F')
+            throw new InvalidDataException("NAVDECK returned an invalid PDF");
+        return bytes;
+    }
+
     // Sends live aircraft data to the NAVDECK flight dashboard.
     public Task SendTelemetryAsync(Sample s)
     {
@@ -101,7 +262,7 @@ internal sealed class NavdeckApi
         }
         catch (JsonException) { }
         if (res.StatusCode == HttpStatusCode.Unauthorized) throw new AuthException(detail);
-        throw new HttpRequestException(detail);
+        throw new HttpRequestException(detail, null, res.StatusCode);
     }
 
     private static string? Trim(string? s, int max) => s is null ? null : s.Length > max ? s[..max] : s;
