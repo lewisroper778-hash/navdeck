@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>NAVDECK · Flight Operations</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" media="print" onload="this.media=\'all\'">
 <style>
 :root{color-scheme:dark;--base:#19191c;--card:#252529;--raised:#303034;--border:#3a3a40;--ink:#f4f3f6;--secondary:#a2a0aa;--faint:#74737b;--accent:#8b45fa;--accent2:#b185ff;--green:#8ce4ac}
 *{box-sizing:border-box}html,body{height:100%;width:100%;margin:0;overflow:hidden}body{background:var(--base);color:var(--ink);font:13px/1.45 "Segoe UI",Inter,Arial,sans-serif}button,input,select{font:inherit}button{cursor:pointer}button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent2);outline-offset:2px}
@@ -56,6 +56,15 @@
 @media(max-width:1150px){.workspace{grid-template-columns:300px 1fr}.telemetry-strip{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:830px){.workspace{grid-template-columns:278px 1fr}.hero{height:165px}.hero svg{height:156px}}
 @media(max-height:750px){.hero{height:130px}.hero svg{height:125px}.airport{min-height:75px}.airport b{font-size:23px}.plane-summary{padding-bottom:2px}.progress-wrap{padding:8px 0 0}}
+/* Keep flight data legible in the narrow panel, without ellipses. */
+.flight-label{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
+.data-cell{align-items:flex-start;flex-wrap:wrap;gap:4px 9px}
+.data-cell span{white-space:normal;overflow-wrap:anywhere}
+.data-cell b{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
+.airport small,.route-meta strong,.route-meta span,.summary-row,.map-brand{overflow-wrap:anywhere}
+.open-flight,.action-strip button,.pill-btn{white-space:normal;line-height:1.35}
+@media(max-width:1080px){.workspace{grid-template-columns:minmax(270px,310px) minmax(0,1fr)}.details-head{padding:16px 13px 10px}}
+@media(max-width:790px){.workspace{grid-template-columns:minmax(255px,285px) minmax(0,1fr)}.details{font-size:12px}.airport b{font-size:23px}}
 </style>
 </head>
 <body>
@@ -129,7 +138,7 @@
     </div>
   </main>
 </div>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script async src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" onload="window.dispatchEvent(new Event(\'navdeck:leaflet-ready\'))"></script>
 <script>
 (function(){
   'use strict';
@@ -166,7 +175,7 @@
     if(center&&latest&&marker)map.flyTo([latest.lat,latest.lon],Math.max(map.getZoom(),9),{duration:.55});
   }
   function setupMap(){
-    if(!window.L){el('mapStatus').textContent='· Map unavailable';notify('Map library could not load. Check your internet connection.');return;}
+    if(mapStarted||!window.L)return;
     map=L.map('map',{zoomControl:false,worldCopyJump:true,preferCanvas:true}).setView([46.5,4.5],5);
     changeLayer('dark');mapStarted=true;
     el('zoomIn').onclick=()=>map.zoomIn();
@@ -177,6 +186,7 @@
     el('recenterBtn').onclick=()=>latest?setFollow(true,true):notify('Connect your simulator to locate your aircraft.');
     el('followBtn').onclick=()=>setFollow(!follow,true);
     map.on('dragstart',()=>{setFollow(false);});
+    if(latest)showTelemetry(latest);
   }
   el('copyBtn').onclick=async()=>{
     if(!latest){notify('No simulator GPS coordinates available.');return;}
@@ -252,8 +262,11 @@
       'flight.html?id='+encodeURIComponent(cloudFlightId)+'#enroute':
       'flight.html?active=1#enroute';
   };
-  setupMap();
-  syncCloudFlight();setInterval(syncCloudFlight,30000);
+  window.addEventListener('navdeck:leaflet-ready',setupMap);
+  // Online map tiles never block the local flight dashboard.
+  if(window.L)setupMap();
+  else el('mapStatus').textContent='· Map loading separately';
+  syncCloudFlight();setInterval(()=>{if(!document.hidden)syncCloudFlight();},45000);
   pollTelemetry();
   setInterval(()=>{if(!document.hidden)pollTelemetry();},1800);
 
