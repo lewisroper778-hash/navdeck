@@ -24,7 +24,9 @@ internal sealed class MainForm : Form
     private readonly Queue<(string FlightId, DetectedGoAround Event)> _goAroundQueue = new();
     private bool _goAroundSending;
     private string? _pairedFlightId;
-    private readonly RunwayDetector _runwayDetector = new();
+    // The runway database (~48,000 rows) is parsed on a background thread so it
+    // no longer freezes the window while the app starts. It is only needed at touchdown.
+    private readonly Task<RunwayDetector> _runwayDetectorTask = Task.Run(() => new RunwayDetector());
     private readonly RunwayVisualizer _runwayVisualizer = new();
     private RunwayMatch? _lastRunway;
 
@@ -588,11 +590,14 @@ internal sealed class MainForm : Form
     private async Task Start()
     {
         if (_startMinimized) WindowState = FormWindowState.Minimized;
+        // Start reading the simulator first: Connect() can take up to its 15 s
+        // timeout when the cloud backend is waking up, and sim tracking should
+        // not have to wait for that.
+        _poll.Start();
         if (!Config.IsValidCode(_config.Code)) AskCode();
         else await Connect();
         UpdateStartupButton();
         RefreshView();
-        _poll.Start();
         _slow.Start();
         // Flight plan refresh is manual only.
         await SlowTick();
@@ -826,8 +831,12 @@ internal sealed class MainForm : Form
             var lon = _tracker.TouchdownLon;
             var track = _tracker.ApproachTrackDeg;
 
-            _lastRunway = lat.HasValue && lon.HasValue && track.HasValue
-                ? _runwayDetector.Find(lat.Value, lon.Value, track.Value)
+            RunwayDetector? detector = null;
+            try { detector = await _runwayDetectorTask; }
+            catch (Exception ex) { Log("Runway database could not be loaded: " + ex.Message); }
+
+            _lastRunway = detector is not null && lat.HasValue && lon.HasValue && track.HasValue
+                ? detector.Find(lat.Value, lon.Value, track.Value)
                 : null;
 
             _runwayVisualizer.UpdateTouchdown(_lastRunway);

@@ -16,9 +16,12 @@
     <Company>NAVDECK</Company>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SelfContained>true</SelfContained>
-    <PublishSingleFile>true</PublishSingleFile>
-    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
-    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <!-- Startup speed: the Inno Setup installer already ships the whole publish
+         folder, so a compressed single-file bundle only adds a decompress/extract
+         step on every launch. ReadyToRun ships pre-compiled code so Windows Forms
+         and WebView2 start without a long JIT warm-up. -->
+    <PublishSingleFile>false</PublishSingleFile>
+    <PublishReadyToRun>true</PublishReadyToRun>
     <DebugType>none</DebugType>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>

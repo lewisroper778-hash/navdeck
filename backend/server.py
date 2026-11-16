@@ -56,6 +56,10 @@ INDEXES: dict[str, list[IndexModel]] = {
     "client_errors": [
         IndexModel([("created", ASCENDING)], name="ttl_7d", expireAfterSeconds=7 * 86400),
     ],
+    # Every desktop/bridge request authenticates by looking up the token hash.
+    "bridge_links": [
+        IndexModel([("token_hash", ASCENDING)], name="token_hash"),
+    ],
 }
 
 
