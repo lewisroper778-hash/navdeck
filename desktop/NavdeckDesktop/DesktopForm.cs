@@ -6,6 +6,8 @@ internal sealed class DesktopForm : Form
 {
     private readonly WebView2 _browser = new();
     private MainForm? _bridge;
+    private NavdeckApi? _cloudApi;
+    private string? _cloudCode;
 
     private readonly Label _simStatus = new()
     {
@@ -165,9 +167,9 @@ internal sealed class DesktopForm : Form
                 if (_browser.CoreWebView2 is null)
                     return;
 
-                var address = route.StartsWith("https://", StringComparison.Ordinal)
-                    ? route : "https://test.navdeck.online" + route;
-                _browser.CoreWebView2.Navigate(address);
+                // Only locally packaged pages may render inside this app.
+                _browser.CoreWebView2.Navigate(
+                    "https://navdeck-desktop.local/" + route);
 
                 if (activeNavigation is not null)
                 {
@@ -185,13 +187,16 @@ internal sealed class DesktopForm : Form
         }
 
         AddSection("WORKSPACE");
-        AddNavigation("Dashboard", "◈", "https://navdeck-desktop.local/map.html");
-        AddNavigation("My Flights", "✈", "/flights");
-        AddNavigation("SimBrief", "≋", "/settings");
-        AddNavigation("VATSIM", "◎", "/vatsim");
+        AddNavigation("Dashboard", "◈", "map.html");
+        AddNavigation("My Flights", "✈", "workspace.html#flights");
+        AddNavigation("SimBrief", "≋", "workspace.html#simbrief");
+        AddNavigation("VATSIM", "◎", "workspace.html#vatsim");
         AddSection("COMMUNITY");
-        AddNavigation("Community", "▦", "/community");
-        AddNavigation("Logbook", "▤", "/logbook");
+        AddNavigation("Community", "▦", "workspace.html#community");
+        AddNavigation("Logbook", "▤", "workspace.html#logbook");
+
+        AddSection("APPLICATION");
+        AddNavigation("Settings", "⚙", "workspace.html#settings");
 
         var footer = new Panel
         {
@@ -291,154 +296,128 @@ internal sealed class DesktopForm : Form
                     "navdeck-desktop.local", mapFolder,
                     Microsoft.Web.WebView2.Core.CoreWebView2HostResourceAccessKind.DenyCors);
 
+                // Prevent remote NAVDECK website pages (or any external site)
+                // from becoming navigation destinations inside the app window.
+                _browser.CoreWebView2.NavigationStarting += (_, nav) =>
+                {
+                    if (!Uri.TryCreate(nav.Uri, UriKind.Absolute, out var page) ||
+                        page.GetLeftPart(UriPartial.Authority) != mapOrigin)
+                        nav.Cancel = true;
+                };
+
+                // Local HTML is only the user interface. Every cloud operation
+                // goes through this narrowly scoped native pairing-token bridge.
                 await _browser.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
                     """
                     (() => {
                       if (location.origin !== 'https://navdeck-desktop.local') return;
                       let nextId = 0;
                       const pending = new Map();
-                      window.navdeckDesktop = {
-                        getTelemetry() {
-                          return new Promise(resolve => {
-                            const id = ++nextId;
-                            const timeout = setTimeout(() => {
-                              pending.delete(id);
-                              resolve(null);
-                            }, 3000);
-                            pending.set(id, value => {
-                              clearTimeout(timeout);
-                              resolve(value);
-                            });
-                            window.chrome.webview.postMessage({type:'navdeck:getTelemetry',id});
-                          });
-                        }
-                      };
+                      const request = (action, payload) => new Promise((resolve, reject) => {
+                        const id = ++nextId;
+                        const timeout = setTimeout(() => {
+                          pending.delete(id);
+                          reject(new Error('The desktop request timed out'));
+                        }, 45000);
+                        pending.set(id, {resolve, reject, timeout});
+                        window.chrome.webview.postMessage({type:'navdeck:request', action, id, payload});
+                      });
+                      window.navdeckDesktop = Object.freeze({
+                        getTelemetry: () => request('getTelemetry').catch(() => null),
+                        getFlight: () => request('getFlight'),
+                        getFlights: () => request('getFlights'),
+                        getLogbook: () => request('getLogbook'),
+                        getProfile: () => request('getProfile'),
+                        saveProfile: (payload) => request('saveProfile', payload),
+                        importSimbrief: () => request('importSimbrief')
+                      });
                       window.chrome.webview.addEventListener('message', event => {
-                        if (event.data?.type !== 'navdeck:telemetry') return;
-                        const resolve = pending.get(event.data.id);
-                        if (resolve) {
-                          pending.delete(event.data.id);
-                          resolve(event.data.telemetry ?? null);
-                        }
+                        if (event.data?.type !== 'navdeck:result') return;
+                        const job = pending.get(event.data.id);
+                        if (!job) return;
+                        pending.delete(event.data.id);
+                        clearTimeout(job.timeout);
+                        if (event.data.error) job.reject(new Error(event.data.error));
+                        else job.resolve(event.data.data ?? null);
                       });
                     })();
                     """);
 
-                _browser.CoreWebView2.WebMessageReceived += (_, args) =>
+                _browser.CoreWebView2.WebMessageReceived += async (_, args) =>
                 {
-                    // Web messages from login providers or remote pages are untrusted.
+                    // Reject any request from outside our packaged application.
                     if (!Uri.TryCreate(args.Source, UriKind.Absolute, out var sender) ||
                         sender.GetLeftPart(UriPartial.Authority) != mapOrigin)
                         return;
+
+                    int requestId = 0;
                     try
                     {
-                        using var message = System.Text.Json.JsonDocument.Parse(args.WebMessageAsJson);
+                        using var message = System.Text.Json.JsonDocument.Parse(
+                            args.WebMessageAsJson);
                         var root = message.RootElement;
-                        if (!root.TryGetProperty("type", out var type) ||
-                            type.GetString() != "navdeck:getTelemetry" ||
+                        if (!root.TryGetProperty("type", out var kind) ||
+                            kind.GetString() != "navdeck:request" ||
                             !root.TryGetProperty("id", out var id) ||
-                            !id.TryGetInt32(out int requestId))
+                            !id.TryGetInt32(out requestId) ||
+                            !root.TryGetProperty("action", out var act) ||
+                            act.ValueKind != System.Text.Json.JsonValueKind.String)
                             return;
 
-                        var sample = _bridge?.LiveAircraftSample;
-                        object? telemetry = sample is { } t
-                            ? new
+                        var action = act.GetString() ?? "";
+                        object? data;
+
+                        if (action == "getTelemetry")
+                        {
+                            var sample = _bridge?.LiveAircraftSample;
+                            data = sample is { } t
+                                ? new
+                                {
+                                    lat = t.Lat,
+                                    lon = t.Lon,
+                                    altitude_ft = t.AltFt,
+                                    groundspeed_kt = t.GroundSpeedKt,
+                                    heading_deg = t.HeadingDeg,
+                                    fuel_lb = t.FuelLb,
+                                    aircraft = _bridge?.SimulatorAircraft
+                                }
+                                : null;
+                        }
+                        else
+                        {
+                            var config = Config.Load();
+                            if (!Config.IsValidCode(config.Code))
+                                throw new InvalidOperationException(
+                                    "No valid connection code. Open Simulator Connection to pair.");
+
+                            if (_cloudApi is null || _cloudCode != config.Code)
                             {
-                                lat = t.Lat,
-                                lon = t.Lon,
-                                altitude_ft = t.AltFt,
-                                groundspeed_kt = t.GroundSpeedKt,
-                                heading_deg = t.HeadingDeg,
-                                fuel_lb = t.FuelLb,
-                                aircraft = _bridge?.SimulatorAircraft
-                            }
-                            : null;
-
-                        _browser.CoreWebView2.PostWebMessageAsJson(
-                            System.Text.Json.JsonSerializer.Serialize(
-                                new { type = "navdeck:telemetry", id = requestId, telemetry }));
-                    }
-                    catch (Exception)
-                    {
-                        // Ignore malformed or unrelated web messages.
-                    }
-                };
-
-                // Apply desktop-only styling to NAVDECK pages.
-                _browser.CoreWebView2.NavigationCompleted +=
-                    async (_, args) =>
-                {
-                    if (!args.IsSuccess)
-                        return;
-
-                    var uri = _browser.CoreWebView2.Source;
-                    if (!Uri.TryCreate(uri, UriKind.Absolute, out var page))
-                        return;
-
-                    if (page.Scheme != Uri.UriSchemeHttps ||
-                        page.Host != "test.navdeck.online")
-                        return;
-
-                    const string desktopCss = """
-                        .navdeck-sidebar,
-                        .navdeck-topbar {
-                            display: none !important;
-                        }
-
-                        body {
-                            margin: 0 !important;
-                            background: #111318 !important;
-                        }
-
-                        /* Desktop workspace fills the application. */
-                        main {
-                            margin-left: 0 !important;
-                            padding-top: 24px !important;
-                            max-width: none !important;
-                            width: 100% !important;
-                            box-sizing: border-box !important;
-                        }
-
-                        /* Remove website navigation spacing. */
-                        .navdeck-sidebar + main,
-                        .navdeck-topbar + main {
-                            margin-left: 0 !important;
-                        }
-
-                        /* Keep flight panels within the workspace. */
-                        main > * {
-                            min-width: 0;
-                        }
-                        """;
-
-                    var script = """
-                        (() => {
-                            let style = document.getElementById(
-                                'navdeck-desktop-style'
-                            );
-
-                            if (!style) {
-                                style = document.createElement('style');
-                                style.id = 'navdeck-desktop-style';
-                                document.head.appendChild(style);
+                                _cloudApi = new NavdeckApi(config.Code);
+                                _cloudCode = config.Code;
                             }
 
-                            style.textContent = CSS_TEXT;
-                        })();
-                        """;
+                            System.Text.Json.JsonElement? payload =
+                                root.TryGetProperty("payload", out var p)
+                                    ? p.Clone() : null;
+                            data = await _cloudApi.RequestDesktopAsync(action, payload);
+                        }
 
-                    try
-                    {
-                        await _browser.CoreWebView2.ExecuteScriptAsync(
-                            script.Replace(
-                                "CSS_TEXT",
-                                System.Text.Json.JsonSerializer.Serialize(desktopCss)
-                            )
-                        );
+                        if (!IsDisposed && _browser.CoreWebView2 is not null)
+                            _browser.CoreWebView2.PostWebMessageAsJson(
+                                System.Text.Json.JsonSerializer.Serialize(
+                                    new { type = "navdeck:result", id = requestId,
+                                          data, error = (string?)null }));
                     }
-                    catch (Exception)
+                    catch (Exception ex)
                     {
-                        // Navigation can change before injection completes.
+                        if (requestId != 0 && !IsDisposed &&
+                            _browser.CoreWebView2 is not null)
+                        {
+                            _browser.CoreWebView2.PostWebMessageAsJson(
+                                System.Text.Json.JsonSerializer.Serialize(
+                                    new { type = "navdeck:result", id = requestId,
+                                          data = (object?)null, error = ex.Message }));
+                        }
                     }
                 };
 
