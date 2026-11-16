@@ -54,7 +54,7 @@ details{background:#313039;border:1px solid #45414d;border-radius:7px;padding:10
 .mini-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:16px}.mini-actions .button{font-size:11px}
 @media(max-width:1170px){.pair{grid-template-columns:1fr}.fieldrow{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media print{header,.phasebar,.button,#statusMsg,.toolbar{display:none!important}main,.panel,body{color:black!important;background:white!important;box-shadow:none!important}.detail{background:white!important;border:1px solid #ccc}.detail small{color:#555!important}}
-</style></head><body><main><header class="top"><div class="crumb">NAVDECK › MY FLIGHTS › <b>FLIGHT OPERATIONS</b></div><span class="status ok"><i></i><span>Desktop cloud link</span></span></header><div class="toolbar"><button class="button ghost" id="back">← My Flights</button></div><section class="hero"><div><span class="eyebrow">OPERATIONAL FLIGHT DECK</span><h1 id="title">Loading flight…</h1><p id="route">— → —</p><p id="aircraft"></p></div></section><div id="statusMsg" hidden></div><div class="demo-banner" id="demoBanner" hidden><strong>Demonstration flight.</strong> All route, fuel and waypoint figures are illustrative. You can test the reporting and sign-off workflow; no flight is imported or saved to your NAVDECK account.</div><div class="panel" id="summary"></div><nav class="phasebar" id="phasebar"></nav><div id="stage"></div></main><script>
+</style></head><body><main><header class="top"><div class="crumb">NAVDECK › MY FLIGHTS › <b>FLIGHT OPERATIONS</b></div><span class="status ok"><i></i><span id="cloudMode">Desktop cloud link</span></span></header><div class="toolbar"><button class="button ghost" id="back">← My Flights</button></div><section class="hero"><div><span class="eyebrow">OPERATIONAL FLIGHT DECK</span><h1 id="title">Loading flight…</h1><p id="route">— → —</p><p id="aircraft"></p></div></section><div id="statusMsg" hidden></div><div class="demo-banner" id="demoBanner" hidden><strong>Demonstration flight.</strong> All route, fuel and waypoint figures are illustrative. You can test the reporting and sign-off workflow; no flight is imported or saved to your NAVDECK account.</div><div class="panel" id="summary"></div><nav class="phasebar" id="phasebar"></nav><div id="stage"></div></main><script>
 (()=>{
 'use strict';
 const d=id=>document.getElementById(id);
@@ -242,7 +242,7 @@ function run(fn){return ()=>{try{const out=fn();if(out&&typeof out.catch==='func
 async function init(){
  if(isDemo){
    f=demoFlight();
-   d('status').textContent='SAMPLE ONLY · OFFLINE PREVIEW';
+   d('cloudMode').textContent='SAMPLE ONLY · OFFLINE PREVIEW';
    draw();return;
  }
  if(!id){
