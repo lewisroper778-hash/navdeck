@@ -46,19 +46,14 @@
 .map-controls{position:absolute;top:88px;right:19px;display:flex;flex-direction:column;gap:10px;z-index:650}.control{border:1px solid #48464f;background:#25252aeb;color:#eee;display:grid;place-items:center;width:41px;height:41px;border-radius:50%;box-shadow:0 5px 15px #0006;font-size:22px}.control:hover{background:#44355d}.control.on{background:#603b99}
 .leaflet-container{font-family:inherit;background:#1d2026}.leaflet-control-attribution{background:#202126d9!important;color:#bab8c0!important;font-size:9px!important}.leaflet-control-attribution a{color:#bdb0ec!important}.leaflet-top.leaflet-left{display:none}
 .map-message{position:absolute;top:80px;left:20px;z-index:650;background:#212126ee;border:1px solid #5a485b;color:#dfdbe5;padding:10px 14px;border-radius:8px;max-width:310px;display:none}
-.traffic-head{position:absolute;bottom:164px;left:18px;right:18px;z-index:650;display:flex;justify-content:space-between;align-items:center;pointer-events:none}
-.traffic-head>*{pointer-events:auto}.traffic-heading{background:#202026db;border:1px solid #403e49;border-radius:7px;padding:8px 11px;font-size:11px;font-weight:650;letter-spacing:.7px}
-.traffic-source{background:#202026ca;color:#c8c3ce;padding:7px 10px;border-radius:8px;font-size:10px}
-.traffic-cards{position:absolute;bottom:15px;left:15px;right:15px;z-index:650;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
-.traffic-card{background:#202024ee;color:white;min-width:0;min-height:143px;padding:12px 13px;border:1px solid #323139;border-radius:9px;box-shadow:0 10px 25px #0008;text-align:left;backdrop-filter:blur(10px);transition:border-color .15s,transform .15s}.traffic-card:hover{border-color:#8961bf;transform:translateY(-2px)}
-.traffic-airline{display:flex;gap:8px;align-items:center}.traffic-logo{width:31px;height:31px;border-radius:100%;background:#533789;color:#f5efff;display:grid;place-items:center;font-size:15px;flex:none}
-.traffic-title{min-width:0;flex:1}.traffic-title strong{display:block;font-size:13px;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.traffic-title small{color:#a9a6b0;font-size:9px;display:block;margin-top:3px}.traffic-badge{font-size:9px;color:#9a969f}
-.traffic-route{display:grid;grid-template-columns:1fr 22px 1fr;align-items:center;gap:4px;padding:11px 0 7px}.traffic-route span:last-child{text-align:right}.traffic-route small{color:#99969f;font-size:9px;display:block}.traffic-route b{font-weight:650;font-size:23px;letter-spacing:.5px;line-height:1.1}.traffic-route .mini-plane{text-align:center;color:#e9e7eb;font-size:18px}
-.traffic-card-foot{display:flex;justify-content:space-between;gap:5px;border-top:1px solid #3a3940;padding-top:8px;color:#a7a4ae;font-size:10px}.live-dot{color:#fd7881}.live-dot:before{content:"● ";font-size:9px}
+.telemetry-strip{position:absolute;bottom:16px;left:16px;right:16px;z-index:650;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;pointer-events:none}
+.telemetry-tile{background:#202024ed;border:1px solid #393841;border-radius:9px;padding:14px 17px;box-shadow:0 8px 24px #0008;min-width:0}
+.telemetry-tile span{display:block;color:#9c99a6;font-size:10px;letter-spacing:1px;text-transform:uppercase;margin-bottom:5px}
+.telemetry-tile b{font-weight:700;font-size:20px;white-space:nowrap}
 .plane-icon{filter:drop-shadow(0 2px 5px #000c)}
 #mapNotice{display:none}
-@media(max-width:1150px){.workspace{grid-template-columns:300px 1fr}.traffic-cards{grid-template-columns:repeat(2,minmax(0,1fr))}.traffic-card:nth-child(3){display:none}.traffic-head{bottom:162px}}
-@media(max-width:830px){.workspace{grid-template-columns:278px 1fr}.traffic-cards{grid-template-columns:1fr}.traffic-card:nth-child(2){display:none}.traffic-head{bottom:162px}.hero{height:165px}.hero svg{height:156px}}
+@media(max-width:1150px){.workspace{grid-template-columns:300px 1fr}.telemetry-strip{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:830px){.workspace{grid-template-columns:278px 1fr}.hero{height:165px}.hero svg{height:156px}}
 @media(max-height:750px){.hero{height:130px}.hero svg{height:125px}.airport{min-height:75px}.airport b{font-size:23px}.plane-summary{padding-bottom:2px}.progress-wrap{padding:8px 0 0}}
 </style>
 </head>
@@ -133,9 +128,11 @@
       <button class="control on" type="button" id="focusAircraft" aria-label="Follow simulator aircraft">⌖</button>
     </div>
     <div class="map-message" id="mapNotice" role="status"></div>
-    <div class="traffic-head"><span class="traffic-heading">✦ NEARBY FLIGHT ACTIVITY</span><span class="traffic-source" id="trafficSource">VATSIM · Loading traffic</span></div>
-    <div class="traffic-cards" id="trafficCards" aria-live="polite">
-      <div class="traffic-card"><div class="traffic-airline"><span class="traffic-logo">✈</span><span class="traffic-title"><strong>Loading live flights</strong><small>Connecting to VATSIM</small></span></div><div class="traffic-route"><span><small>From</small><b>—</b></span><span class="mini-plane">✈</span><span><small>To</small><b>—</b></span></div><div class="traffic-card-foot"><span>Waiting for traffic data</span><span>Not live yet</span></div></div>
+    <div class="telemetry-strip" aria-label="Simulator telemetry">
+      <div class="telemetry-tile"><span>Groundspeed</span><b id="mapSpeed">— KT</b></div>
+      <div class="telemetry-tile"><span>Altitude</span><b id="mapAlt">— FT</b></div>
+      <div class="telemetry-tile"><span>Heading</span><b id="mapHdg">—°</b></div>
+      <div class="telemetry-tile"><span>Fuel on board</span><b id="mapFuel">— LB</b></div>
     </div>
   </main>
 </div>
@@ -147,7 +144,7 @@
   const valid=(n,min,max)=>Number.isFinite(n)&&n>=min&&n<=max;
   const format=(n,d=0)=>Number.isFinite(n)?Number(n).toLocaleString('en-GB',{maximumFractionDigits:d,minimumFractionDigits:d}):'—';
   const cleanCode=(s)=>String(s||'').replace(/[^a-zA-Z0-9]/g,'').slice(0,4).toUpperCase();
-  let map=null,marker=null,trail=null,layer=null,trafficMarkers=null,latest=null,follow=true,mapStarted=false,busy=false;
+  let map=null,marker=null,trail=null,layer=null,latest=null,follow=true,mapStarted=false,busy=false;
   const tracks=[];
   let pairedRoute=null, manualRoute=false;
   const layers={
@@ -165,7 +162,7 @@
   function changeLayer(name){
     if(!map)return;
     if(layer)map.removeLayer(layer);
-    const selected=layers[name]||layers.dark;layer=L.tileLayer(selected.url,{attribution:selected.attribution,maxZoom:18}).addTo(map);
+    const selected=layers[name]||layers.dark;layer=L.tileLayer(selected.url,{attribution:selected.attribution,maxZoom:18,updateWhenIdle:true,keepBuffer:2}).addTo(map);
   }
   function updateFollow(){
     el('followLabel').textContent=follow?'Following':'Follow off';
@@ -178,7 +175,7 @@
   function setupMap(){
     if(!window.L){el('mapStatus').textContent='· Map unavailable';notify('Map library could not load. Check your internet connection.');return;}
     map=L.map('map',{zoomControl:false,worldCopyJump:true,preferCanvas:true}).setView([46.5,4.5],5);
-    changeLayer('dark');trafficMarkers=L.layerGroup().addTo(map);mapStarted=true;
+    changeLayer('dark');mapStarted=true;
     el('zoomIn').onclick=()=>map.zoomIn();
     el('zoomOut').onclick=()=>map.zoomOut();
     el('focusAircraft').onclick=()=>setFollow(true,true);
@@ -222,6 +219,7 @@
     const ok=t&&valid(Number(t.lat),-90,90)&&valid(Number(t.lon),-180,180)&&!(Number(t.lat)===0&&Number(t.lon)===0);
     if(!ok){latest=null;el('connectionIndicator').textContent='AWAITING SIM';el('connectionIndicator').classList.remove('live');el('heroStatus').textContent='STANDBY';el('mapStatus').textContent='· Simulator offline';el('aircraftName').textContent='Not connected';
       for(const k of ['groundspeed','altitude','heading','fuel'])el(k).textContent='—';
+      for(const k of ['mapSpeed','mapAlt','mapHdg','mapFuel'])el(k).textContent='—';
       el('coordinates').textContent='Waiting for simulator';
       if(marker&&map){map.removeLayer(marker);marker=null;}if(trail&&map){map.removeLayer(trail);trail=null;}tracks.length=0;el('progressBar').style.width='0%';return;
     }
@@ -238,10 +236,14 @@
     el('heading').textContent=format(head)+'°';
     el('fuel').textContent=format(Number(t.fuel_lb))+' LB';
     el('coordinates').textContent=lat.toFixed(4)+'°, '+lon.toFixed(4)+'°';
+    el('mapSpeed').textContent=format(Number(t.groundspeed_kt))+' KT';
+    el('mapAlt').textContent=format(Number(t.altitude_ft))+' FT';
+    el('mapHdg').textContent=format(head)+'°';
+    el('mapFuel').textContent=format(Number(t.fuel_lb))+' LB';
     if(!map)return;
     const pt=[lat,lon];
     if(!marker){marker=L.marker(pt,{icon:planeIcon(head,'#c395ff',38),zIndexOffset:1000}).addTo(map).bindTooltip('My simulator aircraft');map.flyTo(pt,9,{duration:.6});}
-    else{marker.setLatLng(pt);marker.setIcon(planeIcon(head,'#c395ff',38));if(follow)map.panTo(pt,{animate:true,duration:.6});}
+    else{marker.setLatLng(pt);marker.setIcon(planeIcon(head,'#c395ff',38));if(follow&&map.distance(map.getCenter(),pt)>900)map.panTo(pt,{animate:false});}
     if(!tracks.length||Math.abs(tracks[tracks.length-1][0]-lat)+Math.abs(tracks[tracks.length-1][1]-lon)>.0001){tracks.push(pt);if(tracks.length>240)tracks.shift();}
     if(trail)trail.setLatLngs(tracks);else trail=L.polyline(tracks,{color:'#ac78fd',weight:3,opacity:.8}).addTo(map);
     el('progressBar').style.width=String(Math.min(95,Math.max(4,tracks.length/2.4)))+'%';
@@ -252,62 +254,6 @@
       if(typeof window.navdeckDesktop?.getTelemetry!=='function'){showTelemetry(null);return;}
       const t=await window.navdeckDesktop.getTelemetry();showTelemetry(t);
     }catch{showTelemetry(null);}finally{busy=false;}
-  }
-  function showTraffic(flights){
-    if(!map)return;
-    trafficMarkers.clearLayers();
-    const center=latest?L.latLng(latest.lat,latest.lon):map.getCenter();
-    const pilots=flights.filter(p=>valid(Number(p.latitude),-90,90)&&valid(Number(p.longitude),-180,180))
-      .sort((a,b)=>center.distanceTo([a.latitude,a.longitude])-center.distanceTo([b.latitude,b.longitude]));
-    pilots.slice(0,65).forEach(p=>{
-      const heading=Number(p.heading)||0;
-      L.marker([p.latitude,p.longitude],{icon:planeIcon(heading,'#e8e9f0',23),interactive:true}).bindTooltip(String(p.callsign||'VATSIM flight')).addTo(trafficMarkers);
-    });
-    const container=el('trafficCards');container.replaceChildren();
-    const featured=pilots.slice(0,3);
-    if(!featured.length){
-      const node=document.createElement('div');node.className='traffic-card';node.textContent='No active flights found near this map area.';container.appendChild(node);return;
-    }
-    featured.forEach(p=>{
-      const from=cleanCode(p.flight_plan?.departure)||'—';
-      const to=cleanCode(p.flight_plan?.arrival)||'—';
-      const callsign=String(p.callsign||'UNKNOWN').slice(0,16);
-      const type=String(p.flight_plan?.aircraft_short||p.flight_plan?.aircraft_faa||'Aircraft').slice(0,20);
-      const b=document.createElement('button');b.type='button';b.className='traffic-card';
-      const top=document.createElement('div');top.className='traffic-airline';
-      const logo=document.createElement('span');logo.className='traffic-logo';logo.textContent='✈';
-      const title=document.createElement('span');title.className='traffic-title';
-      const strong=document.createElement('strong');strong.textContent=callsign;
-      const small=document.createElement('small');small.textContent=type;
-      title.append(strong,small);
-      const badge=document.createElement('span');badge.className='traffic-badge';badge.textContent='VATSIM';
-      top.append(logo,title,badge);
-      const route=document.createElement('div');route.className='traffic-route';
-      const makeAirport=(label,code)=>{const span=document.createElement('span');const sm=document.createElement('small');sm.textContent=label;const bold=document.createElement('b');bold.textContent=code;span.append(sm,bold);return span;};
-      const plane=document.createElement('span');plane.className='mini-plane';plane.textContent='✈';
-      route.append(makeAirport('Departure',from),plane,makeAirport('Arrival',to));
-      const foot=document.createElement('div');foot.className='traffic-card-foot';
-      const alt=document.createElement('span');alt.textContent='ALT '+format(Number(p.altitude))+' FT';
-      const live=document.createElement('span');live.className='live-dot';live.textContent='Live';
-      foot.append(alt,live);b.append(top,route,foot);
-      b.onclick=()=>{setFollow(false);map.flyTo([p.latitude,p.longitude],9,{duration:.7});};
-      container.appendChild(b);
-    });
-  }
-  async function pollTraffic(){
-    if(!map)return;
-    try{
-      const response=await fetch('https://data.vatsim.net/v3/vatsim-data.json',{cache:'no-store'});
-      if(!response.ok)throw Error('HTTP '+response.status);
-      const data=await response.json();
-      if(!Array.isArray(data.pilots))throw Error('Missing pilots');
-      showTraffic(data.pilots);
-      el('trafficSource').textContent='VATSIM · '+data.pilots.length.toLocaleString('en-GB')+' live pilots';
-    }catch{
-      el('trafficSource').textContent='VATSIM · Traffic unavailable';
-      const container=el('trafficCards');container.replaceChildren();
-      const div=document.createElement('div');div.className='traffic-card';div.textContent='VATSIM traffic is unavailable. Simulator tracking still works when connected.';container.appendChild(div);
-    }
   }
   async function syncCloudFlight(){
     if(typeof window.navdeckDesktop?.getFlight!=='function')return;
@@ -328,7 +274,7 @@
   setupMap();
   syncCloudFlight();setInterval(syncCloudFlight,30000);
   pollTelemetry();setInterval(pollTelemetry,1000);
-  pollTraffic();setInterval(pollTraffic,60000);
+
 })();
 </script>
 </body>
