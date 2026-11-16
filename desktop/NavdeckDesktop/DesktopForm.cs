@@ -69,74 +69,104 @@ internal sealed class DesktopForm : Form
         }
         navigation.SizeChanged += (_, _) => FitNavigation();
 
+        // Premium, self-contained NAVDECK brand header. The icon is painted
+        // directly at the current Windows DPI, so no external assets are needed.
         var brand = new Panel
         {
             Dock = DockStyle.Top,
-            Height = 129,
+            Height = 132,
             BackColor = Color.FromArgb(22, 24, 31)
         };
 
-        // Original NAVDECK mark: a stylised N / navigation path.
-        // Vector-painted at native DPI; no external image downloads.
         var brandIcon = new Panel
         {
-            Size = new Size(50, 50),
-            Location = new Point(7, 18),
-            BackColor = Color.FromArgb(100, 62, 191)
+            Size = new Size(52, 52),
+            Location = new Point(9, 20),
+            BackColor = Color.FromArgb(37, 35, 58)
         };
         brandIcon.Paint += (_, paint) =>
         {
             var g = paint.Graphics;
             g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
             var scale = Math.Min(brandIcon.ClientSize.Width,
-                                 brandIcon.ClientSize.Height) / 50f;
+                                 brandIcon.ClientSize.Height) / 52f;
             g.ScaleTransform(scale, scale);
-            using var white = new SolidBrush(Color.White);
-            using var ice = new SolidBrush(Color.FromArgb(170, 231, 250));
-            g.FillPolygon(white, new PointF[]
+            using var border = new Pen(Color.FromArgb(112, 96, 177), 1.5f);
+            using var main = new Pen(Color.FromArgb(237, 240, 255), 4.5f)
             {
-                new(12, 35), new(12, 15), new(18, 15),
-                new(31, 29), new(31, 15), new(38, 15),
-                new(38, 35), new(32, 35), new(19, 21), new(19, 35)
-            });
-            g.FillPolygon(ice, new PointF[]
+                StartCap = System.Drawing.Drawing2D.LineCap.Round,
+                EndCap = System.Drawing.Drawing2D.LineCap.Round,
+                LineJoin = System.Drawing.Drawing2D.LineJoin.Round
+            };
+            using var accent = new Pen(Color.FromArgb(125, 197, 255), 3.5f)
             {
-                new(32, 10), new(43, 10), new(43, 21)
+                StartCap = System.Drawing.Drawing2D.LineCap.Round,
+                EndCap = System.Drawing.Drawing2D.LineCap.Round
+            };
+            using var dot = new SolidBrush(Color.FromArgb(160, 207, 255));
+            g.DrawRectangle(border, 2, 2, 48, 48);
+            // Geometric N: a navigation track between two vertical fixes.
+            g.DrawLines(main, new PointF[]
+            {
+                new(14, 36), new(14, 16), new(37, 36), new(37, 16)
             });
+            g.DrawLine(accent, 31, 13, 40, 13);
+            g.FillEllipse(dot, 36.5f, 10.5f, 6, 6);
         };
 
         var brandTitle = new Label
         {
             Text = "NAVDECK",
             AutoSize = false,
-            Size = new Size(180, 32),
-            Location = new Point(68, 19),
+            Size = new Size(185, 34),
+            Location = new Point(72, 19),
             TextAlign = ContentAlignment.MiddleLeft,
-            ForeColor = Color.FromArgb(250, 249, 253),
-            Font = new Font("Segoe UI", 17, FontStyle.Bold)
+            ForeColor = Color.FromArgb(245, 246, 252),
+            Font = new Font("Segoe UI Semibold", 18.5f, FontStyle.Bold)
         };
 
         var brandSubtitle = new Label
         {
             Text = "FLIGHT OPERATIONS",
             AutoSize = false,
-            Location = new Point(70, 52),
-            Size = new Size(175, 22),
-            Font = new Font("Segoe UI", 8, FontStyle.Bold),
-            ForeColor = Color.FromArgb(165, 166, 178),
-            TextAlign = ContentAlignment.MiddleLeft
+            Size = new Size(184, 21),
+            Location = new Point(74, 54),
+            TextAlign = ContentAlignment.MiddleLeft,
+            ForeColor = Color.FromArgb(153, 164, 186),
+            Font = new Font("Segoe UI", 8f, FontStyle.Bold)
+        };
+
+        var brandTagline = new Label
+        {
+            Text = "SIMULATOR  /  FLIGHT MANAGEMENT",
+            AutoSize = false,
+            Size = new Size(249, 20),
+            Location = new Point(10, 85),
+            TextAlign = ContentAlignment.MiddleLeft,
+            ForeColor = Color.FromArgb(116, 124, 147),
+            Font = new Font("Segoe UI", 7.5f, FontStyle.Regular)
         };
 
         var brandLine = new Panel
         {
-            BackColor = Color.FromArgb(56, 57, 72),
-            Location = new Point(7, 102),
-            Size = new Size(241, 1)
+            BackColor = Color.FromArgb(54, 57, 73),
+            Location = new Point(9, 113),
+            Size = new Size(244, 1)
         };
         brand.Controls.Add(brandIcon);
         brand.Controls.Add(brandTitle);
         brand.Controls.Add(brandSubtitle);
+        brand.Controls.Add(brandTagline);
         brand.Controls.Add(brandLine);
+        brand.Resize += (_, _) =>
+        {
+            // Keep the mark and type aligned if Windows applies DPI scaling.
+            var available = Math.Max(150, brand.ClientSize.Width - 84);
+            brandTitle.Width = available;
+            brandSubtitle.Width = available;
+            brandTagline.Width = Math.Max(170, brand.ClientSize.Width - 24);
+            brandLine.Width = Math.Max(170, brand.ClientSize.Width - 24);
+        };
 
         Button? activeNavigation = null;
 
