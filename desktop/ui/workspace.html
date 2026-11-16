@@ -107,7 +107,7 @@ async function renderSimbrief(){
     $('plannerNotice').innerHTML=notice('Enter valid four-letter airport ICAOs and an aircraft type.','error');return;
   }
   const hour=value('planHour'),minute=value('planMinute');
-  if((hour&&!/^(?:[01]?\\d|2[0-3])$/.test(hour))||(minute&&!/^[0-5]?\\d$/.test(minute))){
+  if((hour&&!/^(?:[01]?\d|2[0-3])$/.test(hour))||(minute&&!/^[0-5]?\d$/.test(minute))){
     $('plannerNotice').innerHTML=notice('Departure hour and minute must be valid UTC times.','error');return;
   }
   const values={orig,dest,type,airline:value('planAirline'),fltnum:value('planFlight'),deph:hour,depm:minute};
