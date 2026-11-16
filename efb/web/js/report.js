@@ -66,7 +66,7 @@ function build() {
   body.append(section('Landing and touchdown',
     h('p', null, l ? `Landing rate ${num(l.rate)} fpm (${rateRating(l.rate)}). ` + (l.runway ? `Runway ${l.runway} at ${l.airport}, ${fmtAlt(l.distFt)} from the threshold, ${lateralText(l.offsetFt)}. Ground speed ${num(l.gsKt)} kt.` : 'Runway not identified.') : 'No landing recorded.'),
     l && plot));
-  if (f.goArounds.length) body.append(section('Go-arounds', tbl(['Time', 'Height', 'Reason', 'Remarks'], f.goArounds.map(g => h('tr', null, td(fmtT(g.time) + 'z'), td(g.raFt != null ? fmtAlt(Math.round(g.raFt)) + ' AGL' : '--'), td(g.reason || h('span', { class: 'draft' }, 'REASON NOT ENTERED')), td(g.remark || ''))))));
+  if (f.goArounds.length) body.append(section('Go-arounds and touch-and-goes', tbl(['Time', 'Event', 'Reason', 'Remarks'], f.goArounds.map(g => h('tr', null, td(fmtT(g.time) + 'z'), td(g.kind === 'touch-and-go' ? 'Touch-and-go' : g.raFt != null ? fmtAlt(Math.round(g.raFt)) + ' AGL' : '--'), td(g.reason || h('span', { class: 'draft' }, 'REASON NOT ENTERED')), td(g.remark || ''))))));
 
   // loads
   if (f.load) {

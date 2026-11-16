@@ -92,6 +92,7 @@ function simStep(action) {
       pushDoc('flight');
     }
   } else if (action === 'fuelcheck') { f.fuelChecks.push({ time: iso, fob: sim.fobKg, plan: sim.fobKg + 120, auto: true }); f.lastFuelCheck = iso; notify('Fuel check', 'Recorded automatically'); pushDoc('flight'); }
+  else if (action === 'touchandgo') { f.goArounds.push({ time: iso, raFt: 0, kind: 'touch-and-go', reason: '', remark: '' }); notify('Touch-and-go', 'The flight continues', 'warn'); pushDoc('flight'); }
   else if (action === 'goaround') { f.goArounds.push({ time: iso, raFt: 410, reason: '', remark: '' }); notify('Go-around detected', 'A reason is required before closing', 'warn'); pushDoc('flight'); }
   else if (action === 'on') {
     f.times.on = iso; f.fuel.on = 5290;
@@ -128,6 +129,16 @@ http.createServer(async (req, res) => {
       return json(res, 200, { ok: true });
     }
     if (p === '/api/flight/new' && req.method === 'POST') { state.flight = JSON.parse(await readBody(req)).flight; pushDoc('flight'); return json(res, 200, { ok: true }); }
+    if (p === '/api/flight/undo-landing' && req.method === 'POST') {
+      const f = state.flight;
+      if (f.closed) return json(res, 400, { error: 'The flight is already closed.' });
+      delete f.times.on; delete f.times.in; delete f.fuel.on; delete f.fuel.in; delete f.landing;
+      const last = f.navlog[f.navlog.length - 1];
+      if (last && last.type === 'apt' && last.auto) { delete last.ata; delete last.fob; delete last.alt; delete last.auto; }
+      sim = { ...sim, stage: 2, onGround: false }; send({ t: 'sim', d: sim });
+      notify('Landing removed', 'The flight continues; the next landing will be recorded.', 'good'); pushDoc('flight');
+      return json(res, 200, { ok: true });
+    }
     if (p === '/api/flight/close' && req.method === 'POST') {
       const f = state.flight;
       if (!f.closed || !f.closed.signature) return json(res, 400, { error: 'The flight must be signed first.' });

@@ -112,11 +112,11 @@ async function askGoAroundReasons() {
     const select = h('select', { class: 'input' }, h('option', { value: '' }, 'Choose the reason…'), GO_AROUND_REASONS.map(r => h('option', { value: r }, r)));
     const remark = h('input', { class: 'input', type: 'text', placeholder: 'Remarks (optional, required for "Other")' });
     return { i, select, remark, el: h('div', { class: 'stack card' },
-      h('b', null, `Go-around at ${fmtT(g.time)}z` + (g.raFt != null ? `, ${Math.round(g.raFt)} ft above ground` : '')), select, remark) };
+      h('b', null, (g.kind === 'touch-and-go' ? `Touch-and-go at ${fmtT(g.time)}z` : `Go-around at ${fmtT(g.time)}z` + (g.raFt != null ? `, ${Math.round(g.raFt)} ft above ground` : ''))), select, remark) };
   });
   const warn = h('div', { class: 'warn-text' });
   const ok = await modal({
-    title: 'Go-around: reason required', wide: true,
+    title: 'Go-around or touch-and-go: reason required', wide: true,
     body: h('div', { class: 'stack' },
       h('p', { class: 'muted' }, 'A go-around was detected on this flight. Enter the reason before the journey log can be signed and closed.'),
       rows.map(r => r.el), warn),

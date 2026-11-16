@@ -138,12 +138,23 @@ async function sign(page) {
     check(await page.locator('tr.next td:nth-child(7) .good, tr.next td:nth-child(7) .bad').count() === 1, 'FOB typed on the keypad updates the comparison live');
 
     await sim('goaround');
+    await sim('touchandgo');
     for (let i = 0; i < 6; i++) await sim('fix');
-    await sim('on'); await sim('in');
+    await sim('on');
     await tab('landing');
     await page.waitForTimeout(400);
     check(await page.locator('text=164 fpm').count() >= 1, 'landing rate shown');
+    check(await page.locator('td:has-text("Touch-and-go")').count() === 1, 'touch-and-go listed with the go-arounds');
     await shot('06-landing');
+
+    // a wrong landing can be undone, then the real one is recorded again
+    await page.click('button:has-text("Undo landing")');
+    await page.click('.modal-foot button:has-text("Undo landing")');
+    await page.waitForTimeout(400);
+    const undone = await page.evaluate(() => fetch('/api/state').then(r => r.json()).then(s => ({ on: s.flight.times.on || null, landing: s.flight.landing || null })));
+    check(undone.on === null && undone.landing === null, 'Undo landing clears the landing so the flight continues');
+    await sim('on'); await sim('in');
+    await page.waitForTimeout(300);
 
     await tab('times');
     await page.click('text=Send departure message');
@@ -156,13 +167,15 @@ async function sign(page) {
 
     // sign and close: blocked until the go-around reason is given
     await tab('flight');
-    check(await page.locator('text=Go-around detected.').count() === 1, 'go-around banner shown');
+    check(await page.locator('.banner:has-text("Go-around and touch-and-go detected.")').count() === 1, 'go-around and touch-and-go banner shown');
     await page.click('button:has-text("Sign and close flight")');
-    await page.waitForSelector('text=Go-around: reason required');
+    await page.waitForSelector('text=Go-around or touch-and-go: reason required');
     await page.click('.modal-foot .btn.primary');
     check(await page.locator('text=Choose a reason for every go-around.').count() === 1, 'cannot continue without a go-around reason');
     await shot('09-goaround-reason');
-    await page.selectOption('.modal select', 'Unstable approach');
+    check(await page.locator('.modal select').count() === 2, 'go-around and touch-and-go both need a reason');
+    await page.locator('.modal select').nth(0).selectOption('Unstable approach');
+    await page.locator('.modal select').nth(1).selectOption('Accidental touchdown');
     await page.click('.modal-foot .btn.primary');
     await page.waitForSelector('.sig-canvas');
     await sign(page);

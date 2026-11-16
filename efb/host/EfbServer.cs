@@ -191,6 +191,13 @@ internal sealed class EfbServer : IAsyncDisposable
             else await Json(ctx, new JsonObject { ["error"] = error }, 400);
         });
 
+        app.MapPost("/api/flight/undo-landing", async ctx =>
+        {
+            var error = _engine.UndoLanding();
+            if (error is null) await Json(ctx, new JsonObject { ["ok"] = true });
+            else await Json(ctx, new JsonObject { ["error"] = error }, 400);
+        });
+
         app.MapGet("/api/history/{id}", async ctx =>
         {
             var json = _store.ReadArchived((string?)ctx.Request.RouteValues["id"] ?? "");
