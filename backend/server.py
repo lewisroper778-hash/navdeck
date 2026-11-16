@@ -1049,10 +1049,18 @@ class SelectiveGZip:
 
 app.add_middleware(SelectiveGZip)
 
+# The desktop Clerk WebView2 page runs on the public NAVDECK frontend
+# origin. Always allow that exact origin even when CORS_ORIGINS is customized.
+cors_origins = {
+    origin.strip().rstrip("/")
+    for origin in os.environ.get("CORS_ORIGINS", "").split(",")
+    if origin.strip()
+}
+cors_origins.add("https://navdeck-frontend.onrender.com")
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get("CORS_ORIGINS", "*").split(","),
+    allow_origins=sorted(cors_origins),
     allow_methods=["*"],
     allow_headers=["*"],
 )
