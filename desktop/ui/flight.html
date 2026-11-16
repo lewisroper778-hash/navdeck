@@ -106,7 +106,9 @@ function fuelSummary(flight,rows){
 }
 function signed(v,suffix=''){return v===null||!Number.isFinite(v)?'—':(v>0?'+':'')+Math.round(v)+suffix}
 
-let id=new URL(location.href).searchParams.get('id'),f=null,section='briefing',pending=false,ink=false;
+let id=new URL(location.href).searchParams.get('id'),f=null,
+    section=location.hash==='#enroute'?'enroute':'briefing',
+    pending=false,ink=false,latestSample=null;
 function message(text,error=false){let x=d('statusMsg');x.hidden=false;x.className='message '+(error?'err':'good');x.textContent=text}
 function clear(){d('statusMsg').hidden=true}
 function on(id,fn){if(d(id))d(id).onclick=fn}
@@ -120,9 +122,44 @@ function act(action,values={}){
  }).catch(err=>message(err.message,true)).finally(()=>{pending=false});
 }
 function run(fn){return ()=>{try{const out=fn();if(out&&typeof out.catch==='function')out.catch(x=>message(x.message,true))}catch(x){message(x.message,true)}}}
-function init(){if(!id){message('No flight selected',true);return}
- api('getFlightDetails',{flight_id:id}).then(x=>{if(!x?.flight)throw Error('Flight not found');f=x.flight;draw()})
- .catch(x=>message('Cloud flight unavailable: '+x.message+'. The updated NAVDECK server API must be deployed.',true))}
+async function init(){
+ if(!id){
+   // The reporting sidebar and dashboard button resolve the current flight,
+   // so users don't have to pass through the flight library every time.
+   try{
+     const active=await api('getFlight');
+     id=active?.flight?.id||null;
+   }catch(err){
+     message('Could not connect to the live flight: '+err.message,true);
+   }
+ }
+ if(!id){
+   d('title').textContent='In-Flight Reporting';
+   d('route').textContent='No flight selected';
+   d('aircraft').textContent='Choose or import an operational flight plan';
+   d('stage').innerHTML=panel('Start reporting',
+       '<p class="muted">No active NAVDECK flight was found. Import an OFP from SimBrief or select an open flight from My Flights.</p>'+
+       '<button id="selectFlight" class="button primary">Choose a flight</button>');
+   on('selectFlight',()=>location.href='workspace.html#flights');
+   return;
+ }
+ try{
+   const data=await api('getFlightDetails',{flight_id:id});
+   if(!data?.flight)throw Error('Flight details unavailable');
+   f=data.flight;draw();
+ }catch(err){
+   d('title').textContent='In-Flight Reporting';
+   d('route').textContent='Cloud flight reporting unavailable';
+   d('aircraft').textContent='NAVDECK server update required';
+   d('stage').innerHTML=panel('Connection required',
+     '<p class="muted">The desktop app is connected to the flight bridge, but its full in-flight reporting endpoint has not been deployed to the NAVDECK server.</p>'+
+     '<button class="button primary" id="retryReport">Retry reporting</button>'+
+     '<button class="button ghost" id="chooseReport" style="margin-left:8px">My Flights</button>');
+   on('retryReport',init);
+   on('chooseReport',()=>location.href='workspace.html#flights');
+   message('Cannot load the full reporting record: '+err.message,true);
+ }
+}
 function draw(){
  const closed=f.status==='closed';
  d('title').textContent=f.callsign||'Flight';
@@ -131,7 +168,7 @@ function draw(){
  const wp=f.waypoints||[], active=wp.filter(x=>!x.skipped),done=active.filter(x=>x.passed||x.ata).length;
  const next=active.find(x=>!x.passed&&!x.ata);
  d('summary').innerHTML=details([['Flight status',closed?'CLOSED':'OPEN'],['Progress',done+'/'+active.length+' fixes'],['Next waypoint',next?.ident],['Landing rate',f.landing_rate?'-'+Math.abs(Number(f.landing_rate))+' FPM':'—'],['Block fuel',f.fuel?.block],['OFP units',f.weights?.ofp_units||'KG']]);
- d('phasebar').innerHTML=phases.map((x,i)=>'<button class="phase '+(section===x?'active':'')+'" data-phase="'+x+'">'+(i+1)+' · '+({briefing:'Briefing',departure:'Departure',enroute:'Enroute',arrival:'Arrival',close:'Close & Sign'})[x]+'</button>').join('');
+ d('phasebar').innerHTML=phases.map((x,i)=>'<button class="phase '+(section===x?'active':'')+'" data-phase="'+x+'">'+(i+1)+' · '+({briefing:'Briefing',departure:'Departure',enroute:'In-Flight Reporting',arrival:'Arrival',close:'Close & Sign'})[x]+'</button>').join('');
  document.querySelectorAll('[data-phase]').forEach(b=>b.onclick=()=>{section=b.dataset.phase;draw()});
  d('stage').innerHTML=({briefing,departure,enroute,arrival,closeFlight})[section]();
  bind();
