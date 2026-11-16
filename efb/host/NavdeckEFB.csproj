@@ -14,6 +14,9 @@
     <Version>1.0.0</Version>
     <Product>NAVDECK EFB</Product>
     <Company>NAVDECK</Company>
+    <Authors>NAVDECK</Authors>
+    <Copyright>Copyright (C) 2026 NAVDECK</Copyright>
+    <Description>NAVDECK EFB: electronic flight bag for flight simulators</Description>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SelfContained>true</SelfContained>
     <!-- Fast start: pre-compiled code and no single-file extraction on launch. -->
