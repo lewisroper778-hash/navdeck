@@ -53,6 +53,7 @@ internal sealed class NavdeckApi
         string action, JsonElement? payload = null)
     {
         string flightId = "";
+        string airportId = "";
         if (action is "getFlightDetails" or "flightAction")
         {
             if (payload is not { } info ||
@@ -65,6 +66,17 @@ internal sealed class NavdeckApi
             flightId = Uri.EscapeDataString(flightGuid.ToString());
         }
 
+        if (action == "getMetar")
+        {
+            if (payload is not { } p ||
+                !p.TryGetProperty("icao", out var raw) ||
+                raw.ValueKind != JsonValueKind.String)
+                throw new ArgumentException("Enter an airport ICAO");
+            airportId = (raw.GetString() ?? "").Trim().ToUpperInvariant();
+            if (airportId.Length != 4 || !airportId.All(char.IsLetter))
+                throw new ArgumentException("Invalid airport ICAO");
+        }
+
         string path = action switch
         {
             "getFlight" => "flight",
@@ -75,6 +87,7 @@ internal sealed class NavdeckApi
             "importSimbrief" => "desktop/import",
             "getFlightDetails" => $"desktop/flights/{flightId}",
             "flightAction" => $"desktop/flights/{flightId}/action",
+            "getMetar" => $"desktop/metar/{airportId}",
             _ => throw new ArgumentException("Unsupported desktop request")
         };
 
@@ -118,7 +131,8 @@ internal sealed class NavdeckApi
             {
                 "toggleWaypoint", "skipWaypoint", "directTo", "undoDirect",
                 "saveWaypoint", "saveTimes", "saveActuals", "saveArrival",
-                "signReport", "closeFlight", "reopenFlight", "resetFlight"
+                "signReport", "closeFlight", "reopenFlight", "resetFlight",
+                "saveNotes"
             };
             if (!allowed.Contains(operation))
                 throw new ArgumentException("Unsupported flight operation");
@@ -134,6 +148,20 @@ internal sealed class NavdeckApi
         await EnsureOk(response);
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         return document.RootElement.Clone();
+    }
+
+    public async Task<byte[]> GetReportPdfAsync(string id)
+    {
+        if (!Guid.TryParse(id, out var guid))
+            throw new ArgumentException("Invalid report flight ID");
+        using var response = await _http.GetAsync(
+            "desktop/reports/" + Uri.EscapeDataString(guid.ToString()));
+        await EnsureOk(response);
+        var bytes = await response.Content.ReadAsByteArrayAsync();
+        if (bytes.Length < 4 || bytes[0] != '%' || bytes[1] != 'P' ||
+            bytes[2] != 'D' || bytes[3] != 'F')
+            throw new InvalidDataException("NAVDECK returned an invalid PDF");
+        return bytes;
     }
 
     // Sends live aircraft data to the NAVDECK flight dashboard.
