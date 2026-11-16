@@ -326,6 +326,10 @@ internal sealed class DesktopForm : Form
                         getTelemetry: () => request('getTelemetry').catch(() => null),
                         getFlight: () => request('getFlight'),
                         getFlights: () => request('getFlights'),
+                        getFlightDetails: (payload) => request('getFlightDetails', payload),
+                        flightAction: (payload) => request('flightAction', payload),
+                        getMetar: (payload) => request('getMetar', payload),
+                        downloadReport: (payload) => request('downloadReport', payload),
                         getLogbook: () => request('getLogbook'),
                         getProfile: () => request('getProfile'),
                         saveProfile: (payload) => request('saveProfile', payload),
@@ -382,6 +386,44 @@ internal sealed class DesktopForm : Form
                                     aircraft = _bridge?.SimulatorAircraft
                                 }
                                 : null;
+                        }
+                        else if (action == "downloadReport")
+                        {
+                            var config = Config.Load();
+                            if (!Config.IsValidCode(config.Code))
+                                throw new InvalidOperationException(
+                                    "Pair the simulator connection first.");
+                            if (!root.TryGetProperty("payload", out var input) ||
+                                !input.TryGetProperty("flight_id", out var flight) ||
+                                flight.ValueKind != System.Text.Json.JsonValueKind.String ||
+                                !Guid.TryParse(flight.GetString(), out var reportId))
+                                throw new ArgumentException("Invalid flight ID");
+
+                            if (_cloudApi is null || _cloudCode != config.Code)
+                            {
+                                _cloudApi = new NavdeckApi(config.Code);
+                                _cloudCode = config.Code;
+                            }
+                            // Ask where to save before downloading any data.
+                            using var picker = new SaveFileDialog
+                            {
+                                Filter = "PDF document (*.pdf)|*.pdf",
+                                DefaultExt = "pdf",
+                                AddExtension = true,
+                                FileName = "NAVDECK-Flight-Report.pdf",
+                                Title = "Save NAVDECK signed report"
+                            };
+                            if (picker.ShowDialog(this) != DialogResult.OK)
+                            {
+                                data = new { saved = false };
+                            }
+                            else
+                            {
+                                var pdf = await _cloudApi.GetReportPdfAsync(
+                                    reportId.ToString());
+                                await File.WriteAllBytesAsync(picker.FileName, pdf);
+                                data = new { saved = true };
+                            }
                         }
                         else
                         {
