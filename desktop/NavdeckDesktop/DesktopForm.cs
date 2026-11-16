@@ -45,9 +45,9 @@ internal sealed class DesktopForm : Form
         var sidebar = new Panel
         {
             Dock = DockStyle.Left,
-            Width = 238,
-            BackColor = Color.FromArgb(29, 29, 32),
-            Padding = new Padding(12, 0, 12, 0)
+            Width = 278,
+            BackColor = Color.FromArgb(22, 24, 31),
+            Padding = new Padding(13, 0, 13, 0)
         };
 
         var navigation = new FlowLayoutPanel
@@ -56,40 +56,61 @@ internal sealed class DesktopForm : Form
             FlowDirection = FlowDirection.TopDown,
             WrapContents = false,
             AutoScroll = true,
-            BackColor = Color.FromArgb(29, 29, 32),
-            Padding = new Padding(0, 6, 0, 6)
+            BackColor = Color.FromArgb(22, 24, 31),
+            Padding = new Padding(0, 6, 0, 8)
         };
-        navigation.SizeChanged += (_, _) =>
+        // Take the true client width, including scrollbar/DPI changes, so
+        // the navigation text is never pushed beneath a scrollbar.
+        void FitNavigation()
         {
+            var width = Math.Max(190, navigation.ClientSize.Width - 9);
             foreach (Control item in navigation.Controls)
-                item.Width = Math.Max(170, navigation.ClientSize.Width - 14);
-        };
+                item.Width = width;
+        }
+        navigation.SizeChanged += (_, _) => FitNavigation();
 
         var brand = new Panel
         {
             Dock = DockStyle.Top,
-            Height = 142,
-            BackColor = Color.FromArgb(29, 29, 32)
+            Height = 129,
+            BackColor = Color.FromArgb(22, 24, 31)
         };
 
-        var brandIcon = new Label
+        // Original NAVDECK mark: a stylised N / navigation path.
+        // Vector-painted at native DPI; no external image downloads.
+        var brandIcon = new Panel
         {
-            Text = "↗",
-            AutoSize = false,
-            Size = new Size(34, 34),
-            Location = new Point(7, 20),
-            TextAlign = ContentAlignment.MiddleCenter,
-            BackColor = Color.FromArgb(131, 59, 240),
-            ForeColor = Color.White,
-            Font = new Font("Segoe UI Symbol", 19, FontStyle.Bold)
+            Size = new Size(50, 50),
+            Location = new Point(7, 18),
+            BackColor = Color.FromArgb(100, 62, 191)
+        };
+        brandIcon.Paint += (_, paint) =>
+        {
+            var g = paint.Graphics;
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            var scale = Math.Min(brandIcon.ClientSize.Width,
+                                 brandIcon.ClientSize.Height) / 50f;
+            g.ScaleTransform(scale, scale);
+            using var white = new SolidBrush(Color.White);
+            using var ice = new SolidBrush(Color.FromArgb(170, 231, 250));
+            g.FillPolygon(white, new PointF[]
+            {
+                new(12, 35), new(12, 15), new(18, 15),
+                new(31, 29), new(31, 15), new(38, 15),
+                new(38, 35), new(32, 35), new(19, 21), new(19, 35)
+            });
+            g.FillPolygon(ice, new PointF[]
+            {
+                new(32, 10), new(43, 10), new(43, 21)
+            });
         };
 
         var brandTitle = new Label
         {
             Text = "NAVDECK",
             AutoSize = false,
-            Size = new Size(155, 38),
-            Location = new Point(47, 18),
+            Size = new Size(180, 32),
+            Location = new Point(68, 19),
             TextAlign = ContentAlignment.MiddleLeft,
             ForeColor = Color.FromArgb(250, 249, 253),
             Font = new Font("Segoe UI", 17, FontStyle.Bold)
@@ -99,18 +120,18 @@ internal sealed class DesktopForm : Form
         {
             Text = "FLIGHT OPERATIONS",
             AutoSize = false,
-            Location = new Point(8, 65),
-            Size = new Size(208, 24),
-            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-            ForeColor = Color.FromArgb(151, 148, 159),
+            Location = new Point(70, 52),
+            Size = new Size(175, 22),
+            Font = new Font("Segoe UI", 8, FontStyle.Bold),
+            ForeColor = Color.FromArgb(165, 166, 178),
             TextAlign = ContentAlignment.MiddleLeft
         };
 
         var brandLine = new Panel
         {
-            BackColor = Color.FromArgb(66, 65, 72),
-            Location = new Point(5, 109),
-            Size = new Size(208, 1)
+            BackColor = Color.FromArgb(56, 57, 72),
+            Location = new Point(7, 102),
+            Size = new Size(241, 1)
         };
         brand.Controls.Add(brandIcon);
         brand.Controls.Add(brandTitle);
@@ -125,39 +146,42 @@ internal sealed class DesktopForm : Form
             {
                 Text = title,
                 Height = 29,
-                Width = 205,
+                Width = 240,
                 TextAlign = ContentAlignment.BottomLeft,
-                Padding = new Padding(11, 0, 0, 4),
-                ForeColor = Color.FromArgb(137, 133, 146),
+                Padding = new Padding(13, 0, 0, 5),
+                ForeColor = Color.FromArgb(124, 129, 148),
                 Font = new Font("Segoe UI", 8, FontStyle.Bold),
-                Margin = new Padding(0, 4, 0, 7)
+                Margin = new Padding(0, 8, 0, 6)
             });
         }
 
+        var navigationFont = new Font("Segoe UI", 9.5f, FontStyle.Regular);
+        var activeNavigationFont = new Font("Segoe UI", 9.5f, FontStyle.Bold);
         void AddNavigation(string title, string glyph, string route)
         {
             bool isDashboard = title == "Dashboard";
             var button = new Button
             {
-                Text = "   " + glyph + "     " + title,
-                Height = 44,
-                Width = 205,
+                Text = glyph + "    " + title,
+                Height = 47,
+                Width = 240,
                 TextAlign = ContentAlignment.MiddleLeft,
+                Padding = new Padding(12, 0, 3, 0),
+                AutoEllipsis = false,
                 FlatStyle = FlatStyle.Flat,
                 BackColor = isDashboard
-                    ? Color.FromArgb(117, 54, 228)
-                    : Color.FromArgb(29, 29, 32),
+                    ? Color.FromArgb(72, 49, 118)
+                    : Color.FromArgb(22, 24, 31),
                 ForeColor = isDashboard
                     ? Color.White
-                    : Color.FromArgb(191, 188, 198),
-                Font = new Font("Segoe UI", 10, isDashboard
-                    ? FontStyle.Bold : FontStyle.Regular),
+                    : Color.FromArgb(194, 194, 208),
+                Font = isDashboard ? activeNavigationFont : navigationFont,
                 Cursor = Cursors.Hand,
                 Margin = new Padding(0, 2, 0, 2),
                 TabStop = true
             };
             button.FlatAppearance.BorderSize = 0;
-            button.FlatAppearance.MouseOverBackColor = Color.FromArgb(69, 56, 91);
+            button.FlatAppearance.MouseOverBackColor = Color.FromArgb(46, 42, 62);
 
             if (isDashboard)
                 activeNavigation = button;
@@ -170,12 +194,22 @@ internal sealed class DesktopForm : Form
                 // Navigate between locally packaged workspace tabs using
                 // only the hash fragment. This avoids reloading the entire
                 // HTML/CSS/WebView document on every sidebar click.
-                if (route.StartsWith("workspace.html#", StringComparison.Ordinal)
-                    && _browser.Source is { } current
-                    && current.Host == "navdeck-desktop.local"
-                    && current.AbsolutePath == "/workspace.html")
+                bool sameWorkspace =
+                    route.StartsWith("workspace.html#", StringComparison.Ordinal) &&
+                    _browser.Source is { } currentWorkspace &&
+                    currentWorkspace.Host == "navdeck-desktop.local" &&
+                    currentWorkspace.AbsolutePath == "/workspace.html";
+                bool sameFlight =
+                    route.StartsWith("flight.html?", StringComparison.Ordinal) &&
+                    _browser.Source is { } currentFlight &&
+                    currentFlight.Host == "navdeck-desktop.local" &&
+                    currentFlight.AbsolutePath == "/flight.html" &&
+                    (route.Contains("demo=1", StringComparison.Ordinal) ==
+                     currentFlight.Query.Contains("demo=1", StringComparison.Ordinal));
+                if (sameWorkspace || sameFlight)
                 {
-                    var fragment = route.Substring("workspace.html".Length);
+                    int hashPos = route.IndexOf('#');
+                    var fragment = hashPos >= 0 ? route.Substring(hashPos) : "";
                     _ = _browser.CoreWebView2.ExecuteScriptAsync(
                         "location.hash = " +
                         System.Text.Json.JsonSerializer.Serialize(fragment));
@@ -188,13 +222,13 @@ internal sealed class DesktopForm : Form
 
                 if (activeNavigation is not null)
                 {
-                    activeNavigation.BackColor = Color.FromArgb(29, 29, 32);
-                    activeNavigation.ForeColor = Color.FromArgb(191, 188, 198);
-                    activeNavigation.Font = new Font("Segoe UI", 10);
+                    activeNavigation.BackColor = Color.FromArgb(22, 24, 31);
+                    activeNavigation.ForeColor = Color.FromArgb(194, 194, 208);
+                    activeNavigation.Font = navigationFont;
                 }
-                button.BackColor = Color.FromArgb(117, 54, 228);
+                button.BackColor = Color.FromArgb(72, 49, 118);
                 button.ForeColor = Color.White;
-                button.Font = new Font("Segoe UI", 10, FontStyle.Bold);
+                button.Font = activeNavigationFont;
                 activeNavigation = button;
             };
 
@@ -206,7 +240,8 @@ internal sealed class DesktopForm : Form
         // Primary operation: open the live in-flight report in one click.
         // Resolves the currently paired active flight before loading its details.
         AddNavigation("In-Flight Reporting", "▤", "flight.html?active=1#enroute");
-        AddNavigation("Preview Reporting", "◻", "flight.html?demo=1#enroute");
+        AddNavigation("Close & Sign", "✓", "flight.html?active=1#close");
+        AddNavigation("Preview Reporting", "◇", "flight.html?demo=1#enroute");
         AddNavigation("My Flights", "✈", "workspace.html#flights");
         AddNavigation("SimBrief", "≋", "workspace.html#simbrief");
         AddNavigation("VATSIM", "◎", "workspace.html#vatsim");
@@ -220,34 +255,35 @@ internal sealed class DesktopForm : Form
         var footer = new Panel
         {
             Dock = DockStyle.Bottom,
-            Height = 152,
-            BackColor = Color.FromArgb(29, 29, 32),
-            Padding = new Padding(4, 12, 4, 8)
+            Height = 132,
+            BackColor = Color.FromArgb(22, 24, 31),
+            Padding = new Padding(3, 9, 3, 7)
         };
 
         var footerDivider = new Panel
         {
             Dock = DockStyle.Top,
             Height = 1,
-            BackColor = Color.FromArgb(66, 65, 72)
+            BackColor = Color.FromArgb(56, 57, 72)
         };
 
         _simStatus.AutoSize = false;
         _simStatus.TextAlign = ContentAlignment.MiddleLeft;
         _simStatus.Dock = DockStyle.Top;
-        _simStatus.Height = 51;
+        _simStatus.Height = 48;
         _simStatus.Font = new Font("Segoe UI", 9, FontStyle.Bold);
 
         var bridgeButton = new Button
         {
-            Text = "   ◉   Simulator Connection",
+            Text = "◉    Simulator Connection",
+            Padding = new Padding(12, 0, 1, 0),
             Dock = DockStyle.Top,
             Height = 45,
             TextAlign = ContentAlignment.MiddleLeft,
             FlatStyle = FlatStyle.Flat,
             BackColor = Color.FromArgb(49, 43, 63),
             ForeColor = Color.White,
-            Font = new Font("Segoe UI", 9),
+            Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
             Cursor = Cursors.Hand
         };
         bridgeButton.FlatAppearance.BorderSize = 0;

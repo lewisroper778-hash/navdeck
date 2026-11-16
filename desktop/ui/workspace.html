@@ -25,6 +25,27 @@
 @media(max-width:1250px){main{padding:26px 25px}.cards{grid-template-columns:repeat(2,minmax(0,1fr))}.two-col{grid-template-columns:1fr}.hero h1{font-size:30px}}
 @media(max-width:960px){.metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.cards{grid-template-columns:1fr}.hero-stat{display:none}.hero{padding:26px}}
 @media(max-width:720px){main{padding:20px 17px}.top{margin-bottom:19px}.topright .label{display:none}.metric-grid{grid-template-columns:1fr 1fr}.hero h1{font-size:26px}}
+
+/* Keep sidebar-adjacent content fully readable at normal Windows DPI. */
+main{width:100%;min-width:0}
+.hero,.panel,.flight,.metric,.two-col,.cards,.toolbar,.top{min-width:0}
+.top,.toolbar,.hero{flex-wrap:wrap}
+.crumb{flex-wrap:wrap;min-width:0;overflow-wrap:anywhere}
+.hero h1{font-size:clamp(23px,3.2vw,35px);overflow-wrap:anywhere}
+.hero p,.panel p,.flight-head b,.flight-footer,.metric strong,.metric small{overflow-wrap:anywhere}
+.hero-stat{min-width:130px}
+.flight-head,.flight-footer{flex-wrap:wrap}
+.flight-route{flex-wrap:wrap}
+.flight-route b{font-size:clamp(20px,2.8vw,27px);overflow-wrap:anywhere}
+.chip{white-space:normal;overflow-wrap:anywhere}
+.button{white-space:normal;overflow-wrap:anywhere;max-width:100%;min-width:0}
+.two-col{grid-template-columns:minmax(0,1.18fr) minmax(0,.82fr)}
+.setting-group input{min-width:0}
+.table-wrap{max-width:100%;overflow-x:auto;overscroll-behavior-x:contain}
+@media(max-width:1120px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}.two-col{grid-template-columns:1fr}}
+@media(max-width:850px){main{padding:22px 19px}.cards{grid-template-columns:1fr}.metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.hero-stat{display:none}}
+@media(max-width:650px){main{padding:15px 12px}.metric-grid{grid-template-columns:1fr}.search{min-width:0;width:100%}}
+
 </style>
 </head>
 <body>
