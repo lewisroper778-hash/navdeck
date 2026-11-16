@@ -9,6 +9,7 @@ internal sealed record TouchdownSnapshot(
 internal sealed class MainForm : Form
 {
     public event Action? SignInRequested;
+    public bool HasPendingGoArounds => _goAroundQueue.Count > 0 || _goAroundSending;
     public TouchdownSnapshot? LastTouchdown { get; private set; }
 
     public bool SimulatorConnected => _sim.IsOpen;
