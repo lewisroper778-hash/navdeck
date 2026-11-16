@@ -492,7 +492,27 @@ internal sealed class DesktopForm : Form
                         }
                         else if (action == "signOut")
                         {
-                            // Remove local account pairing without touching website sessions.
+                            if (_bridge?.HasPendingGoArounds == true)
+                                throw new InvalidOperationException(
+                                    "A go-around is still syncing. Wait for it to save before signing out.");
+                            var active = Config.Load();
+                            bool remoteRevoked = false;
+                            if (Config.IsValidCode(active.Code))
+                            {
+                                try
+                                {
+                                    await new NavdeckApi(active.Code)
+                                        .RevokeDesktopSessionAsync();
+                                    remoteRevoked = true;
+                                }
+                                catch (Exception ex) when (ex is HttpRequestException or
+                                    TaskCanceledException or AuthException)
+                                {
+                                    // Still clear local credentials if the cloud
+                                    // is offline. The remote session can be
+                                    // revoked from website simulator settings.
+                                }
+                            }
                             if (_bridge is { IsDisposed: false })
                                 _bridge.SignOut();
                             else
@@ -509,7 +529,7 @@ internal sealed class DesktopForm : Form
                             // Clear Clerk cookies so signing back in cannot
                             // silently restore the previous account.
                             _browser.CoreWebView2?.CookieManager.DeleteAllCookies();
-                            data = new { signed_out = true };
+                            data = new { signed_out = true, remote_revoked = remoteRevoked };
                         }
                         else if (action == "getTouchdown")
                         {
