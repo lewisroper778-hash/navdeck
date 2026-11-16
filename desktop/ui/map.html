@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>NAVDECK · Flight Operations</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" media="print" onload="this.media='all'">
+<link rel="stylesheet" href="vendor/leaflet.css">
 <style>
 :root{color-scheme:dark;--base:#19191c;--card:#252529;--raised:#303034;--border:#3a3a40;--ink:#f4f3f6;--secondary:#a2a0aa;--faint:#74737b;--accent:#8b45fa;--accent2:#b185ff;--green:#8ce4ac}
 *{box-sizing:border-box}html,body{height:100%;width:100%;margin:0;overflow:hidden}body{background:var(--base);color:var(--ink);font:13px/1.45 "Segoe UI",Inter,Arial,sans-serif}button,input,select{font:inherit}button{cursor:pointer}button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent2);outline-offset:2px}
@@ -138,7 +138,7 @@
     </div>
   </main>
 </div>
-<script async src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" onload="window.dispatchEvent(new Event('navdeck:leaflet-ready'))"></script>
+<script src="vendor/leaflet.js"></script>
 <script>
 (function(){
   'use strict';
