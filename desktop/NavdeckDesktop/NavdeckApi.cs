@@ -80,6 +80,7 @@ internal sealed class NavdeckApi
         string path = action switch
         {
             "getFlight" => "flight",
+            "getActiveFlightDetails" => "desktop/active",
             "getFlights" => "desktop/flights",
             "getLogbook" => "desktop/logbook",
             "getProfile" => "desktop/profile",
