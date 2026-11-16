@@ -57,9 +57,12 @@ internal sealed class ReportOutbox : IDisposable
         var arrival = flight["diversion"] is JsonObject d ? J.Str(d["to"]) : J.Str(flight["arr"]);
         string? block = J.Time(times?["out"]) is { } o && J.Time(times?["in"]) is { } i ? $"{(int)(i - o).TotalHours}:{(i - o).Minutes:00}" : null;
         double? burn = J.Num(fuel?["out"]) is { } a && J.Num(fuel?["in"]) is { } b ? a - b : null;
+        var airlineCode = J.Str(flight["airline"]).Trim().ToUpperInvariant();
         var item = new JsonObject
         {
             ["id"] = id,
+            ["airline"] = string.Join(" ", new[] { J.Str(flight["airlineName"]), airlineCode.Length > 0 ? $"({airlineCode})" : "" }.Where(x => x.Length > 0)),
+            ["logo"] = AirlineLogo(airlineCode),
             ["flight"] = flightNo,
             ["route"] = $"{J.Str(flight["dep"])}-{arrival}",
             ["aircraft"] = string.Join(" ", new[] { J.Str(flight["type"]), J.Str(flight["reg"]) }.Where(x => x.Length > 0)),
@@ -165,6 +168,7 @@ internal sealed class ReportOutbox : IDisposable
         var title = $"Journey log {Field(item, "flight")} {Field(item, "route")}";
         var fields = new JsonArray
         {
+            EmbedField("Airline", Field(item, "airline")),
             EmbedField("Flight", Field(item, "flight")),
             EmbedField("Route", Field(item, "route") + (J.Bool(item["diverted"], false) ? " (diverted)" : "")),
             EmbedField("Aircraft", Field(item, "aircraft")),
@@ -188,12 +192,24 @@ internal sealed class ReportOutbox : IDisposable
             }),
             ["attachments"] = new JsonArray(new JsonObject { ["id"] = 0, ["filename"] = FileName(item) }),
         };
+        var logo = LogoBytes(J.Str(item["logo"]));
+        if (logo is not null)
+        {
+            ((JsonArray)payload["attachments"]!).Add(new JsonObject { ["id"] = 1, ["filename"] = "airline-logo.png" });
+            ((JsonObject)((JsonArray)payload["embeds"]!)[0]!)["thumbnail"] = new JsonObject { ["url"] = "attachment://airline-logo.png" };
+        }
 
         using var form = new MultipartFormDataContent();
         form.Add(new StringContent(payload.ToJsonString(), System.Text.Encoding.UTF8, "application/json"), "payload_json");
         var file = new ByteArrayContent(pdf);
         file.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
         form.Add(file, "files[0]", FileName(item));
+        if (logo is not null)
+        {
+            var image = new ByteArrayContent(logo);
+            image.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+            form.Add(image, "files[1]", "airline-logo.png");
+        }
 
         try
         {
@@ -210,6 +226,27 @@ internal sealed class ReportOutbox : IDisposable
         {
             return (Outcome.RetryLater, null);     // offline
         }
+    }
+
+    // The logo of the pilot's airline profile for this airline (Settings > Airline profiles), if there is one.
+    private string? AirlineLogo(string code)
+    {
+        if (code.Length == 0 || _store.Settings["profiles"] is not JsonArray profiles) return null;
+        foreach (var p in profiles.OfType<JsonObject>())
+        {
+            var logo = J.Str(p["logo"]);
+            if (string.Equals(J.Str(p["icao"]).Trim(), code, StringComparison.OrdinalIgnoreCase) && logo.StartsWith("data:image/png;base64,") && logo.Length < 1_500_000)
+                return logo;
+        }
+        return null;
+    }
+
+    private static byte[]? LogoBytes(string dataUrl)
+    {
+        const string prefix = "data:image/png;base64,";
+        if (!dataUrl.StartsWith(prefix)) return null;
+        try { return Convert.FromBase64String(dataUrl[prefix.Length..]); }
+        catch (FormatException) { return null; }
     }
 
     private static JsonObject EmbedField(string name, string value) =>

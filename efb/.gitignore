@@ -2,3 +2,5 @@ web/vendor/
 dev/shots/
 host/bin/
 host/obj/
+tools/manuals/__pycache__/
+tools/manuals/out/

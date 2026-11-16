@@ -201,12 +201,16 @@ async function sign(page) {
     await docPage.close();
     check(await page.locator('#rail a[href="#charts"]').count() === 0, 'Charts section removed');
     await tab('docs');
+    await page.waitForSelector('.lib-group, .lib-item');
+    const groupsText = await page.locator('#view').innerText();
+    check(/Airbus A320 family[\s\S]*This flight/.test(groupsText) && groupsText.indexOf('Airbus A320 family') < groupsText.indexOf('Boeing 737'), 'A320neo flight shows the A320 family QRH and FCOM first');
+    check(/Boeing 787/.test(groupsText) && /Airbus A350/.test(groupsText), 'manuals for every family are in Documents');
     await page.click('text=Add files');
     await page.fill('.modal input[type=text]', 'QRH');
     await page.setInputFiles('.modal input[type=file]', png);
     await page.click('.modal-foot .btn.primary');
-    await page.waitForSelector('.lib-item');
-    await page.click('.lib-item');
+    await page.waitForSelector('.lib-item:has-text("sample-doc")');
+    await page.click('.lib-item:has-text("sample-doc")');
     await page.waitForSelector('.lib-page img');
     await page.click('.lib-bar button:has-text("Draw")');
     const pg = await page.locator('.lib-page').boundingBox();
@@ -254,7 +258,8 @@ async function sign(page) {
     await tab('flight');
     await shot('16-day-mode');
 
-    // the printable journey log
+    // the printable journey log, with the airline worked out from the flight and its logo from the airline profile
+    await page.evaluate(() => import('/js/core.js').then(m => m.setS(['profiles'], [{ id: 'p1', name: 'British Airways', icao: 'BAW', color: '#2563eb', logo: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==' }])));
     const report = await ctx.newPage();
     report.on('pageerror', e => errors.push('report pageerror: ' + e.message));
     const id = await page.evaluate(() => fetch('/api/state').then(r => r.json()).then(s => s.flight.id));
@@ -262,6 +267,10 @@ async function sign(page) {
     await report.waitForFunction(() => window.reportReady === true);
     const text = await report.locator('#page').innerText();
     check(/Unstable approach/.test(text), 'journey log includes the go-around reason');
+    check(/British Airways BA \/ BAW/.test(text), 'journey log names the airline from the flight');
+    check(await report.locator('.band img.airline').count() === 1, 'journey log carries the airline logo from the profile');
+    const guess = await report.evaluate(() => import('/js/airlines.js').then(m => [m.airlineOf({ flightNo: 'EZY45TK' })?.name, m.airlineOf({ callsign: 'U22041' })?.name, m.airlineOf({ flightNo: 'FR1234' })?.name, m.airlineOf({ flightNo: 'XYZ1' })]));
+    check(guess[0] === 'easyJet' && guess[1] === 'easyJet' && guess[2] === 'Ryanair' && guess[3] === null, 'airline recognised from ICAO or IATA flight numbers: ' + JSON.stringify(guess));
     check(/GSX RECEIPTS/i.test(text) && /signed and closed/.test(text), 'journey log ends with GSX receipts and carries the PIC signature');
     await report.pdf({ path: path.join(OUT, 'journey-log.pdf'), format: 'A4', printBackground: true });
     await report.screenshot({ path: path.join(OUT, '17-journey-log.png'), fullPage: true });

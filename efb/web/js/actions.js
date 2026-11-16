@@ -3,6 +3,7 @@ import { S, api, h, setF, setS, push, nowIso, fmtT, blankFlight, loadState, from
 import { flightFromOfp, planAt, ofpFromFile } from './simbrief.js';
 import { toast, modal, confirmBox, signaturePad, keypad } from './widgets.js';
 import { GO_AROUND_REASONS } from './data.js';
+import { airlineOf } from './airlines.js';
 
 export async function startFlight(flight) {
   await api('/api/flight/new', { method: 'POST', body: { flight } });
@@ -13,7 +14,7 @@ export async function startFlight(flight) {
 
 async function useOfp(ofp) {
   const flight = flightFromOfp(ofp);
-  const profile = (S.settings.profiles || []).find(p => p.icao && p.icao.toUpperCase() === flight.airline.toUpperCase());
+  const profile = (S.settings.profiles || []).find(p => p.icao && p.icao.toUpperCase() === (airlineOf(flight)?.icao || ''));
   if (profile) flight.profile = profile.id;
   await startFlight(flight);
   toast(`${flight.flightNo || flight.callsign}  ${flight.dep} to ${flight.arr}, ${flight.navlog.length} fixes`, 'good', 'SimBrief plan loaded');
@@ -152,6 +153,8 @@ export async function signAndClose() {
     extra: h('p', { class: 'muted' }, 'By signing you confirm the journey log, fuel figures and reports for this flight are complete.'),
   });
   if (!sig) return;
+  const airline = airlineOf(f);   // kept with the flight for the logbook and the Discord post
+  if (airline && (f.airline !== airline.icao || f.airlineName !== airline.name)) { await setF(['airline'], airline.icao); await setF(['airlineName'], airline.name); }
   await setF(['closed'], { time: nowIso(), name: sig.name, signature: sig.image });
   if (!S.settings.picName) setS(['picName'], sig.name);
   let closing = null;

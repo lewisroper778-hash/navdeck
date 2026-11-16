@@ -2,6 +2,7 @@
 import { S, h, setS, uid } from '../core.js';
 import { modal, confirmBox, toast } from '../widgets.js';
 import { activeTabs } from '../app.js';
+import { allAirlines, airlineByIcao, airlineOf } from '../airlines.js';
 
 let topic = 'general', query = '';
 const PROFILE_COLORS = ['#a78bfa', '#7c3aed', '#2563eb', '#00c8eb', '#e11d48', '#f59e0b', '#16a34a', '#0f766e', '#ea580c', '#475569'];
@@ -15,10 +16,12 @@ const text = (path, value, placeholder = '', type = 'text') => {
 };
 const row = (title, hint, control) => ({ title, hint, control });
 
-async function editProfile(existing) {
-  const p = existing ? { ...existing } : { id: uid(), name: '', icao: '', color: PROFILE_COLORS[0], logo: '' };
+async function editProfile(existing, preset) {
+  const p = existing ? { ...existing } : { id: uid(), name: preset?.name || '', icao: preset?.icao || '', color: PROFILE_COLORS[0], logo: '' };
   const name = h('input', { class: 'input', type: 'text', value: p.name, placeholder: 'Airline name' });
-  const icao = h('input', { class: 'input', type: 'text', value: p.icao, placeholder: 'ICAO code, for example BAW', autocapitalize: 'characters', maxlength: 4 });
+  const icao = h('input', { class: 'input', type: 'text', value: p.icao, placeholder: 'ICAO code, for example BAW', autocapitalize: 'characters', maxlength: 4, list: 'airline-codes' });
+  icao.addEventListener('input', () => { const a = airlineByIcao(icao.value); if (a && !name.value.trim()) name.value = a.name; });
+  const codes = h('datalist', { id: 'airline-codes' }, allAirlines().map(a => h('option', { value: a.icao }, `${a.name}${a.iata ? ' (' + a.iata + ')' : ''}`)));
   const swatches = h('div', { class: 'swatches' });
   const drawSwatches = () => swatches.replaceChildren(...PROFILE_COLORS.map(c => h('button', { class: p.color === c ? 'on' : '', style: { background: c }, 'aria-label': c, onclick: () => { p.color = c; drawSwatches(); } })));
   drawSwatches();
@@ -40,7 +43,7 @@ async function editProfile(existing) {
   });
   const ok = await modal({
     title: existing ? 'Edit airline profile' : 'New airline profile',
-    body: h('div', { class: 'stack' }, h('label', { class: 'field' }, h('span', null, 'Name'), name), h('label', { class: 'field' }, h('span', null, 'ICAO code (profile is chosen automatically for flights of this airline)'), icao),
+    body: h('div', { class: 'stack' }, h('label', { class: 'field' }, h('span', null, 'Name'), name), h('label', { class: 'field' }, h('span', null, 'ICAO code (chosen automatically when the flight number or callsign starts with this airline\'s ICAO or IATA code)'), icao, codes),
       h('div', { class: 'field' }, h('span', null, 'Colour'), swatches), h('label', { class: 'field' }, h('span', null, 'Logo'), file), preview),
     buttons: [{ label: 'Cancel', value: false }, { label: 'Save profile', value: true, primary: true }],
   });
@@ -55,6 +58,7 @@ async function editProfile(existing) {
 
 function profilesControl() {
   const list = S.settings.profiles || [];
+  const current = airlineOf(S.flight);
   return h('div', { class: 'stack', style: { minWidth: '280px' } },
     list.map(p => h('div', { class: 'row' },
       h('span', { style: { width: '18px', height: '18px', borderRadius: '5px', background: p.color, flex: 'none' } }),
@@ -62,6 +66,8 @@ function profilesControl() {
       h('button', { class: 'btn small' + (S.settings.activeProfile === p.id ? ' primary' : ''), onclick: () => setS(['activeProfile'], S.settings.activeProfile === p.id ? '' : p.id) }, S.settings.activeProfile === p.id ? 'Default' : 'Use'),
       h('button', { class: 'btn small', onclick: () => editProfile(p) }, 'Edit'),
       h('button', { class: 'btn small danger', 'aria-label': 'Delete profile', onclick: async () => { if (await confirmBox('Delete profile?', p.name, 'Delete', true)) setS(['profiles'], list.filter(x => x.id !== p.id)); } }, '✕'))),
+    current && !list.some(p => p.icao && p.icao.toUpperCase() === current.icao) && h('div', { class: 'row' }, h('span', { class: 'muted', style: { flex: '1' } }, `This flight: ${current.name || current.icao} (${current.icao}) has no logo yet.`),
+      h('button', { class: 'btn small primary', onclick: () => editProfile(null, current) }, 'Add logo')),
     h('div', null, h('button', { class: 'btn small', onclick: () => editProfile(null) }, 'Add airline profile')));
 }
 
@@ -143,7 +149,7 @@ function topics() {
       row('Fuel price per kg', 'Used for the automatic fuel receipt.', text(['fuelPrice'], st.fuelPrice, '0.95', 'number')),
     ] },
     { id: 'profiles', label: 'Airline profiles', rows: [
-      row('Airline profiles', 'Colours and logo for each airline. The profile is chosen by the ICAO code of the flight.', profilesControl()),
+      row('Airline profiles', 'Logo and colour for each airline. Add a logo once: every journey log, the top bar and the Discord post for that airline then use it automatically. The airline is recognised from the SimBrief plan, the flight number or the callsign.', profilesControl()),
     ] },
     { id: 'tabs', label: 'Tabs', rows: [
       row('Tabs and sections', 'Switch tabs off or move them.', tabsControl()),
