@@ -4,6 +4,7 @@
 #define MyAppExeName "NavdeckDesktop.exe"
 
 [Setup]
+SourceDir=..\..
 AppId=NAVDECK.Desktop
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
