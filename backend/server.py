@@ -224,7 +224,7 @@ class ImportRequest(BaseModel):
 
 
 class GoAroundRecord(BaseModel):
-    event_id: str = Field(pattern=r"^[0-9a-fA-F-]{36}$")
+    event_id: uuid.UUID
     detected_at: datetime
     radio_alt_ft: Optional[float] = Field(default=None, ge=0, le=2500)
     climb_fpm: Optional[float] = Field(default=None, ge=0, le=8000)
@@ -232,7 +232,7 @@ class GoAroundRecord(BaseModel):
 
 
 class GoAroundReview(BaseModel):
-    event_id: str = Field(pattern=r"^[0-9a-fA-F-]{36}$")
+    event_id: uuid.UUID
     review: Literal["confirmed", "false_positive"]
     reason: str = Field(default="", max_length=1000)
 
@@ -886,7 +886,7 @@ async def _desktop_flight_ops(user_id: str, flight_id: str,
     if action == "recordGoAround":
         data = GoAroundRecord(**payload)
         doc = await _editable_flight(flight_id, user_id)
-        event_id = str(uuid.UUID(data.event_id))
+        event_id = str(data.event_id)
         if any(item.get("id") == event_id
                for item in doc.get("go_arounds") or []):
             return Flight(**doc)
@@ -911,7 +911,7 @@ async def _desktop_flight_ops(user_id: str, flight_id: str,
     if action == "reviewGoAround":
         data = GoAroundReview(**payload)
         doc = await _editable_flight(flight_id, user_id)
-        event_id = str(uuid.UUID(data.event_id))
+        event_id = str(data.event_id)
         if not any(item.get("id") == event_id
                    for item in doc.get("go_arounds") or []):
             raise HTTPException(status_code=404,
