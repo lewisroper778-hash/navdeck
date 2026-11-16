@@ -146,7 +146,7 @@ http.createServer(async (req, res) => {
       state.archive[f.id] = JSON.parse(JSON.stringify(f));
       state.history = [summary(f), ...state.history.filter(h => h.id !== f.id)];
       send({ t: 'history', d: state.history });
-      return json(res, 200, { ok: true });
+      return json(res, 200, { ok: true, sending: state.settings.sendReports !== false });
     }
     if (p.startsWith('/api/history/')) {
       const id = p.slice('/api/history/'.length);

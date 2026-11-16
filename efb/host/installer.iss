@@ -1,5 +1,5 @@
 #define MyAppName "NAVDECK EFB"
-#define MyAppVersion "1.0.1"
+#define MyAppVersion "1.1.0"
 #define MyAppPublisher "NAVDECK"
 #define MyAppExeName "NavdeckEFB.exe"
 

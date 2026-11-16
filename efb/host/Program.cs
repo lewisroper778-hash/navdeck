@@ -39,8 +39,13 @@ internal static class Program
 
         using var poller = new SimPoller(engine);
         poller.Start();
+        using var outbox = new ReportOutbox(store);
+        server.Outbox = outbox;
         var hidden = args.Any(a => a.Equals("--minimized", StringComparison.OrdinalIgnoreCase));
-        Application.Run(new MainForm(store, server, hidden));
+        var form = new MainForm(store, server, hidden);
+        outbox.PdfRenderer = form.RenderPdfAsync;
+        outbox.Start();
+        Application.Run(form);
 
         poller.Dispose();
         server.DisposeAsync().AsTask().Wait(3000);

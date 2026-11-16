@@ -67,7 +67,19 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore efb/host/NavdeckEFB.csproj -r win-x64
 
+      - name: Check the Discord webhook secret (never printed)
+        shell: pwsh
+        env:
+          EFB_DISCORD_WEBHOOK: ${{ secrets.EFB_DISCORD_WEBHOOK }}
+        run: |
+          $hook = "$env:EFB_DISCORD_WEBHOOK".Trim()
+          if (-not $hook) { Write-Host '::warning::EFB_DISCORD_WEBHOOK is not set: this build will not post journey logs to Discord.' }
+          elseif ($hook -notmatch '^https://(ptb\.|canary\.)?(discord|discordapp)\.com/api/webhooks/\d+/[\w-]+$') { Write-Host '::error::EFB_DISCORD_WEBHOOK does not look like a Discord webhook link.'; exit 1 }
+          else { Write-Host 'Discord webhook link found: journey logs will be posted to Discord.' }
+
       - name: Build Windows application
+        env:
+          EFB_DISCORD_WEBHOOK: ${{ secrets.EFB_DISCORD_WEBHOOK }}
         run: >
           dotnet publish efb/host/NavdeckEFB.csproj
           --configuration Release

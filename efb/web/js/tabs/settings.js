@@ -108,6 +108,13 @@ function topics() {
       row('Company name', 'Shown on the journey log.', text(['company'], st.company, 'Airline or virtual airline')),
       row('Company e-mail', 'Used by "Send to company".', text(['companyEmail'], st.companyEmail, 'ops@example.com', 'email')),
     ] },
+    { id: 'reports', label: 'Journey logs', rows: [
+      row('Post journey logs to the NAVDECK Discord', S.info.reportsAvailable === false
+        ? 'Not available in this version of the app.'
+        : 'When you sign and close a flight, its journey log PDF and a short summary are posted automatically to the NAVDECK Discord server. The PDF includes the flight, times, fuel, crew names and signatures.',
+        toggle(['sendReports'], st.sendReports !== false, 'Post journey logs to the NAVDECK Discord')),
+      row('Waiting to be sent', 'Logs are kept and retried automatically when the PC is offline.', h('span', { class: 'mono' }, String(S.info.outbox ?? 0))),
+    ] },
     { id: 'units', label: 'Units', rows: [
       row('Weight and fuel', 'Kilograms or pounds everywhere, including the PDF.', seg(['units', 'weight'], [['kg', 'KG'], ['lb', 'LB']], u.weight)),
       row('Fuel volume', 'Used for uplift.', seg(['units', 'volume'], [['l', 'Litres'], ['usg', 'US gallons']], u.volume)),
