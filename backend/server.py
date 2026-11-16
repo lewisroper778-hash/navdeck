@@ -837,7 +837,40 @@ async def _desktop_simbrief_import(user_id: str):
     return await import_from_simbrief(ImportRequest(), {"user_id": user_id})
 
 
-app.include_router(build_bridge_router(db, _desktop_simbrief_import))
+async def _desktop_flight_ops(user_id: str, flight_id: str,
+                              action: str, payload: dict):
+    # Use the original NAVDECK workflows, validation and permission checks;
+    # only explicitly listed operations may be called by a paired desktop app.
+    user = {"user_id": user_id}
+    if action == "toggleWaypoint":
+        return await toggle_waypoint(flight_id, WaypointToggle(**payload), user)
+    if action == "skipWaypoint":
+        return await skip_waypoint(flight_id, WaypointSkip(**payload), user)
+    if action == "directTo":
+        return await direct_to(flight_id, DirectTo(**payload), user)
+    if action == "undoDirect":
+        return await undo_direct(flight_id, DirectUndo(**payload), user)
+    if action == "saveWaypoint":
+        return await log_waypoint(flight_id, WaypointLog(**payload), user)
+    if action == "saveTimes":
+        return await update_times(flight_id, TimesUpdate(**payload), user)
+    if action == "saveActuals":
+        return await update_actuals(flight_id, ActualsUpdate(**payload), user)
+    if action == "saveArrival":
+        return await update_arrival(flight_id, ArrivalUpdate(**payload), user)
+    if action == "signReport":
+        return await sign_report(flight_id, SignRequest(**payload), user)
+    if action == "closeFlight":
+        return await close_flight(flight_id, user)
+    if action == "reopenFlight":
+        return await reopen_flight(flight_id, user)
+    if action == "resetFlight":
+        return await reset_tracker(flight_id, user)
+    raise HTTPException(status_code=400, detail="Unsupported desktop operation")
+
+
+app.include_router(build_bridge_router(
+    db, _desktop_simbrief_import, _desktop_flight_ops))
 
 
 @app.get("/health")
