@@ -1,0 +1,11 @@
+**
+!frontend/
+!frontend/**
+!deploy/
+!deploy/oracle/
+!deploy/oracle/nginx.conf
+frontend/node_modules/
+frontend/build/
+frontend/.env
+frontend/.env.*
+frontend/**/__pycache__/

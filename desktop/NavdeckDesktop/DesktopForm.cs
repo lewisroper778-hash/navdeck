@@ -25,7 +25,7 @@ internal sealed class DesktopForm : Form
                 return false;
             // The backend has already validated the Clerk JWT and issued
             // this revocable desktop credential. No manual code is required.
-            var code = "https://navdeck-backend.onrender.com#" + login.DesktopToken;
+            var code = CloudEndpoint.Origin + "#" + login.DesktopToken;
             if (_bridge is { IsDisposed: false })
                 _bridge.ApplyClerkConnection(code);
             else

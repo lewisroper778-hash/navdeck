@@ -10,7 +10,7 @@ namespace NavdeckLink;
 // never sees passwords or Clerk JWTs; no connection code is copied by users.
 internal sealed class ClerkLoginDialog : Form
 {
-    private const string FrontendOrigin = "https://navdeck-frontend.onrender.com";
+    private const string FrontendOrigin = CloudEndpoint.Origin;
     private const string HandoffPath = "/desktop/connect";
     private readonly WebView2 _web = new() { Dock = DockStyle.Fill };
     private readonly Label _status = new()

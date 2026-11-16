@@ -1056,7 +1056,12 @@ cors_origins = {
     for origin in os.environ.get("CORS_ORIGINS", "").split(",")
     if origin.strip()
 }
-cors_origins.add("https://navdeck-frontend.onrender.com")
+cors_origins.update({
+    "https://navdeck-frontend.onrender.com",
+    "https://test.navdeck.online",
+    "https://navdeck.online",
+    "https://www.navdeck.online",
+})
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
