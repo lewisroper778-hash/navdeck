@@ -33,6 +33,7 @@
     <Content Include="../ui/workspace.html" Link="desktop-map/workspace.html" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
     <Content Include="../ui/flight.html" Link="desktop-map/flight.html" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
     <Content Include="../../frontend/public/favicon.png" Link="desktop-map/navdeck-website-logo.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
+    <Content Include="../ui/vendor/**/*" Link="desktop-map/vendor/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
   </ItemGroup>
 
 </Project>
