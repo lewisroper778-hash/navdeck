@@ -240,7 +240,6 @@ internal sealed class DesktopForm : Form
         // Primary operation: open the live in-flight report in one click.
         // Resolves the currently paired active flight before loading its details.
         AddNavigation("In-Flight Reporting", "▤", "flight.html?active=1#enroute");
-        AddNavigation("Close & Sign", "✓", "flight.html?active=1#close");
         AddNavigation("Preview Reporting", "◇", "flight.html?demo=1#enroute");
         AddNavigation("My Flights", "✈", "workspace.html#flights");
         AddNavigation("SimBrief", "≋", "workspace.html#simbrief");
