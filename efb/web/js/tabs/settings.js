@@ -124,6 +124,11 @@ function topics() {
       row('Company messages', 'OCC sends messages as the flight progresses.', toggle(['autoMessages'], st.autoMessages, 'Company messages')),
       row('Own delay codes', 'Offered next to the IATA delay codes.', delaysControl()),
     ] },
+    { id: 'vatsim', label: 'VATSIM', rows: [
+      row('Your VATSIM CID', 'Highlights your own aircraft in the Live section.', text(['vatsimCid'], st.vatsimCid, 'For example 1234567')),
+      row('Friends', 'Tap the star next to a pilot in the Live section to add a friend.', h('span', { class: 'muted' }, `${(st.vatsimFriends || []).length} friend${(st.vatsimFriends || []).length === 1 ? '' : 's'}`)),
+      row('Clear friends', '', h('button', { class: 'btn small danger', disabled: !(st.vatsimFriends || []).length, onclick: () => setS(['vatsimFriends'], []) }, 'Clear')),
+    ] },
     { id: 'gsx', label: 'GSX', rows: [
       row('GSX remote address', 'IP address of the PC running GSX. 127.0.0.1 is this PC.', text(['gsx', 'host'], st.gsx.host, '127.0.0.1')),
       row('GSX remote port', '', text(['gsx', 'port'], st.gsx.port, '8380', 'number')),

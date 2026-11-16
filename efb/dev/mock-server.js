@@ -55,6 +55,23 @@ function sampleOfp() {
   };
 }
 
+// ---------------------------------------------------------------- sample VATSIM traffic
+function sampleVatsim() {
+  const apts = [['EGLL', 51.47, -0.46], ['EHAM', 52.31, 4.76], ['LFPG', 49.01, 2.55], ['EDDF', 50.03, 8.56], ['LEMD', 40.47, -3.56], ['EIDW', 53.42, -6.27], ['EGKK', 51.15, -0.19], ['LIRF', 41.8, 12.24], ['KJFK', 40.64, -73.78], ['EGCC', 53.35, -2.27]];
+  const types = ['A20N', 'B738', 'A321', 'B77W', 'A359', 'E190', 'B789', 'A320', 'C172'];
+  const pilots = [];
+  let seed = 7;
+  const r = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < 60; i++) {
+    const a = apts[Math.floor(r() * apts.length)], b = apts[Math.floor(r() * apts.length)];
+    const k = r();
+    pilots.push({ cid: 1000000 + i * 37, callsign: ['BAW', 'KLM', 'AFR', 'DLH', 'EZY', 'RYR', 'IBE', 'EIN'][i % 8] + (100 + i * 7), name: 'Pilot ' + (i + 1),
+      lat: a[1] + (b[1] - a[1]) * k, lon: a[2] + (b[2] - a[2]) * k, alt: Math.round(r() * 38000), gs: Math.round(120 + r() * 360), hdg: Math.round(r() * 359),
+      dep: a[0], arr: b[0] === a[0] ? 'EGLL' : b[0], aircraft: types[i % types.length] });
+  }
+  return { updated: new Date().toISOString(), fetched: new Date().toISOString(), pilots };
+}
+
 // ---------------------------------------------------------------- scripted flight (what the Windows host does from FSUIPC data)
 function simStep(action) {
   const f = state.flight, iso = new Date().toISOString();
@@ -126,6 +143,7 @@ http.createServer(async (req, res) => {
       return state.archive[id] ? json(res, 200, state.archive[id]) : json(res, 404, { error: 'Flight not found' });
     }
     if (p === '/api/simbrief') return json(res, 200, sampleOfp());
+    if (p === '/api/vatsim') return json(res, 200, sampleVatsim());
     if (p === '/api/gsx/probe') return json(res, 200, { ok: false });
     if (p === '/api/report.pdf') return json(res, 501, { error: 'PDF export needs the Windows app' });
     if (p === '/api/lib/list') return json(res, 200, listFiles(path.join(LIB, url.searchParams.get('kind'))));

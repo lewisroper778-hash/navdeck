@@ -29,6 +29,17 @@ async function sign(page) {
   try {
     const ctx = await browser.newContext({ viewport: { width: 1180, height: 820 }, deviceScaleFactor: 1 });   // iPad landscape
     const page = await ctx.newPage();
+    const mapCalls = { markers: 0 };
+    await page.exposeFunction('__countMarker', () => { mapCalls.markers++; });
+    await ctx.route('**/vendor/leaflet/leaflet.js', route => route.fulfill({ contentType: 'text/javascript', body: `
+      (function () {
+        const chain = () => new Proxy(function () {}, { get: (t, k) => k === 'getZoom' ? () => 4 : () => chain(), apply: () => chain() });
+        window.L = {
+          map: el => { el.style.background = '#2a2a33'; el.innerHTML = '<div style="color:#9a9aa8;padding:20px">Map stand-in (Leaflet is bundled by the Windows build)</div>'; return chain(); },
+          tileLayer: () => chain(), canvas: () => ({}), layerGroup: () => chain(), divIcon: () => ({}),
+          marker: () => { window.__countMarker(); return chain(); }, circleMarker: () => { window.__countMarker(); return chain(); },
+        };
+      })();` }));
     page.on('pageerror', e => errors.push('pageerror: ' + e.message));
     page.on('console', m => { if (m.type() === 'error' && !/pdf\.min\.js|Failed to load resource/.test(m.text())) errors.push('console: ' + m.text()); });
     const shot = name => page.screenshot({ path: path.join(OUT, name + '.png') });
@@ -169,19 +180,19 @@ async function sign(page) {
     await page.waitForTimeout(1500);
     await shot('12-report');
 
-    // library: upload a chart image and draw on it
-    const png = path.join(OUT, 'sample-chart.png');
-    const chartPage = await ctx.newPage();
-    await chartPage.setContent('<div style="width:900px;height:1200px;background:#fff;font:40px sans-serif;padding:40px">EHAM ILS 18R<br><svg width="800" height="900"><circle cx="400" cy="400" r="300" fill="none" stroke="#000" stroke-width="3"/><line x1="100" y1="800" x2="700" y2="100" stroke="#000" stroke-width="3"/></svg></div>');
-    await chartPage.screenshot({ path: png });
-    await chartPage.close();
-    await tab('charts');
+    // documents: upload a page image, draw on it and use night mode
+    const png = path.join(OUT, 'sample-doc.png');
+    const docPage = await ctx.newPage();
+    await docPage.setContent('<div style="width:900px;height:1200px;background:#fff;font:40px sans-serif;padding:40px">QRH<br>ENGINE FIRE<br><br>1. Thrust lever ... IDLE<br>2. Fire switch ... PULL</div>');
+    await docPage.screenshot({ path: png });
+    await docPage.close();
+    check(await page.locator('#rail a[href="#charts"]').count() === 0, 'Charts section removed');
+    await tab('docs');
     await page.click('text=Add files');
-    await page.fill('.modal input[type=text]', 'EHAM');
+    await page.fill('.modal input[type=text]', 'QRH');
     await page.setInputFiles('.modal input[type=file]', png);
     await page.click('.modal-foot .btn.primary');
     await page.waitForSelector('.lib-item');
-    check(await page.locator('.lib-group:has-text("This flight")').count() >= 1, 'charts of the flight airports are marked and sorted first');
     await page.click('.lib-item');
     await page.waitForSelector('.lib-page img');
     await page.click('.lib-bar button:has-text("Draw")');
@@ -190,10 +201,32 @@ async function sign(page) {
     await page.mouse.move(pg.x + 300, pg.y + 260, { steps: 8 }); await page.mouse.up();
     await page.waitForTimeout(300);
     const ink = await page.evaluate(() => fetch('/api/state').then(r => r.json()).then(s => Object.keys(s.library.ink || {}).length));
-    check(ink === 1, 'drawing on a chart is saved to the shared library');
+    check(ink === 1, 'drawing on a document is saved to the shared library');
     await page.click('.lib-bar button:has-text("Night")');
     await page.waitForTimeout(300);
-    await shot('13-charts');
+    await shot('13-docs');
+
+    // live VATSIM traffic
+    await tab('live');
+    await page.waitForSelector('.live-list .tbl');
+    check(await page.locator('.live-list tbody tr').count() === 60, 'VATSIM pilots listed');
+    check(mapCalls.markers > 0, 'aircraft drawn on the map');
+    await page.click('.live-list tbody tr:first-child button[aria-label="Add friend"]');
+    await page.waitForTimeout(300);
+    await page.click('.live-top .seg button:has-text("Friends")');
+    await page.waitForTimeout(300);
+    check(await page.locator('.live-list tbody tr').count() === 1, 'friend added and filtered');
+    await page.click('.live-top .seg button:has-text("My airports")');
+    await page.waitForTimeout(300);
+    const airportRows = await page.locator('.live-list tbody tr').count();
+    check(airportRows > 0 && airportRows < 60, `traffic to or from the flight's airports (${airportRows})`);
+    await page.click('.live-top .seg button:has-text("Everyone")');
+    await page.fill('.live-top input[type=search]', 'KLM');
+    await page.waitForTimeout(500);
+    check(await page.locator('.live-list tbody tr').count() === 8, 'search by callsign');
+    await page.fill('.live-top input[type=search]', '');
+    await page.waitForTimeout(400);
+    await shot('19-live');
 
     await tab('settings');
     await page.click('.settings nav button:has-text("Units")');

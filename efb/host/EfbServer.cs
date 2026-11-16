@@ -20,6 +20,9 @@ internal sealed class EfbServer : IAsyncDisposable
     private readonly Store _store;
     private readonly FlightEngine _engine;
     private WebApplication? _app;
+    private readonly SemaphoreSlim _vatsimLock = new(1, 1);
+    private string? _vatsimJson;
+    private DateTime _vatsimAt = DateTime.MinValue;
 
     public int Port { get; private set; }
     public Func<string, Task<byte[]>>? PdfRenderer { get; set; }
@@ -217,6 +220,18 @@ internal sealed class EfbServer : IAsyncDisposable
             else await Text(ctx, text);
         });
 
+        app.MapGet("/api/vatsim", async ctx =>
+        {
+            try
+            {
+                await Text(ctx, await VatsimAsync(ctx.RequestAborted));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException || !ctx.RequestAborted.IsCancellationRequested)
+            {
+                await Json(ctx, new JsonObject { ["error"] = "VATSIM is not reachable right now." }, 502);
+            }
+        });
+
         app.MapGet("/api/gsx/probe", async ctx =>
         {
             var host = ctx.Request.Query["host"].ToString();
@@ -300,8 +315,68 @@ internal sealed class EfbServer : IAsyncDisposable
         return app;
     }
 
+    // The VATSIM network feed, trimmed to what the Live section shows. Fetched at most every 15 seconds.
+    private async Task<string> VatsimAsync(CancellationToken token)
+    {
+        if (_vatsimJson is { } fresh && DateTime.UtcNow - _vatsimAt < TimeSpan.FromSeconds(15)) return fresh;
+        await _vatsimLock.WaitAsync(token);
+        try
+        {
+            if (_vatsimJson is { } again && DateTime.UtcNow - _vatsimAt < TimeSpan.FromSeconds(15)) return again;
+            try
+            {
+                using var response = await Http.GetAsync("https://data.vatsim.net/v3/vatsim-data.json", token);
+                response.EnsureSuccessStatusCode();
+                await using var stream = await response.Content.ReadAsStreamAsync(token);
+                using var doc = await System.Text.Json.JsonDocument.ParseAsync(stream, cancellationToken: token);
+                var pilots = new JsonArray();
+                if (doc.RootElement.TryGetProperty("pilots", out var list))
+                {
+                    foreach (var p in list.EnumerateArray())
+                    {
+                        string S(System.Text.Json.JsonElement e, string name) =>
+                            e.ValueKind == System.Text.Json.JsonValueKind.Object && e.TryGetProperty(name, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String ? v.GetString() ?? "" : "";
+                        double N(string name) =>
+                            p.TryGetProperty(name, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.Number ? v.GetDouble() : 0;
+                        var plan = p.TryGetProperty("flight_plan", out var fp) ? fp : default;
+                        pilots.Add(new JsonObject
+                        {
+                            ["cid"] = N("cid"),
+                            ["callsign"] = S(p, "callsign"),
+                            ["name"] = S(p, "name"),
+                            ["lat"] = N("latitude"),
+                            ["lon"] = N("longitude"),
+                            ["alt"] = N("altitude"),
+                            ["gs"] = N("groundspeed"),
+                            ["hdg"] = N("heading"),
+                            ["dep"] = S(plan, "departure"),
+                            ["arr"] = S(plan, "arrival"),
+                            ["aircraft"] = S(plan, "aircraft_short"),
+                        });
+                    }
+                }
+                var updated = doc.RootElement.TryGetProperty("general", out var general) ? S2(general, "update_timestamp") : "";
+                _vatsimJson = new JsonObject { ["updated"] = updated, ["fetched"] = J.Iso(DateTime.UtcNow), ["pilots"] = pilots }.ToJsonString();
+                _vatsimAt = DateTime.UtcNow;
+            }
+            catch (Exception) when (_vatsimJson is not null && !token.IsCancellationRequested)
+            {
+                // Keep showing the last good data; try again on the next request.
+                _vatsimAt = DateTime.UtcNow - TimeSpan.FromSeconds(10);
+            }
+            return _vatsimJson ?? throw new InvalidOperationException("VATSIM data unavailable");
+        }
+        finally
+        {
+            _vatsimLock.Release();
+        }
+    }
+
+    private static string S2(System.Text.Json.JsonElement e, string name) =>
+        e.TryGetProperty(name, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String ? v.GetString() ?? "" : "";
+
     private string? LibraryRoot(string kind) =>
-        kind is "charts" or "docs" ? Path.Combine(_store.LibraryDir, kind) : null;
+        kind == "docs" ? Path.Combine(_store.LibraryDir, kind) : null;
 
     // Keeps uploads and deletes inside the library folder.
     private string? LibraryPath(string kind, string relative)

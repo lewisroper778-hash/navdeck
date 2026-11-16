@@ -67,6 +67,7 @@ export const DEFAULT_SETTINGS = {
   theme: 'night', units: { weight: 'kg', volume: 'l', alt: 'ft', press: 'hpa' }, clock: 'auto',
   simbriefUser: '', picName: '', fuelCheckOn: true, fuelCheckMin: 30, hideTocTod: false, autoMessages: true,
   tabs: null, profiles: [], activeProfile: '', gsx: { host: '127.0.0.1', port: 8380, path: '/' },
+  vatsimCid: '', vatsimFriends: [],
   currency: 'EUR', fuelPrice: 0.95, fuelDensity: 0.8, customDelays: [], company: '', companyEmail: '',
 };
 function normalize() {

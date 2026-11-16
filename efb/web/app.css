@@ -198,6 +198,21 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
 .outline button { display: block; width: 100%; text-align: left; background: none; border: 0; padding: 8px; border-bottom: 1px solid var(--line); cursor: pointer; }
 @media (max-width: 760px) { .lib-side { width: 220px; } }
 
+/* ---------- Live (VATSIM) */
+.live { display: flex; flex-direction: column; height: 100%; }
+.live-top { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; }
+.live-top h2 { font-size: 20px; }
+.live-top .spacer { flex: 1; }
+.live-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 440px; }
+.live-map { position: relative; min-height: 300px; background: var(--card2); border-right: 1px solid var(--line); }
+.live-list { overflow: auto; background: var(--card); }
+.live-list tr { cursor: pointer; }
+.plane-icon { background: none; border: 0; }
+.live-pop { font: 13px/1.45 var(--font); color: #1c1c22; min-width: 160px; }
+.leaflet-container { background: var(--card2); font: 12px var(--font); }
+:root[data-theme="night"] .leaflet-tile-pane { filter: brightness(.62) saturate(.35) contrast(1.1); }
+@media (max-width: 900px) { .live-body { grid-template-columns: 1fr; grid-template-rows: 55% 45%; } .live-map { border-right: 0; border-bottom: 1px solid var(--line); } }
+
 /* ---------- GSX */
 .gsx-frame { width: 100%; height: 100%; border: 0; background: #fff; border-radius: 10px; }
 .gsx-shell { height: min(62dvh, 640px); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--bg); display: grid; }

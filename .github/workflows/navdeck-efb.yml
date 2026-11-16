@@ -46,6 +46,19 @@ jobs:
           Copy-Item pdfjs-tmp/package/legacy/build/pdf.worker.min.js efb/web/vendor/pdf.worker.min.js
           Copy-Item pdfjs-tmp/package/LICENSE efb/web/vendor/pdfjs-LICENSE.txt
 
+      - name: Bundle the map (Leaflet) for the Live section
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path efb/web/vendor/leaflet, leaflet-tmp | Out-Null
+          Push-Location leaflet-tmp
+          npm pack leaflet@1.9.4 --silent
+          tar -xzf (Get-ChildItem *.tgz | Select-Object -First 1).Name
+          Pop-Location
+          Copy-Item leaflet-tmp/package/dist/leaflet.js, leaflet-tmp/package/dist/leaflet.css efb/web/vendor/leaflet/
+          Copy-Item leaflet-tmp/package/dist/images efb/web/vendor/leaflet/images -Recurse
+          Copy-Item leaflet-tmp/package/LICENSE efb/web/vendor/leaflet/LICENSE.txt
+          if (!(Test-Path efb/web/vendor/leaflet/leaflet.js)) { throw 'Leaflet was not bundled' }
+
       - name: Install .NET SDK
         uses: actions/setup-dotnet@v4
         with:

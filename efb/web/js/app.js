@@ -9,11 +9,12 @@ import navlog from './tabs/navlog.js';
 import times from './tabs/times.js';
 import landing from './tabs/landing.js';
 import gsx from './tabs/gsx.js';
-import { charts, docs } from './tabs/library.js';
+import { docs } from './tabs/library.js';
+import live from './tabs/live.js';
 import report from './tabs/report.js';
 import settings from './tabs/settings.js';
 
-const TABS = { flight, occ, loads, navlog, times, landing, gsx, charts, docs, report, settings };
+const TABS = { flight, occ, loads, navlog, times, landing, gsx, live, docs, report, settings };
 const view = document.getElementById('view');
 const rail = document.getElementById('rail');
 const topbar = document.getElementById('topbar');

@@ -113,7 +113,7 @@ export const ALL_TABS = [
   { id: 'times', label: 'Times', icon: 'M12 3a9 9 0 100 18 9 9 0 000-18zM12 7v5l3 3' },
   { id: 'landing', label: 'Landing', icon: 'M3 19h18M4 14l6 1 9-4-2-3-8 3-3-3-2 1 2 4z' },
   { id: 'gsx', label: 'GSX', icon: 'M3 16h13V8H3zM16 11h3l2 3v2h-5M7 19a2 2 0 100-4 2 2 0 000 4zM17 19a2 2 0 100-4 2 2 0 000 4z' },
-  { id: 'charts', label: 'Charts', icon: 'M4 5l5-2 6 2 5-2v16l-5 2-6-2-5 2zM9 3v16M15 5v16' },
+  { id: 'live', label: 'Live', icon: 'M12 12m-2 0a2 2 0 104 0 2 2 0 10-4 0M7.8 7.8a6 6 0 000 8.4M16.2 7.8a6 6 0 010 8.4M4.9 4.9a10 10 0 000 14.2M19.1 4.9a10 10 0 010 14.2' },
   { id: 'docs', label: 'Documents', icon: 'M6 3h9l4 4v14H6zM15 3v4h4' },
   { id: 'report', label: 'Report', icon: 'M6 3h12v18H6zM9 8h6M9 12h6M9 16h3' },
   { id: 'settings', label: 'Settings', icon: 'M12 9a3 3 0 100 6 3 3 0 000-6zM4 12h2M18 12h2M12 4v2M12 18v2M6.3 6.3l1.4 1.4M16.3 16.3l1.4 1.4M6.3 17.7l1.4-1.4M16.3 7.7l1.4-1.4' },

@@ -27,7 +27,6 @@ internal sealed class Store : IDisposable
         _flightsDir = Path.Combine(_dir, "flights");
         LibraryDir = Path.Combine(_dir, "library");
         Directory.CreateDirectory(_flightsDir);
-        Directory.CreateDirectory(Path.Combine(LibraryDir, "charts"));
         Directory.CreateDirectory(Path.Combine(LibraryDir, "docs"));
 
         Flight = Load("flight") ?? NewFlight();

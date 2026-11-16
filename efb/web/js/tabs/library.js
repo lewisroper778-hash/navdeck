@@ -309,5 +309,4 @@ function makeLibrary(kind) {
   };
 }
 
-export const charts = makeLibrary('charts');
 export const docs = makeLibrary('docs');
