@@ -197,11 +197,11 @@ def build_bridge_router(db, simbrief_import=None, flight_ops=None) -> APIRouter:
         return await desktop_profile(link)
 
     @r.post("/desktop/import")
-    async def desktop_import_flight(body: DesktopImportRequest,
+    async def desktop_import_flight(body: Optional[DesktopImportRequest] = None,
                                     link: dict = Depends(bridge_user)):
         if simbrief_import is None:
             raise HTTPException(status_code=503, detail="SimBrief import not configured")
-        flight = await simbrief_import(link["user_id"], body.pilot_id)
+        flight = await simbrief_import(link["user_id"], body.pilot_id if body else None)
         return {"flight": {k: getattr(flight, k, None) for k in
             ("id", "callsign", "origin", "destination", "aircraft")}}
 
