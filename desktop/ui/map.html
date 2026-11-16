@@ -149,6 +149,7 @@
   const cleanCode=(s)=>String(s||'').replace(/[^a-zA-Z0-9]/g,'').slice(0,4).toUpperCase();
   let map=null,marker=null,trail=null,layer=null,trafficMarkers=null,latest=null,follow=true,mapStarted=false,busy=false;
   const tracks=[];
+  let pairedRoute=null, manualRoute=false;
   const layers={
     dark:{url:'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',attribution:'Tiles &copy; Esri'},
     satellite:{url:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',attribution:'Imagery &copy; Esri'}
@@ -188,6 +189,7 @@
     map.on('dragstart',()=>{setFollow(false);});
   }
   function readRoute(){
+    if(pairedRoute&&!manualRoute)return pairedRoute;
     try{let data=JSON.parse(localStorage.getItem('navdeck.desktop.route')||'{}');return {dep:cleanCode(data.dep),arr:cleanCode(data.arr)};}catch{return {dep:'',arr:''}}
   }
   function renderRoute(){
@@ -208,6 +210,7 @@
     const dep=cleanCode(el('depInput').value),arr=cleanCode(el('arrInput').value);
     if(dep.length<3||arr.length<3){notify('Enter 3–4 character airport codes.');return;}
     try{localStorage.setItem('navdeck.desktop.route',JSON.stringify({dep,arr}));}catch{}
+    manualRoute=true;
     el('routeForm').classList.remove('visible');renderRoute();
   };
   el('copyBtn').onclick=async()=>{
@@ -306,8 +309,24 @@
       const div=document.createElement('div');div.className='traffic-card';div.textContent='VATSIM traffic is unavailable. Simulator tracking still works when connected.';container.appendChild(div);
     }
   }
+  async function syncCloudFlight(){
+    if(typeof window.navdeckDesktop?.getFlight!=='function')return;
+    try{
+      const response=await window.navdeckDesktop.getFlight();
+      const f=response?.flight;
+      if(!f)return;
+      if(f.origin&&f.destination){
+        pairedRoute={dep:cleanCode(f.origin),arr:cleanCode(f.destination)};
+        renderRoute();
+        el('routeStatus').textContent='Synced from NAVDECK';
+      }
+      if(f.callsign)el('flightTitle').textContent=String(f.callsign).slice(0,26)+' · MY AIRCRAFT';
+      if(f.aircraft)el('heroAircraft').textContent=String(f.aircraft).slice(0,60);
+    }catch{ /* A simulator can still be tracked before cloud pairing. */ }
+  }
   renderRoute();
   setupMap();
+  syncCloudFlight();setInterval(syncCloudFlight,30000);
   pollTelemetry();setInterval(pollTelemetry,1000);
   pollTraffic();setInterval(pollTraffic,60000);
 })();
