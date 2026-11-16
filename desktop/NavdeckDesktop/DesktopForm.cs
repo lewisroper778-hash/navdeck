@@ -336,6 +336,7 @@ internal sealed class DesktopForm : Form
                       window.navdeckDesktop = Object.freeze({
                         getTelemetry: () => request('getTelemetry').catch(() => null),
                         getFlight: () => request('getFlight'),
+                        getActiveFlightDetails: () => request('getActiveFlightDetails'),
                         getFlights: () => request('getFlights'),
                         getFlightDetails: (payload) => request('getFlightDetails', payload),
                         flightAction: (payload) => request('flightAction', payload),
