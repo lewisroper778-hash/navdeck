@@ -22,6 +22,19 @@ def _valid_amount(value: Any) -> bool:
         return False
 
 
+def go_around_review_blockers(flight: dict) -> list[str]:
+    """A possible go-around must be reviewed and documented before closing."""
+    issues: list[str] = []
+    for index, item in enumerate(flight.get("go_arounds") or [], 1):
+        review = item.get("review")
+        if review == "false_positive":
+            continue
+        reason = str(item.get("reason") or "").strip()
+        if review != "confirmed" or len(reason) < 8:
+            issues.append(f"Go-around {index}: review and reason required")
+    return issues
+
+
 def desktop_report_blockers(flight: dict) -> list[str]:
     """Missing required in-flight actuals before signing or closing.
 
@@ -43,6 +56,7 @@ def desktop_report_blockers(flight: dict) -> list[str]:
             issues.append(f"{ident}: actual altitude")
     if not _valid_amount(flight.get("arrival_fob")):
         issues.append("Arrival fuel on board at gate")
+    issues.extend(go_around_review_blockers(flight))
     return issues
 
 
