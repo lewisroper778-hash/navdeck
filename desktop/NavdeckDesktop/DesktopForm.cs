@@ -494,9 +494,9 @@ internal sealed class DesktopForm : Form
                                 // this Windows account, never reported as
                                 // successfully synced to NAVDECK.
                                 if (action == "saveProfile")
-                                    data = DesktopProfileCache.Save(payload);
+                                    data = DesktopProfileCache.Save(payload, config.Code);
                                 else if (action == "getProfile")
-                                    data = DesktopProfileCache.ReadFallback();
+                                    data = DesktopProfileCache.ReadFallback(config.Code);
                                 else
                                     throw new InvalidOperationException(
                                         "No valid connection code. Open Simulator Connection to pair.");
@@ -512,7 +512,7 @@ internal sealed class DesktopForm : Form
                                 try
                                 {
                                     if (action == "getProfile" &&
-                                        DesktopProfileCache.PendingPayload() is
+                                        DesktopProfileCache.PendingPayload(config.Code) is
                                             { } pending)
                                     {
                                         // Profile was saved locally while
@@ -523,14 +523,14 @@ internal sealed class DesktopForm : Form
                                         await _cloudApi.RequestDesktopAsync("getProfile");
                                         data = await _cloudApi.RequestDesktopAsync(
                                             "saveProfile", pending);
-                                        DesktopProfileCache.Clear();
+                                        DesktopProfileCache.Clear(config.Code);
                                     }
                                     else
                                     {
                                         data = await _cloudApi.RequestDesktopAsync(
                                             action, payload);
                                         if (action == "saveProfile")
-                                            DesktopProfileCache.Clear();
+                                            DesktopProfileCache.Clear(config.Code);
                                     }
                                 }
                                 catch (HttpRequestException ex) when (
@@ -544,15 +544,15 @@ internal sealed class DesktopForm : Form
                                         System.Net.HttpStatusCode.ServiceUnavailable))
                                 {
                                     data = action == "saveProfile"
-                                        ? DesktopProfileCache.Save(payload)
-                                        : DesktopProfileCache.ReadFallback();
+                                        ? DesktopProfileCache.Save(payload, config.Code)
+                                        : DesktopProfileCache.ReadFallback(config.Code);
                                 }
                                 catch (TaskCanceledException) when (
                                     action == "getProfile" || action == "saveProfile")
                                 {
                                     data = action == "saveProfile"
-                                        ? DesktopProfileCache.Save(payload)
-                                        : DesktopProfileCache.ReadFallback();
+                                        ? DesktopProfileCache.Save(payload, config.Code)
+                                        : DesktopProfileCache.ReadFallback(config.Code);
                                 }
                             }
                         }
