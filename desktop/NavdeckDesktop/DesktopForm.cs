@@ -482,20 +482,77 @@ internal sealed class DesktopForm : Form
                         else
                         {
                             var config = Config.Load();
-                            if (!Config.IsValidCode(config.Code))
-                                throw new InvalidOperationException(
-                                    "No valid connection code. Open Simulator Connection to pair.");
-
-                            if (_cloudApi is null || _cloudCode != config.Code)
-                            {
-                                _cloudApi = new NavdeckApi(config.Code);
-                                _cloudCode = config.Code;
-                            }
-
                             System.Text.Json.JsonElement? payload =
                                 root.TryGetProperty("payload", out var p)
                                     ? p.Clone() : null;
-                            data = await _cloudApi.RequestDesktopAsync(action, payload);
+
+                            if (!Config.IsValidCode(config.Code))
+                            {
+                                // Offline profile changes are stored only on
+                                // this Windows account, never reported as
+                                // successfully synced to NAVDECK.
+                                if (action == "saveProfile")
+                                    data = DesktopProfileCache.Save(payload);
+                                else if (action == "getProfile")
+                                    data = DesktopProfileCache.ReadFallback();
+                                else
+                                    throw new InvalidOperationException(
+                                        "No valid connection code. Open Simulator Connection to pair.");
+                            }
+                            else
+                            {
+                                if (_cloudApi is null || _cloudCode != config.Code)
+                                {
+                                    _cloudApi = new NavdeckApi(config.Code);
+                                    _cloudCode = config.Code;
+                                }
+
+                                try
+                                {
+                                    if (action == "getProfile" &&
+                                        DesktopProfileCache.PendingPayload() is
+                                            { } pending)
+                                    {
+                                        // Profile was saved locally while
+                                        // the desktop API was unavailable.
+                                        // First verify that the profile route
+                                        // now exists, then sync the pending
+                                        // values from the user's prior Save.
+                                        await _cloudApi.RequestDesktopAsync("getProfile");
+                                        data = await _cloudApi.RequestDesktopAsync(
+                                            "saveProfile", pending);
+                                        DesktopProfileCache.Clear();
+                                    }
+                                    else
+                                    {
+                                        data = await _cloudApi.RequestDesktopAsync(
+                                            action, payload);
+                                        if (action == "saveProfile")
+                                            DesktopProfileCache.Clear();
+                                    }
+                                }
+                                catch (HttpRequestException ex) when (
+                                    (action == "getProfile" || action == "saveProfile") &&
+                                    (ex.StatusCode ==
+                                        System.Net.HttpStatusCode.NotFound ||
+                                     ex.StatusCode is null ||
+                                     ex.StatusCode ==
+                                        System.Net.HttpStatusCode.BadGateway ||
+                                     ex.StatusCode ==
+                                        System.Net.HttpStatusCode.ServiceUnavailable))
+                                {
+                                    data = action == "saveProfile"
+                                        ? DesktopProfileCache.Save(payload)
+                                        : DesktopProfileCache.ReadFallback();
+                                }
+                                catch (TaskCanceledException) when (
+                                    action == "getProfile" || action == "saveProfile")
+                                {
+                                    data = action == "saveProfile"
+                                        ? DesktopProfileCache.Save(payload)
+                                        : DesktopProfileCache.ReadFallback();
+                                }
+                            }
                         }
 
                         if (!IsDisposed && _browser.CoreWebView2 is not null)
