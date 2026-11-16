@@ -1,16 +1,20 @@
 import hashlib
 import re
 import secrets
+import requests
 from datetime import datetime, timezone
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Response
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
 try:
     from backend.clerk_auth import require_user
+    from backend.pdf_report import build_report_pdf
 except ModuleNotFoundError:
     from clerk_auth import require_user
+    from pdf_report import build_report_pdf
 
 LB_PER_KG = 2.20462
 
@@ -43,7 +47,7 @@ class BridgeTarget(BaseModel):
 class DesktopFlightAction(BaseModel):
     action: Literal["toggleWaypoint", "skipWaypoint", "directTo", "undoDirect",
                     "saveWaypoint", "saveTimes", "saveActuals", "saveArrival",
-                    "signReport", "closeFlight", "reopenFlight", "resetFlight"]
+                    "signReport", "closeFlight", "reopenFlight", "resetFlight", "saveNotes"]
     payload: dict = Field(default_factory=dict)
 
 
@@ -85,6 +89,35 @@ def build_bridge_router(db, simbrief_import=None, flight_ops=None) -> APIRouter:
         result = await flight_ops(
             link["user_id"], flight_id, body.action, body.payload)
         return {"flight": result.model_dump()}
+
+    @r.get("/desktop/metar/{icao}")
+    async def desktop_metar(icao: str, link: dict = Depends(bridge_user)):
+        if not re.fullmatch(r"[A-Za-z]{4}", icao):
+            raise HTTPException(status_code=400, detail="Invalid airport ICAO")
+        try:
+            response = await run_in_threadpool(
+                requests.get, "https://aviationweather.gov/api/data/metar",
+                params={"ids": icao.upper(), "format": "raw"}, timeout=8)
+        except requests.RequestException:
+            raise HTTPException(status_code=502, detail="METAR service unavailable")
+        if response.status_code == 204:
+            return {"icao": icao.upper(), "metar": None}
+        if response.status_code != 200:
+            raise HTTPException(status_code=502, detail="METAR service unavailable")
+        return {"icao": icao.upper(), "metar": response.text[:5000].strip() or None}
+
+    @r.get("/desktop/reports/{flight_id}")
+    async def desktop_report_pdf(flight_id: str,
+                                 link: dict = Depends(bridge_user)):
+        f = await db.flights.find_one(
+            {"id": flight_id, "user_id": link["user_id"]}, {"_id": 0})
+        if not f:
+            raise HTTPException(status_code=404, detail="Flight not found")
+        if f.get("status") != "closed":
+            raise HTTPException(status_code=409, detail="Close the flight before downloading the signed report")
+        data = await run_in_threadpool(build_report_pdf, f)
+        return Response(content=data, media_type="application/pdf",
+                        headers={"Content-Disposition": "attachment; filename=NavdeckReport.pdf"})
 
     # Read-only desktop clients use the existing revocable pairing token. All
     # queries are scoped to the user who created the token. The desktop never
