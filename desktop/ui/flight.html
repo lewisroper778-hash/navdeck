@@ -19,6 +19,11 @@
 @media(max-width:960px){.metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.cards{grid-template-columns:1fr}.hero-stat{display:none}.hero{padding:26px}}
 @media(max-width:720px){main{padding:20px 17px}.top{margin-bottom:19px}.topright .label{display:none}.metric-grid{grid-template-columns:1fr 1fr}.hero h1{font-size:26px}}
 
+.demo-banner{border:1px solid #b990f6;background:#342c44;color:#f0e3ff;padding:11px 16px;border-radius:9px;margin:13px 0;font-size:12px}
+.fuel-trend{background:#222128;border:1px solid #454150;border-radius:9px;padding:14px;margin:14px 0}
+.fuel-trend svg{width:100%;height:auto;display:block}
+.checkline button{border:0;background:transparent;color:#bc9eff;text-align:left;font:inherit;cursor:pointer}
+.checkline button:hover{text-decoration:underline}
 .phasebar{display:flex;gap:9px;flex-wrap:wrap;padding:0 0 16px;margin:0 0 19px;border-bottom:1px solid var(--line)}
 .phase{border:1px solid #555161;background:#302e38;color:#d5d0df;border-radius:8px;padding:10px 14px;font-weight:650}.phase.active{background:#8243d5;color:#fff;border-color:#a86cf2}
 .pair{display:grid;grid-template-columns:1fr 1fr;gap:17px}
@@ -107,17 +112,62 @@ function fuelSummary(flight,rows){
  const deviation=current.length?current[current.length-1].fuelDeviation:0;
  const fuel=flight.fuel||{};
  const dest=rows.filter(x=>!x.skipped).at(-1);
- const predicted=dest?.fob&&Number.isFinite(Number(dest.fob))?Number(dest.fob)+deviation:null;
- const minFuel=Number(fuel.min_fuel||0)||Number(fuel.alternate||0)+Number(fuel.reserve||0);
- const reserve=Number(fuel.mayday_fuel||fuel.reserve||0);
+ const plan=dest?.fob==null||dest.fob===''?null:Number(dest.fob);
+ const predicted=plan!==null&&Number.isFinite(plan)?plan+deviation:null;
+ const minFuel=fuel.min_fuel!=null&&fuel.min_fuel!==''?Number(fuel.min_fuel):Number(fuel.alternate||0)+Number(fuel.reserve||0);
+ const reserve=Number(fuel.mayday_fuel??fuel.reserve??0);
+ const burn=Number(fuel.avg_burn_per_hour||0);
+ const holdFuel=predicted===null?null:predicted-minFuel;
+ const holdMin=holdFuel!==null&&burn>0?Math.max(0,Math.floor(holdFuel/burn*60)):null;
  const state=predicted===null?'NO FORECAST':predicted<reserve?'MAYDAY FUEL':predicted<minFuel?'MINIMUM FUEL':'NORMAL';
- return {deviation,predicted,state};
+ return {deviation,predicted,state,minFuel,reserve,burn,holdFuel,holdMin};
+}
+function reportBlockers(flight,includeEvents=false){
+ const issues=[],waypoints=(flight.waypoints||[]).filter(w=>!w.skipped);
+ if(!waypoints.length)issues.push(['Imported waypoint route','enroute']);
+ const validNum=x=>x!==null&&x!==undefined&&x!==''&&Number.isFinite(Number(x))&&Number(x)>=0;
+ waypoints.forEach(w=>{
+   if(!time.test(w.ata||''))issues.push([(w.ident||'Waypoint')+' · Actual UTC time','enroute']);
+   if(!validNum(w.actual_fob))issues.push([(w.ident||'Waypoint')+' · Fuel on board','enroute']);
+   if(!validNum(w.actual_alt)||Number(w.actual_alt)>60000)issues.push([(w.ident||'Waypoint')+' · Actual altitude','enroute']);
+ });
+ if(!validNum(flight.arrival_fob))issues.push(['Arrival fuel on board','arrival']);
+ if(includeEvents){
+   const t=flight.times||{};
+   for(const [key,label,phase] of [['off','Gate-out time','departure'],['takeoff','Takeoff time','departure'],['landing','Landing time','arrival'],['on','Gate-in time','arrival']])
+     if(!time.test(t[key]||''))issues.push([label,phase]);
+   if(!validNum(flight.landing_rate))issues.push(['Landing rate','arrival']);
+ }
+ return issues;
+}
+function fuelChart(rows,fuel){
+ const data=rows.filter(w=>!w.skipped&&w.fob!==null&&w.fob!==undefined&&w.fob!=='').slice(0,140);
+ if(data.length<2)return '<p class="muted">At least two planned waypoints are needed for the fuel trend.</p>';
+ const all=data.flatMap(w=>[Number(w.fob),w.actual_fob==null||w.actual_fob===''?null:Number(w.actual_fob)]).filter(x=>x!==null&&Number.isFinite(x));
+ if(!all.length)return '';
+ const lo=Math.min(...all,fuel.minFuel,fuel.reserve),hi=Math.max(...all);
+ const range=Math.max(1,hi-lo),w=920,h=170;
+ const x=i=>20+i*(w-40)/Math.max(1,data.length-1);
+ const y=value=>h-20-(Number(value)-lo)/range*(h-40);
+ const pts=field=>data.map((r,i)=>r[field]==null||r[field]===''?null:[x(i),y(r[field])]).filter(Boolean);
+ const poly=points=>points.map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
+ const plan=pts('fob'),actual=pts('actual_fob');
+ const guide=(value,color,label)=>'<line x1="20" y1="'+y(value).toFixed(1)+'" x2="'+(w-20)+'" y2="'+y(value).toFixed(1)+'" stroke="'+color+'" stroke-width="1" stroke-dasharray="6 6"/>'+
+ '<text x="'+(w-18)+'" y="'+Math.max(12,y(value)-4).toFixed(1)+'" text-anchor="end" fill="'+color+'" font-size="10">'+label+'</text>';
+ return '<div class="fuel-trend"><div class="muted" style="margin-bottom:8px">Planned (blue) vs actual (purple) fuel on board</div>'+
+ '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 170" role="img" aria-label="Planned versus actual fuel chart">'+
+ guide(fuel.minFuel,'#fac879','MIN')+guide(fuel.reserve,'#f39898','RESERVE')+
+ '<polyline points="'+poly(plan)+'" stroke="#7cd5ff" fill="none" stroke-width="3" stroke-linejoin="round"/>'+
+ (actual.length>1?'<polyline points="'+poly(actual)+'" stroke="#b991ff" fill="none" stroke-width="3" stroke-linejoin="round"/>':'')+
+ actual.map(p=>'<circle cx="'+p[0]+'" cy="'+p[1]+'" r="3.8" fill="#b991ff"/>').join('')+
+ '</svg></div>';
 }
 function signed(v,suffix=''){return v===null||!Number.isFinite(v)?'—':(v>0?'+':'')+Math.round(v)+suffix}
 
+const isDemo=new URL(location.href).searchParams.get('demo')==='1';
 let id=new URL(location.href).searchParams.get('id'),f=null,
     section=location.hash==='#enroute'?'enroute':'briefing',
-    pending=false,ink=false,latestSample=null;
+    pending=false,ink=false,latestSample=null,wpPage=0;
 function message(text,error=false){let x=d('statusMsg');x.hidden=false;x.className='message '+(error?'err':'good');x.textContent=text}
 function clear(){d('statusMsg').hidden=true}
 function on(id,fn){if(d(id))d(id).onclick=fn}
@@ -227,7 +277,7 @@ function enroute(){
  '<button data-skip="'+i+'" data-edit>Skip</button><button data-direct="'+i+'" data-edit>DCT</button>')+'</td></tr>';
  }).join('');
  const undos=[...new Set(rows.map(x=>x.direct_group).filter(Boolean))];
- const forecast=details([['Waypoint progress',completed+'/'+active.length],['Next fix',next?.ident||'—'],['Estimated landing fuel',fuel.predicted===null?'—':Math.round(fuel.predicted)+' '+units],['Fuel deviation',signed(fuel.deviation)+' '+units],['Fuel state',fuel.state],['ETOs',f.times?.takeoff?'Actual takeoff':'Scheduled']]);
+ const forecast=details([['Waypoint progress',completed+'/'+active.length],['Next fix',next?.ident||'—'],['Estimated landing fuel',fuel.predicted===null?'—':Math.round(fuel.predicted)+' '+units],['Fuel deviation',signed(fuel.deviation)+' '+units],['Fuel state',fuel.state],['Holding before divert',fuel.holdMin===null?'—':fuel.holdMin+' min'],['Minimum fuel',Math.round(fuel.minFuel)+' '+units],['Final reserve',Math.round(fuel.reserve)+' '+units],['Average burn/hour',fuel.burn?Math.round(fuel.burn)+' '+units:'—']]);
  return panel('In-Flight Reporting','<p class="muted">Live simulator data, waypoint reports, actual times, fuel and altitude. NAVDECK Link can automatically update a paired flight, or you can save manual entries here.</p>'+
  '<div class="live-report" aria-label="Live simulator reporting">'+
  '<div class="live-indicator"><span>Simulator</span><b id="liveConnection" class="disconnected">Awaiting connection</b></div>'+
@@ -235,7 +285,7 @@ function enroute(){
  '<div class="live-indicator"><span>Altitude</span><b id="liveAltitude">— FT</b></div>'+
  '<div class="live-indicator"><span>Fuel on board</span><b id="liveFuel">— LB</b></div>'+
  '<div class="live-indicator"><span>Current UTC</span><b id="liveUtc">—</b></div>'+
- '</div>'+forecast+
+ '</div>'+forecast+fuelChart(rows,fuel)+
  '<div class="mini-actions"><button class="button ghost" id="refreshReport" type="button">↻ Sync report from NAVDECK</button></div>'+
  '<div class="rule"></div><div class="scroll-table"><table class="tab-table"><thead><tr><th>Passed</th><th>Fix</th><th>FL</th><th>ETO UTC</th><th>Plan FOB</th><th>ATA UTC</th><th>Actual FOB</th><th>ALT</th><th>ΔTime</th><th>ΔFuel</th><th>Actions</th></tr></thead><tbody>'+tbody+'</tbody></table></div>'+
  '<div class="mini-actions">'+undos.map((g,i)=>'<button class="button ghost" data-undo="'+e(g)+'" data-edit>Undo direct '+(i+1)+'</button>').join('')+
@@ -255,8 +305,11 @@ function arrival(){
 }
 function closeFlight(){
  const t=f.times||{},sg=f.signoff||{},closed=f.status==='closed';
- const checks=[['Gate-out time',!!t.off],['Takeoff time',!!t.takeoff],['Landing time',!!t.landing],['Gate-in time',!!t.on],['Landing rate',!!f.landing_rate],['Commander sign-off',!!sg.signed]];
+ const missing=reportBlockers(f,true);
+ const checks=missing.map(([label,phase])=>[label,false,phase]);
+ checks.push(['Commander sign-off',!!sg.signed,'close']);
  const good=checks.every(x=>x[1]);
+ const readyToSign=missing.length===0;
  const signature=sg.signed?
  '<div class="message good">Signed by '+e(sg.signed_by||'')+' · '+e(sg.signed_at?.slice(0,16)||'')+' UTC</div><p>'+e(sg.remarks||'No remarks')+'</p>'+
  (sg.signature?'<img src="'+e(sg.signature)+'" alt="Commander signature" style="background:white;max-height:110px;max-width:100%">':''):
@@ -265,8 +318,9 @@ function closeFlight(){
  '<div class="field"><label>Draw signature</label><canvas id="pad" class="signpad" width="640" height="130"></canvas></div>'+
  '<div class="row"><button class="button ghost" id="clearPad">Clear</button></div>'+
  '<label class="muted" style="display:block;margin:12px 0"><input type="checkbox" id="agree"> I confirm this flight record is accurate.</label>'+
- button('sign','Sign flight report');
- return '<div class="pair">'+panel('Completion checklist',checks.map(([name,ok])=>'<div class="checkline"><strong>'+e(name)+'</strong><b class="'+(ok?'green':'red')+'">'+(ok?'✓ Complete':'Required')+'</b></div>').join('')+
+ '<p class="muted">'+(readyToSign?'All flight actuals have been recorded. The report is ready for sign-off.':'Complete the required waypoint, fuel and flight actuals before signing.')+'</p>'+
+ '<button class="button primary" id="sign" data-edit '+(!readyToSign?'disabled':'')+'>Sign flight report</button>';
+ return '<div class="pair">'+panel('Completion checklist',checks.map(([name,ok,phase])=>'<div class="checkline"><button type="button" data-jump="'+e(phase)+'">'+e(name)+'</button><b class="'+(ok?'green':'red')+'">'+(ok?'✓ Complete':'Required')+'</b></div>').join('')+
  '<div class="mini-actions">'+(closed?'<button class="button primary" id="reopen">Reopen flight</button>':'<button class="button primary" id="finish" '+(!good?'disabled':'')+'>Close flight</button>')+'</div>')+
  panel('Signed operational report',signature)+'</div>'+
  panel('Archive and export','<p class="muted">Closed flights are saved to NAVDECK Logbook. A signed PDF report can be saved directly to your PC.</p><div class="mini-actions"><button class="button ghost" id="print">Print flight summary</button>'+
@@ -350,6 +404,7 @@ function bind(){
   on('metarFetch',run(async()=>{const a=await api('getMetar',{icao:f.destination});if(a?.metar){d('metar').value=a.metar;message('METAR loaded. Save notes to keep it.')}else message('No METAR available')}));
  }
  if(section==='close'){
+  document.querySelectorAll('[data-jump]').forEach(b=>b.onclick=()=>{section=b.dataset.jump;draw();});
   on('finish',()=>{if(confirm('Close this flight and store its report in NAVDECK?'))act('closeFlight')});
   on('reopen',()=>{if(confirm('Reopen this flight for editing?'))act('reopenFlight')});
   on('print',()=>window.print());
