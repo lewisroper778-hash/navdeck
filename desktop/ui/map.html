@@ -87,7 +87,7 @@
         <div><strong>Paired NAVDECK flight</strong><span id="routeSub">Connect to sync your flight</span></div>
         <div><strong id="routeStatus">No active flight</strong><span id="nextFix">Next fix: —</span></div>
       </div>
-      <button class="open-flight" id="openFlight" type="button" disabled>Open flight operations</button>
+      <button class="open-flight" id="openFlight" type="button">▤ &nbsp; Open In-Flight Reporting</button>
     </section>
 
     <div class="section-title">Flight information</div>
@@ -241,14 +241,17 @@
       el('arrName').textContent='NAVDECK route';
       el('routeSub').textContent=(f.origin||'—')+' → '+(f.destination||'—');
       el('routeStatus').textContent=f.callsign||'Active flight';
-      el('nextFix').textContent='Next fix: '+(f.waypoints?.[0]?.ident||'—');
+      el('nextFix').textContent='Next fix: '+(f.waypoints?.find(w=>!w.done)?.ident||'—');
       cloudFlightId=f.id;
-      el('openFlight').disabled=!cloudFlightId;
       if(f.callsign)el('flightTitle').textContent=String(f.callsign).slice(0,26)+' · LIVE';
       if(f.aircraft)el('heroAircraft').textContent=String(f.aircraft).slice(0,60);
     }catch{ /* A simulator can still be tracked before cloud pairing. */ }
   }
-  el('openFlight').onclick=()=>{if(cloudFlightId)location.href='flight.html?id='+encodeURIComponent(cloudFlightId);};
+  el('openFlight').onclick=()=>{
+    location.href=cloudFlightId?
+      'flight.html?id='+encodeURIComponent(cloudFlightId)+'#enroute':
+      'flight.html?active=1#enroute';
+  };
   setupMap();
   syncCloudFlight();setInterval(syncCloudFlight,30000);
   pollTelemetry();setInterval(pollTelemetry,1200);
