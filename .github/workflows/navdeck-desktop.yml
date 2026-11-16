@@ -84,9 +84,11 @@ jobs:
           )
           foreach ($asset in $assets) {
             $file = "desktop/ui/vendor/$($asset.name)"
-            Invoke-WebRequest -Uri "https://unpkg.com/leaflet@1.9.4/dist/$($asset.name)" -OutFile $file -TimeoutSec 40
+            curl.exe --fail --location --silent --show-error --output $file "https://unpkg.com/leaflet@1.9.4/dist/$($asset.name)"
+            if ($LASTEXITCODE -ne 0) { throw "Leaflet download failed: $($asset.name)" }
             $hash = (Get-FileHash $file -Algorithm SHA256).Hash
             $actual = [Convert]::ToBase64String([Convert]::FromHexString($hash))
+            Write-Host "Verified source $($asset.name): $actual"
             if ($actual -ne $asset.sri) { throw "Leaflet integrity mismatch: $($asset.name)" }
           }
 
