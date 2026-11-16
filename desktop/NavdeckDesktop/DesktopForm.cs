@@ -795,9 +795,18 @@ internal sealed class DesktopForm : Form
                         if (!Config.IsValidCode(Config.Load().Code))
                             BeginInvoke(new Action(() =>
                             {
-                                if (!IsDisposed && SignInWithClerk())
-                                    _browser.CoreWebView2?.Navigate(
-                                        "https://navdeck-desktop.local/workspace.html#settings");
+                                if (IsDisposed) return;
+                                try
+                                {
+                                    if (SignInWithClerk())
+                                        _browser.CoreWebView2?.Navigate(
+                                            "https://navdeck-desktop.local/workspace.html#settings");
+                                }
+                                catch (Exception error)
+                                {
+                                    MessageBox.Show(this, error.Message, "NAVDECK sign-in",
+                                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                                }
                             }));
                     }
                     catch (Exception bridgeError)
