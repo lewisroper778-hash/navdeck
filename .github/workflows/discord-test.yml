@@ -1,0 +1,56 @@
+name: Discord test message
+
+on:
+  push:
+    branches:
+      - tools/discord-test
+  workflow_dispatch:
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Post a test message to the NAVDECK Discord
+        env:
+          HOOK: ${{ secrets.EFB_DISCORD_WEBHOOK }}
+        run: |
+          python3 - <<'PY'
+          import json, os, sys, urllib.request, urllib.error, uuid, datetime
+          hook = os.environ.get("HOOK", "").strip()
+          if not hook:
+              print("::error::The EFB_DISCORD_WEBHOOK secret is empty."); sys.exit(1)
+          now = datetime.datetime.now(datetime.timezone.utc).strftime("%d %b %Y %H:%M UTC")
+          payload = {
+              "username": "NAVDECK EFB",
+              "content": "**NAVDECK EFB is connected to this channel**",
+              "allowed_mentions": {"parse": []},
+              "embeds": [{
+                  "title": "Test message",
+                  "description": "Signed journey logs from NAVDECK EFB will be posted here automatically, with the PDF attached.",
+                  "color": 0xA78BFA,
+                  "thumbnail": {"url": "attachment://navdeck-efb.png"},
+                  "footer": {"text": f"Sent {now}"},
+              }],
+              "attachments": [{"id": 0, "filename": "navdeck-efb.png"}],
+          }
+          logo = open("efb/web/img/logo-256.png", "rb").read()
+          boundary = uuid.uuid4().hex
+          body = b"".join([
+              f"--{boundary}\r\nContent-Disposition: form-data; name=\"payload_json\"\r\nContent-Type: application/json\r\n\r\n".encode(),
+              json.dumps(payload).encode(), b"\r\n",
+              f"--{boundary}\r\nContent-Disposition: form-data; name=\"files[0]\"; filename=\"navdeck-efb.png\"\r\nContent-Type: image/png\r\n\r\n".encode(),
+              logo, b"\r\n", f"--{boundary}--\r\n".encode(),
+          ])
+          sep = "&" if "?" in hook else "?"
+          req = urllib.request.Request(hook + sep + "wait=true", data=body, method="POST",
+                                       headers={"Content-Type": f"multipart/form-data; boundary={boundary}", "User-Agent": "NAVDECK-EFB-test"})
+          try:
+              with urllib.request.urlopen(req, timeout=30) as r:
+                  msg = json.load(r)
+                  print(f"Discord accepted the message (HTTP {r.status}) in channel {msg.get('channel_id')}, message {msg.get('id')}.")
+          except urllib.error.HTTPError as e:
+              print(f"::error::Discord refused the message: HTTP {e.code} {e.read().decode(errors='replace')[:300]}"); sys.exit(1)
+          PY
