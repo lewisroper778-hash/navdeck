@@ -318,10 +318,8 @@ async function init(){
    d('aircraft').textContent='Choose or import an operational flight plan';
    d('stage').innerHTML=panel('Start reporting',
        '<p class="muted">No active NAVDECK flight was found. Import an OFP from SimBrief or select an open flight from My Flights.</p>'+
-       '<button id="selectFlight" class="button primary">Choose a flight</button> '+
-       '<button id="sampleFlight" class="button ghost">Preview sample report</button>');
+       '<button id="selectFlight" class="button primary">Choose a flight</button>');
    on('selectFlight',()=>location.href='workspace.html#flights');
-   on('sampleFlight',()=>location.href='flight.html?demo=1#enroute');
    return;
  }
  try{
@@ -335,11 +333,9 @@ async function init(){
    d('stage').innerHTML=panel('Connection required',
      '<p class="muted">The desktop app is connected to the flight bridge, but its full in-flight reporting endpoint has not been deployed to the NAVDECK server.</p>'+
      '<button class="button primary" id="retryReport">Retry reporting</button>'+
-     '<button class="button ghost" id="chooseReport" style="margin-left:8px">My Flights</button> '+
-     '<button class="button ghost" id="demoReport">Preview sample report</button>');
+     '<button class="button ghost" id="chooseReport" style="margin-left:8px">My Flights</button>');
    on('retryReport',init);
    on('chooseReport',()=>location.href='workspace.html#flights');
-   on('demoReport',()=>location.href='flight.html?demo=1#enroute');
    message('Cannot load the full reporting record: '+err.message,true);
  }
 }
