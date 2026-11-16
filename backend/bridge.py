@@ -81,6 +81,14 @@ def build_bridge_router(db, simbrief_import=None, flight_ops=None) -> APIRouter:
                 return f
         return await db.flights.find_one(q, {"_id": 0}, sort=[("imported_at", -1)])
 
+    @r.get("/desktop/active")
+    async def desktop_active_flight(link: dict = Depends(bridge_user)):
+        # One database lookup and one desktop round-trip for the primary
+        # in-flight reporting screen, instead of a summary request followed
+        # by a second detail request.
+        flight = await target_flight(link)
+        return {"flight": flight}
+
     @r.get("/desktop/flights/{flight_id}")
     async def desktop_flight_detail(flight_id: str, link: dict = Depends(bridge_user)):
         f = await db.flights.find_one(
