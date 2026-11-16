@@ -1,7 +1,7 @@
 // Actions shared by several tabs: starting a flight, fuel checks, sign and close, PDF export.
 import { S, api, h, setF, setS, push, nowIso, fmtT, blankFlight, loadState, fromW, toW, wUnit, addNotice, hhmmToIso } from './core.js';
-import { flightFromOfp, planAt } from './simbrief.js';
-import { toast, modal, confirmBox, promptText, signaturePad, keypad } from './widgets.js';
+import { flightFromOfp, planAt, ofpFromFile } from './simbrief.js';
+import { toast, modal, confirmBox, signaturePad, keypad } from './widgets.js';
 import { GO_AROUND_REASONS } from './data.js';
 
 export async function startFlight(flight) {
@@ -11,26 +11,64 @@ export async function startFlight(flight) {
   window.dispatchEvent(new HashChangeEvent('hashchange'));
 }
 
+async function useOfp(ofp) {
+  const flight = flightFromOfp(ofp);
+  const profile = (S.settings.profiles || []).find(p => p.icao && p.icao.toUpperCase() === flight.airline.toUpperCase());
+  if (profile) flight.profile = profile.id;
+  await startFlight(flight);
+  toast(`${flight.flightNo || flight.callsign}  ${flight.dep} to ${flight.arr}, ${flight.navlog.length} fixes`, 'good', 'SimBrief plan loaded');
+}
+
+// Pulls the latest plan for the saved SimBrief user (through the PC), or imports a saved SimBrief file.
 export async function newFromSimbrief() {
-  let user = S.settings.simbriefUser;
-  if (!user) {
-    user = await promptText('SimBrief', 'SimBrief username or pilot ID');
-    if (!user) return;
-    await setS(['simbriefUser'], user);
-  }
   if (S.flight.dep && !S.flight.closed && !(await confirmBox('Replace the current flight?', 'The current flight has not been closed. Loading a new plan replaces it.', 'Replace', true))) return;
-  try {
-    toast('Loading the latest SimBrief plan…');
-    const ofp = await api('/api/simbrief?user=' + encodeURIComponent(user));
-    if (!ofp || !ofp.origin) throw new Error('SimBrief returned no flight plan for that user.');
-    const flight = flightFromOfp(ofp);
-    const profile = (S.settings.profiles || []).find(p => p.icao && p.icao.toUpperCase() === flight.airline.toUpperCase());
-    if (profile) flight.profile = profile.id;
-    await startFlight(flight);
-    toast(`${flight.flightNo}  ${flight.dep} to ${flight.arr}, ${flight.navlog.length} fixes`, 'good', 'Flight plan loaded');
-  } catch (e) {
-    toast(e.message, 'bad', 'SimBrief plan not loaded');
-  }
+  const user = h('input', { class: 'input', type: 'text', value: S.settings.simbriefUser || '', placeholder: 'SimBrief username or pilot ID', autocapitalize: 'none', autocomplete: 'off' });
+  const file = h('input', { class: 'input', type: 'file', accept: '.json,.xml,application/json,text/xml,application/xml' });
+  const status = h('div', { class: 'warn-text' });
+  const say = (text, error) => { status.textContent = text; status.style.color = error ? '' : 'var(--muted)'; };
+
+  const pull = async close => {
+    const name = user.value.trim();
+    if (!name) { say('Enter your SimBrief username or pilot ID.', true); return; }
+    say('Fetching your latest plan from SimBrief…');
+    try {
+      if (name !== S.settings.simbriefUser) await setS(['simbriefUser'], name);
+      const ofp = await api('/api/simbrief?user=' + encodeURIComponent(name));
+      if (!ofp?.origin) throw new Error('SimBrief returned no flight plan for that user.');
+      close(null);
+      await useOfp(ofp);
+    } catch (e) { say(e.message, true); }
+  };
+  const importFile = async close => {
+    if (!file.files.length) { say('Choose the SimBrief file first.', true); return; }
+    say('Reading the file…');
+    try {
+      const ofp = await ofpFromFile(file.files[0]);
+      close(null);
+      await useOfp(ofp);
+    } catch (e) { say(e.message, true); }
+  };
+
+  await modal({
+    title: 'Load a SimBrief flight plan', wide: true,
+    body: h('div', { class: 'grid' },
+      h('div', { class: 'card c6 stack' },
+        h('h3', null, 'Pull from SimBrief'),
+        h('p', { class: 'muted' }, 'Fetches the latest plan you generated on simbrief.com. Your username is remembered.'),
+        user, h('button', { class: 'btn primary', 'data-act': 'pull' }, 'Pull latest plan')),
+      h('div', { class: 'card c6 stack' },
+        h('h3', null, 'Import a SimBrief file'),
+        h('p', { class: 'muted' }, 'A plan you saved from SimBrief as JSON or XML. Works without an internet connection.'),
+        file, h('button', { class: 'btn', 'data-act': 'file' }, 'Import file')),
+      h('div', { class: 'c12' }, status)),
+    buttons: [{ label: 'Cancel', value: null }],
+    onOpen: (box, close) => {
+      box.querySelector('[data-act=pull]').addEventListener('click', () => pull(close));
+      box.querySelector('[data-act=file]').addEventListener('click', () => importFile(close));
+      user.addEventListener('keydown', e => { if (e.key === 'Enter') pull(close); });
+      file.addEventListener('change', () => { if (file.files.length) importFile(close); });
+    },
+  });
 }
 
 export async function newBlank() {

@@ -34,7 +34,7 @@ export default {
   deps: ['flight', 'settings'],
   mount(root) {
     head = h('div', { class: 'page-head' });
-    frame = h('iframe', { title: 'Journey log', style: { width: '100%', height: 'calc(100dvh - 170px)', border: '1px solid var(--line)', borderRadius: '12px', background: '#e9edf2' } });
+    frame = h('iframe', { title: 'Journey log', style: { width: '100%', height: 'calc(100dvh - 170px)', border: '1px solid var(--line)', borderRadius: '12px', background: '#e8e8ec' } });
     root.append(head, frame);
     renderHead();
     frame.src = 'report.html?embed=1&id=' + encodeURIComponent(S.flight.id);

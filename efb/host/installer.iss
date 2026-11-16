@@ -18,7 +18,7 @@ SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
-SetupIconFile=efb\host\navdeck.ico
+SetupIconFile=efb\host\navdeck-efb.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 CloseApplications=yes
 

@@ -148,7 +148,7 @@ export default {
       return;
     }
     root.append(h('div', { class: 'grid' },
-      h('div', { class: 'card c12' }, h('h3', null, 'Progress', h('span', { class: 'spacer' }), h('span', { class: 'tag accent' }, 'Cyan values are logged automatically. Tap a value to edit it.')), summary()),
+      h('div', { class: 'card c12' }, h('h3', null, 'Progress', h('span', { class: 'spacer' }), h('span', { class: 'tag accent' }, 'Purple values are logged automatically. Tap a value to edit it.')), summary()),
       h('div', { class: 'card c12', style: { padding: '6px 6px 2px' } }, table()),
       fuelChecksCard(), diversionCard()));
     liveNext(S.sim);

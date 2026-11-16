@@ -39,10 +39,31 @@ async function sign(page) {
     await page.waitForSelector('#rail a');
     await shot('01-start');
     check(await page.locator('text=Start a flight').count() === 1, 'start screen shown');
+    check(await page.locator('#rail .brand img[src="img/logo.svg"]').count() === 1, 'logo shown in the app');
+    const icon = await page.evaluate(() => fetch(document.querySelector('link[rel=apple-touch-icon]').href).then(r => r.ok && r.headers.get('content-type')));
+    check(/image\/png/.test(icon || ''), 'iPad home-screen icon available');
 
+    // import a saved SimBrief XML file first, then pull the latest plan by username
+    const ofp = await (await fetch(BASE + '/api/simbrief?user=demo')).json();
+    const toXml = (name, v) => Array.isArray(v) ? v.map(x => toXml(name, x)).join('')
+      : v && typeof v === 'object' ? `<${name}>${Object.entries(v).map(([k, x]) => toXml(k, x)).join('')}</${name}>` : `<${name}>${String(v ?? '')}</${name}>`;
+    const xmlFile = path.join(OUT, 'sample-ofp.xml');
+    const xmlOfp = JSON.parse(JSON.stringify(ofp));
+    xmlOfp.destination.icao_code = 'EHRD'; xmlOfp.destination.name = 'Rotterdam';
+    fs.writeFileSync(xmlFile, '<?xml version="1.0"?>' + toXml('OFP', xmlOfp));
     await page.click('text=Load SimBrief plan');
-    await page.waitForSelector('text=EGLL → EHAM');
-    check(true, 'SimBrief plan loaded into a flight');
+    await page.waitForSelector('text=Import a SimBrief file');
+    await page.setInputFiles('.modal input[type=file]', xmlFile);
+    await page.waitForSelector('.big:has-text("EGLL → EHRD")');
+    const nav = await page.evaluate(() => fetch('/api/state').then(r => r.json()).then(s => s.flight.navlog.length));
+    check(nav === 9, 'SimBrief XML file imported with its NavLog');
+    await page.click('button:has-text("Load SimBrief plan")');
+    await page.click('.modal-foot button:has-text("Replace")');
+    await page.waitForSelector('text=Pull from SimBrief');
+    await shot('00-simbrief');
+    await page.click('text=Pull latest plan');
+    await page.waitForSelector('.big:has-text("EGLL → EHAM")');
+    check(true, 'latest SimBrief plan pulled by username');
     await sim('connect');
     await page.waitForTimeout(300);
     await shot('02-flight');
@@ -58,7 +79,8 @@ async function sign(page) {
     await page.click('text=Create booking figures');
     await page.waitForSelector('text=Close boarding and issue final load sheet');
     await page.click('text=Close boarding and issue final load sheet');
-    await page.waitForSelector('text=Sign load sheet');
+    await page.waitForSelector('text=Final, edition 1');
+    await page.waitForTimeout(300);
     const load = await page.evaluate(() => fetch('/api/state').then(r => r.json()).then(s => s.flight.load));
     check(load.final.pax <= load.seats, `final passengers ${load.final.pax} never exceed ${load.seats} seats`);
     check(load.final.jump === 0 || load.final.pax === load.seats, 'jumpseat staff only on a full flight');

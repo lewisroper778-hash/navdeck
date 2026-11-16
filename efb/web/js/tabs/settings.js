@@ -4,7 +4,7 @@ import { modal, confirmBox, toast } from '../widgets.js';
 import { activeTabs } from '../app.js';
 
 let topic = 'general', query = '';
-const PROFILE_COLORS = ['#00c8eb', '#2563eb', '#e11d48', '#f59e0b', '#16a34a', '#7c3aed', '#0f766e', '#ea580c', '#475569'];
+const PROFILE_COLORS = ['#a78bfa', '#7c3aed', '#2563eb', '#00c8eb', '#e11d48', '#f59e0b', '#16a34a', '#0f766e', '#ea580c', '#475569'];
 
 const seg = (path, options, current) => h('div', { class: 'seg' }, options.map(([v, label]) => h('button', { class: current === v ? 'on' : '', onclick: () => setS(path, v) }, label)));
 const toggle = (path, value, label) => h('button', { class: 'switch' + (value ? ' on' : ''), 'aria-label': label, onclick: () => setS(path, !value) });

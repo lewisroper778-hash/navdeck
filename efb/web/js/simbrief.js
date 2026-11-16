@@ -5,6 +5,36 @@ const n = v => { const x = parseFloat(v); return Number.isFinite(x) ? x : null; 
 const s = v => (v == null || typeof v === 'object' ? '' : String(v));
 const unix = v => { const x = n(v); return x ? new Date(x * 1000).toISOString() : null; };
 
+// Turns a SimBrief XML flight plan into the same shape as the JSON one.
+export function ofpFromXml(text) {
+  const doc = new DOMParser().parseFromString(text, 'application/xml');
+  if (doc.querySelector('parsererror')) throw new Error('This file is not a valid SimBrief XML flight plan.');
+  const walk = el => {
+    const kids = [...el.children];
+    if (!kids.length) return el.textContent.trim();
+    const out = {};
+    for (const k of kids) {
+      const v = walk(k);
+      if (k.tagName in out) { if (!Array.isArray(out[k.tagName])) out[k.tagName] = [out[k.tagName]]; out[k.tagName].push(v); }
+      else out[k.tagName] = v;
+    }
+    return out;
+  };
+  return walk(doc.documentElement);
+}
+
+// Reads a SimBrief file (.json or .xml) chosen on this device.
+export async function ofpFromFile(file) {
+  const text = (await file.text()).trim();
+  let ofp;
+  if (text.startsWith('{')) {
+    try { ofp = JSON.parse(text); } catch { throw new Error('This file is not a valid SimBrief JSON flight plan.'); }
+  } else if (text.startsWith('<')) ofp = ofpFromXml(text);
+  else throw new Error('Choose a SimBrief flight plan saved as JSON or XML.');
+  if (!ofp?.origin?.icao_code || !ofp?.destination?.icao_code) throw new Error('No departure and destination found in this file. Is it a SimBrief flight plan?');
+  return ofp;
+}
+
 export function flightFromOfp(ofp) {
   const f = blankFlight();
   const kg = v => { const x = n(v); return x == null ? null : (s(ofp.params?.units).toLowerCase().startsWith('lb') ? x / KG_LB : x); };

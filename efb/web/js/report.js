@@ -17,7 +17,7 @@ function build() {
   const page = document.getElementById('page');
   const parts = [];
 
-  parts.push(h('div', { class: 'band' }, profile?.logo && h('img', { src: profile.logo, alt: '' }),
+  parts.push(h('div', { class: 'band' }, profile?.logo ? h('img', { class: 'airline', src: profile.logo, alt: '' }) : h('img', { src: 'img/logo.svg', alt: '' }),
     h('h1', null, profile?.name || st.company || 'NAVDECK'), h('div', { class: 'right' }, 'JOURNEY LOG', h('br'), fmtDate(t.out || t.off || f.created))));
 
   const body = h('div', { class: 'body' });

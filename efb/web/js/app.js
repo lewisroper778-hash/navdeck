@@ -31,7 +31,7 @@ function renderRail() {
   const profile = activeProfile();
   const unread = Object.values(S.flight.occ.messages || {}).filter(m => !m.ack).length;
   rail.replaceChildren(
-    h('div', { class: 'brand' }, profile?.logo && h('img', { src: profile.logo, alt: '' }), profile?.icao || 'NAVDECK'),
+    h('div', { class: 'brand' }, profile?.logo ? h('img', { class: 'airline', src: profile.logo, alt: '' }) : h('img', { src: 'img/logo.svg', alt: 'NAVDECK' }), profile?.icao || 'NAVDECK'),
     activeTabs().filter(t => t.on).map(t => h('a', { href: '#' + t.id, class: t.id === currentId ? 'active' : '' },
       h('span', { html: `<svg viewBox="0 0 24 24"><path d="${t.icon}"/></svg>` }), t.label,
       t.id === 'occ' && unread > 0 && h('span', { class: 'dot' }, unread))));

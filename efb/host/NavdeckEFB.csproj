@@ -10,7 +10,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>NavdeckEFB</AssemblyName>
     <RootNamespace>NavdeckEfb</RootNamespace>
-    <ApplicationIcon>navdeck.ico</ApplicationIcon>
+    <ApplicationIcon>navdeck-efb.ico</ApplicationIcon>
     <Version>1.0.0</Version>
     <Product>NAVDECK EFB</Product>
     <Company>NAVDECK</Company>

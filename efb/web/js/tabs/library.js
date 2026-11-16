@@ -2,7 +2,7 @@
 import { S, h, api, set, del, nowIso } from '../core.js';
 import { modal, toast, confirmBox } from '../widgets.js';
 
-const COLORS = ['#8496b2', '#00c8eb', '#34d399', '#fbbf24', '#f87171', '#a78bfa', '#fb923c'];
+const COLORS = ['#9a9aa8', '#a78bfa', '#34d399', '#fbbf24', '#f87171', '#a78bfa', '#fb923c'];
 const SECTIONS = ['GND', 'SID', 'STAR', 'APP', 'ENR', 'OTHER'];
 const isPdf = path => /\.pdf$/i.test(path);
 const baseName = path => path.split('/').pop().replace(/\.(pdf|png|jpe?g)$/i, '');

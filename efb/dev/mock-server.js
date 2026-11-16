@@ -8,7 +8,7 @@ const os = require('os');
 const PORT = +process.argv[2] || 8640;
 const WEB = path.join(__dirname, '..', 'web');
 const LIB = fs.mkdtempSync(path.join(os.tmpdir(), 'navdeck-efb-lib-'));
-const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.pdf': 'application/pdf', '.json': 'application/json', '.svg': 'image/svg+xml' };
+const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.pdf': 'application/pdf', '.json': 'application/json', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json' };
 
 const state = { flight: { id: 'none', navlog: [], times: {}, fuel: {}, goArounds: [], fuelChecks: [], crew: [], safety: [], movement: [], occ: { messages: {}, turnaround: {}, delays: [] }, gsx: { receipts: [] } }, settings: {}, library: {}, history: [], archive: {} };
 let sim = { connected: false };

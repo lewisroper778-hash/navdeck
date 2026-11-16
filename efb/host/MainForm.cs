@@ -12,7 +12,7 @@ internal sealed class MainForm : Form
     private readonly WebView2 _printView = new() { Size = new Size(820, 1160), Location = new Point(-4000, 0), TabStop = false };
     private readonly Label _status = new()
     {
-        Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter, ForeColor = Color.FromArgb(132, 150, 178),
+        Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter, ForeColor = Color.FromArgb(154, 154, 168),
         Font = new Font("Segoe UI", 11f), Text = "Starting NAVDECK EFB...",
     };
     private readonly NotifyIcon _tray = new();
@@ -30,7 +30,7 @@ internal sealed class MainForm : Form
         ClientSize = new Size(1280, 820);
         MinimumSize = new Size(900, 640);
         StartPosition = FormStartPosition.CenterScreen;
-        BackColor = Color.FromArgb(11, 18, 32);
+        BackColor = Color.FromArgb(20, 20, 24);
         try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch (Exception) { }
 
         Controls.Add(_view);
