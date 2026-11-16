@@ -7,9 +7,16 @@ on:
       - 'desktop/**'
       - 'backend/**'
       - '.github/workflows/navdeck-desktop.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'desktop/**'
+      - 'backend/**'
+      - '.github/workflows/navdeck-desktop.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -102,3 +109,11 @@ jobs:
           path: desktop-output/
           if-no-files-found: error
           retention-days: 7
+      - name: Publish Windows installer to GitHub Releases
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "desktop-" + "${{ github.run_number }}"
+          gh release create $tag installer-output/*.exe --target $env:GITHUB_SHA --title "NAVDECK Desktop $tag" --prerelease --notes "NAVDECK Desktop installer for Windows x64. Includes In-Flight Reporting, SimBrief integration and an offline sample flight. The connected NAVDECK backend must be deployed for live cloud features. Test with your simulator before relying on live records."
