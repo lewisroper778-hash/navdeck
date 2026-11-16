@@ -40,11 +40,16 @@ class BridgeTarget(BaseModel):
     flight_id: str
 
 
+class DesktopPilotUpdate(BaseModel):
+    simbrief_pilot_id: Optional[str] = Field(default=None, pattern=r"^\d{1,16}$")
+    display_name: Optional[str] = Field(default=None, max_length=80)
+
+
 def _hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def build_bridge_router(db) -> APIRouter:
+def build_bridge_router(db, simbrief_import=None) -> APIRouter:
     r = APIRouter(prefix="/api/bridge")
 
     async def bridge_user(x_bridge_token: str = Header(default="")) -> dict:
@@ -53,7 +58,59 @@ def build_bridge_router(db) -> APIRouter:
         rec = await db.bridge_links.find_one({"token_hash": _hash(x_bridge_token)}, {"_id": 0})
         if not rec:
             raise HTTPException(status_code=401, detail="Connection code not recognised; create a new one in NAVDECK")
-        return rec
+        # Read-only desktop clients use the existing revocable pairing token. All
+    # queries are scoped to the user who created the token. The desktop never
+    # receives Clerk credentials or a direct database connection.
+    @r.get("/desktop/flights")
+    async def desktop_flights(link: dict = Depends(bridge_user)):
+        docs = await db.flights.find(
+            {"user_id": link["user_id"]},
+            {"_id": 0, "id": 1, "callsign": 1, "origin": 1,
+             "destination": 1, "aircraft": 1, "status": 1,
+             "imported_at": 1, "distance": 1, "ete": 1,
+             "landing_rate": 1, "times": 1}
+        ).sort("imported_at", -1).to_list(100)
+        return {"flights": docs}
+
+    @r.get("/desktop/logbook")
+    async def desktop_logbook(link: dict = Depends(bridge_user)):
+        docs = await db.flights.find(
+            {"user_id": link["user_id"], "status": "closed"},
+            {"_id": 0, "id": 1, "callsign": 1, "origin": 1,
+             "destination": 1, "aircraft": 1, "closed_at": 1,
+             "landing_rate": 1, "times": 1}
+        ).sort("closed_at", -1).to_list(200)
+        return {"flights": docs}
+
+    @r.get("/desktop/profile")
+    async def desktop_profile(link: dict = Depends(bridge_user)):
+        p = await db.pilots.find_one({"user_id": link["user_id"]}, {"_id": 0,
+            "simbrief_pilot_id": 1, "display_name": 1})
+        return {"profile": p or {}}
+
+    @r.put("/desktop/profile")
+    async def desktop_update_profile(body: DesktopPilotUpdate,
+                                     link: dict = Depends(bridge_user)):
+        update = body.model_dump(exclude_unset=True)
+        if "display_name" in update and update["display_name"] is not None:
+            update["display_name"] = update["display_name"].strip() or None
+        if "simbrief_pilot_id" in update and update["simbrief_pilot_id"] == "":
+            update["simbrief_pilot_id"] = None
+        if update:
+            update["updated_at"] = datetime.now(timezone.utc).isoformat()
+            await db.pilots.update_one({"user_id": link["user_id"]},
+                {"$set": update}, upsert=True)
+        return await desktop_profile(link)
+
+    @r.post("/desktop/import")
+    async def desktop_import_flight(link: dict = Depends(bridge_user)):
+        if simbrief_import is None:
+            raise HTTPException(status_code=503, detail="SimBrief import not configured")
+        flight = await simbrief_import(link["user_id"])
+        return {"flight": {k: getattr(flight, k, None) for k in
+            ("id", "callsign", "origin", "destination", "aircraft")}}
+
+    return rec
 
     async def target_flight(link: dict) -> Optional[dict]:
         q = {"user_id": link["user_id"], "status": {"$ne": "closed"}}
