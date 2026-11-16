@@ -119,10 +119,25 @@ async function renderSimbrief(){
  };
  action('previewOFP',()=>{location.href='flight.html?demo=1#enroute';});
  action('importOFP',async()=>{
-  const b=$('importOFP');b.disabled=true;let label=b.textContent;b.textContent='Importing…';
-  try{const data=await call('importSimbrief');flightCache=null;$('profileNotice').innerHTML=notice('Imported '+String(data?.flight?.callsign||'the latest flight')+' successfully.','good');}
-  catch(e){$('profileNotice').innerHTML=notice('Import unavailable: '+e.message,'error')}
-  finally{b.disabled=false;b.textContent=label}
+  const b=$('importOFP'),pilotId=$('pilotId').value.trim();
+  if(pilotId&&!/^[0-9]{1,16}$/.test(pilotId)){
+    $('profileNotice').innerHTML=notice('Enter a numeric SimBrief Pilot ID first.','error');return;
+  }
+  b.disabled=true;const label=b.textContent;b.textContent='Importing OFP…';
+  $('profileNotice').innerHTML=notice('Checking your latest SimBrief OFP. If the NAVDECK server was sleeping, its first request may take longer.');
+  try{
+    const data=await call('importSimbrief',{pilot_id:pilotId||null});
+    flightCache=null;flightCacheAt=0;
+    $('profileNotice').innerHTML=notice('Imported '+String(data?.flight?.callsign||'the latest flight')+'. Opening In-Flight Reporting…','good');
+    if(data?.flight?.id&&/^[0-9a-fA-F-]{36}$/.test(data.flight.id))
+      location.href='flight.html?id='+encodeURIComponent(data.flight.id)+'#enroute';
+  }catch(e){
+    const err=String(e.message||'');
+    const extra=/Not Found|404/i.test(err)
+      ?' The NAVDECK backend needs the new desktop import endpoint deployed.'
+      : /No SimBrief Pilot ID/i.test(err)?' Save or enter your SimBrief Pilot ID first.':'';
+    $('profileNotice').innerHTML=notice('Import unavailable: '+err+'.'+extra,'error');
+  }finally{b.disabled=false;b.textContent=label}
  });
  $('profileForm').onsubmit=async e=>{
   e.preventDefault();
