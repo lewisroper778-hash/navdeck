@@ -211,6 +211,34 @@ internal static class SelfTest
                       last.Contains("%PDF-1.7 selftest journey log") && last.Contains("BAW123") && last.Contains("EGKK-EGLL"),
                     "Discord message carries the PDF, flight and route");
                 Check(last.Contains("\"allowed_mentions\":{\"parse\":[]}"), "the message can never ping anyone");
+
+                // safety reports: opened, completed, closed (locked), then posted to Discord
+                var sr = store.OpenSafety(new JsonObject
+                {
+                    ["type"] = "birdstrike", ["typeName"] = "Bird strike", ["openedBy"] = "TEST",
+                    ["flight"] = new JsonObject { ["flightNo"] = "BAW123", ["dep"] = "EGKK", ["arr"] = "EGLL" },
+                    ["labels"] = new JsonObject { ["phase"] = "Phase of flight" }, ["required"] = new JsonArray("phase"),
+                }, clock);
+                var srId = J.Str(sr["id"]);
+                Check(J.Str(sr["number"]).StartsWith("SR-") && J.Str(sr["status"]) == "open", "safety report opened with a number");
+                var closure = new JsonObject { ["name"] = "TEST", ["outcome"] = "No further action" };
+                Check(store.CloseSafety(srId, closure, clock, out _) is { } srWhy && srWhy.Contains("Phase of flight") && srWhy.Contains("severity"), "safety report cannot close with required items missing");
+                store.ApplyOps("safety", new JsonArray(
+                    new JsonObject { ["op"] = "set", ["path"] = new JsonArray("reports", srId, "severity"), ["value"] = "Medium" },
+                    new JsonObject { ["op"] = "set", ["path"] = new JsonArray("reports", srId, "narrative"), ["value"] = "Two gulls struck the radome on the climb out." },
+                    new JsonObject { ["op"] = "set", ["path"] = new JsonArray("reports", srId, "fields", "phase"), ["value"] = "Initial climb" }));
+                Check(store.CloseSafety(srId, closure, clock, out var srClosed) is null && srClosed is not null, "safety report closes once complete");
+                store.ApplyOps("safety", new JsonArray(new JsonObject { ["op"] = "set", ["path"] = new JsonArray("reports", srId, "narrative"), ["value"] = "changed" }));
+                store.ApplyOps("safety", new JsonArray(new JsonObject { ["op"] = "del", ["path"] = new JsonArray("reports", srId) }));
+                bool srLocked;
+                lock (store.Gate) srLocked = J.Str(store.Safety["reports"]?[srId]?["narrative"]).StartsWith("Two gulls");
+                Check(srLocked, "a closed safety report cannot be edited or deleted");
+                Check(outbox.EnqueueSafety(srClosed!) && outbox.SendDueAsync(ignoreSchedule: true).GetAwaiter().GetResult() == 1, "closed safety report posted to Discord");
+                lock (bodies) last = bodies.Count > 0 ? bodies[^1] : "";
+                Check(last.Contains("Safety report SR-") && last.Contains("Bird strike") && last.Contains("Two gulls") && last.Contains("Initial climb"), "Discord message carries the safety report");
+                bool srPosted;
+                lock (store.Gate) srPosted = J.Time(store.Safety["reports"]?[srId]?["discord"]) is not null;
+                Check(srPosted, "report marked as posted");
                 listener.Stop();
                 serving.Wait(2000);
             }

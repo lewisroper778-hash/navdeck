@@ -1,7 +1,7 @@
 // Shared state, server API, units and formatting for NAVDECK EFB.
 
 export const S = {
-  flight: null, settings: null, library: null, history: [],
+  flight: null, settings: null, library: null, safety: null, history: [],
   sim: { connected: false }, info: {}, notices: [],
 };
 const listeners = { doc: [], sim: [], notify: [] };
@@ -74,6 +74,8 @@ function normalize() {
   const st = S.settings || {};
   S.settings = { ...DEFAULT_SETTINGS, ...st, units: { ...DEFAULT_SETTINGS.units, ...(st.units || {}) }, gsx: { ...DEFAULT_SETTINGS.gsx, ...(st.gsx || {}) } };
   S.library = { pins: {}, colors: {}, last: {}, ink: {}, pagePins: {}, night: {}, ...(S.library || {}) };
+  S.safety = { reports: {}, ...(S.safety || {}) };
+  if (Array.isArray(S.safety.reports)) S.safety.reports = {};
   const f = S.flight || (S.flight = blankFlight());
   const b = blankFlight();
   for (const k of Object.keys(b)) if (f[k] == null && b[k] != null && k !== 'id' && k !== 'created') f[k] = b[k];
@@ -86,7 +88,7 @@ function normalize() {
 
 export async function loadState() {
   const state = await api('/api/state');
-  Object.assign(S, { flight: state.flight, settings: state.settings, library: state.library || {},
+  Object.assign(S, { flight: state.flight, settings: state.settings, library: state.library || {}, safety: state.safety || {},
     history: state.history || [], sim: state.sim || { connected: false }, info: state.info || {} });
   normalize();
   syncClock();

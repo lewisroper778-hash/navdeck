@@ -11,11 +11,12 @@ import times from './tabs/times.js';
 import landing from './tabs/landing.js';
 import gsx from './tabs/gsx.js';
 import { docs } from './tabs/library.js';
+import safety from './tabs/safety.js';
 import live from './tabs/live.js';
 import report from './tabs/report.js';
 import settings from './tabs/settings.js';
 
-const TABS = { flight, occ, loads, navlog, times, landing, gsx, live, docs, report, settings };
+const TABS = { flight, occ, loads, navlog, times, landing, gsx, live, safety, docs, report, settings };
 const view = document.getElementById('view');
 const rail = document.getElementById('rail');
 const topbar = document.getElementById('topbar');
@@ -29,14 +30,25 @@ export function activeTabs() {
   return order.map(t => ({ ...ALL_TABS.find(a => a.id === t.id), on: t.on !== false || t.id === 'settings' }));
 }
 
+// Sidebar: sections (flight, ground and traffic, library) split by thin dividers, Settings pinned at the bottom.
+// Counts show unread OCC messages and open safety reports.
+const RAIL_GROUPS = ['flight', 'ground', 'library'];
 function renderRail() {
   const profile = activeProfile();
   const unread = Object.values(S.flight.occ.messages || {}).filter(m => !m.ack).length;
+  const openSafety = Object.values(S.safety?.reports || {}).filter(r => r.status !== 'closed').length;
+  const badge = { occ: unread > 0 ? [unread, ''] : null, safety: openSafety > 0 ? [openSafety, 'warn'] : null };
+  const link = t => h('a', { href: '#' + t.id, class: t.id === currentId ? 'active' : '', title: t.label, 'aria-current': t.id === currentId ? 'page' : null },
+    h('span', { class: 'ico', html: `<svg viewBox="0 0 24 24"><path d="${t.icon}"/></svg>` }), h('span', { class: 'lbl' }, t.label),
+    badge[t.id] && h('span', { class: 'dot ' + badge[t.id][1] }, badge[t.id][0]));
+  const tabs = activeTabs().filter(t => t.on);
+  const sections = RAIL_GROUPS.map(g => tabs.filter(t => (t.group || 'flight') === g)).filter(list => list.length);
   rail.replaceChildren(
-    h('div', { class: 'brand' }, profile?.logo ? h('img', { class: 'airline', src: profile.logo, alt: '' }) : h('img', { src: 'img/logo.svg', alt: 'NAVDECK' }), profile?.icao || 'NAVDECK'),
-    activeTabs().filter(t => t.on).map(t => h('a', { href: '#' + t.id, class: t.id === currentId ? 'active' : '' },
-      h('span', { html: `<svg viewBox="0 0 24 24"><path d="${t.icon}"/></svg>` }), t.label,
-      t.id === 'occ' && unread > 0 && h('span', { class: 'dot' }, unread))));
+    h('a', { class: 'brand', href: '#flight', title: profile?.name || 'NAVDECK EFB' },
+      profile?.logo ? h('img', { class: 'airline', src: profile.logo, alt: '' }) : h('img', { src: 'img/logo.svg', alt: 'NAVDECK' }),
+      profile?.icao && h('span', null, profile.icao)),
+    h('div', { class: 'rail-groups' }, sections.map(list => h('div', { class: 'rail-group' }, list.map(link)))),
+    h('div', { class: 'rail-foot' }, tabs.filter(t => t.group === 'system').map(link)));
 }
 
 function go(id) {
@@ -215,6 +227,7 @@ async function start() {
 
   on('doc', doc => {
     if (doc === 'settings' || doc === 'flight') { applyTheme(); renderRail(); renderTopbar(); }
+    else if (doc === 'safety') renderRail();
     if (doc === 'flight') { autoMessages(); announceMessages(); }
     if (doc === 'settings' && !activeTabs().some(t => t.on && t.id === currentId)) go(currentId);
     refresh(doc);

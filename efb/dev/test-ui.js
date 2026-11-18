@@ -258,6 +258,50 @@ async function sign(page) {
     await tab('flight');
     await shot('16-day-mode');
 
+    // safety reports: suggested from the go-around, opened, completed, signed, closed (locked) and posted to Discord
+    await tab('safety');
+    await page.waitForSelector('text=Unstable approach / go-around suggested');
+    check(true, 'go-around suggests an unstable approach report');
+    await page.click('.banner button:has-text("Open report")');
+    await page.waitForSelector('.sr-editor');
+    const srText = await page.locator('.sr-editor').innerText();
+    check(/SR-\d{4}-0001/.test(srText) && /Open/.test(srText), 'safety report opened with a number');
+    check(await page.$$eval('.sr-editor input', els => els.some(e => e.value === 'Unstable approach')), 'report filled in from the flight (go-around reason)');
+    await page.click('.sr-editor button:has-text("Sign and close")');
+    await page.waitForSelector('text=Not ready to close');
+    check(await page.locator('.sig-canvas').count() === 0, 'an incomplete report cannot be closed');
+    await page.click('.sr-editor .seg button:has-text("Medium")');
+    const srSelects = page.locator('.sr-editor select');
+    await srSelects.nth(0).selectOption('1000 ft (instrument)');
+    await srSelects.nth(1).selectOption('Sink rate');
+    await page.fill('.sr-editor textarea', 'Sink rate above 1,200 fpm at 600 ft after a late descent clearance. Went around and landed off the second approach.');
+    await page.click('.sr-head');
+    await page.waitForSelector('text=Ready to close.', { timeout: 5000 }).catch(async e => { await shot('debug-safety'); console.log('DBG', await page.locator('.sr-foot').innerText()); throw e; });
+    await page.click('.sr-editor button:has-text("Sign and close")');
+    await page.waitForSelector('.sig-canvas');
+    await sign(page);
+    await page.locator('.modal select').selectOption('Lessons learned shared with pilots');
+    await page.click('.modal-foot .btn.primary');
+    await page.waitForSelector('.sr-editor .tag:has-text("Posted to Discord")', { timeout: 6000 }).catch(async e => { await shot('debug-safety'); console.log('DBG', await page.locator('body').innerText()); throw e; });
+    check(true, 'closed safety report posted to Discord');
+    check(await page.locator('.sr-editor textarea, .sr-editor select, .sr-editor button:has-text("Sign and close")').count() === 0, 'a closed report is locked');
+    const lockedTry = await page.evaluate(async () => {
+      const s = await fetch('/api/state').then(r => r.json()); const id = Object.keys(s.safety.reports)[0];
+      await fetch('/api/patch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ doc: 'safety', ops: [{ op: 'set', path: ['reports', id, 'narrative'], value: 'changed' }] }) });
+      return fetch('/api/state').then(r => r.json()).then(x => x.safety.reports[id].narrative);
+    });
+    check(lockedTry.startsWith('Sink rate'), 'server refuses edits to a closed report');
+    await page.click('button:has-text("New report")');
+    await page.click('.sr-type[data-type="birdstrike"]');
+    await page.waitForSelector('.sr-editor h3:has-text("Bird strike")');
+    await page.waitForTimeout(300);
+    check(await page.locator('#rail a[href="#safety"] .dot').innerText() === '1', 'sidebar counts the open safety report');
+    check((await page.locator('.seg button.on').first().innerText()).startsWith('Open (1)'), 'open and closed reports listed separately');
+    await shot('20-safety');
+    await page.click('.seg button:has-text("Closed")');
+    await page.waitForTimeout(200);
+    await shot('21-safety-closed');
+
     // the printable journey log, with the airline worked out from the flight and its logo from the airline profile
     await page.evaluate(() => import('/js/core.js').then(m => m.setS(['profiles'], [{ id: 'p1', name: 'British Airways', icao: 'BAW', color: '#2563eb', logo: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==' }])));
     const report = await ctx.newPage();
@@ -268,6 +312,7 @@ async function sign(page) {
     const text = await report.locator('#page').innerText();
     check(/Unstable approach/.test(text), 'journey log includes the go-around reason');
     check(/British Airways BA \/ BAW/.test(text), 'journey log names the airline from the flight');
+    check(/SR-\d{4}-0001/.test(text), 'journey log lists the flight\'s safety reports');
     check(await report.locator('.band img.airline').count() === 1, 'journey log carries the airline logo from the profile');
     const guess = await report.evaluate(() => import('/js/airlines.js').then(m => [m.airlineOf({ flightNo: 'EZY45TK' })?.name, m.airlineOf({ callsign: 'U22041' })?.name, m.airlineOf({ flightNo: 'FR1234' })?.name, m.airlineOf({ flightNo: 'XYZ1' })]));
     check(guess[0] === 'easyJet' && guess[1] === 'easyJet' && guess[2] === 'Ryanair' && guess[3] === null, 'airline recognised from ICAO or IATA flight numbers: ' + JSON.stringify(guess));

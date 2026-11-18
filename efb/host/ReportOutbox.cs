@@ -81,6 +81,29 @@ internal sealed class ReportOutbox : IDisposable
         return true;
     }
 
+    // Called when a safety report is closed. Safety reports are posted as a Discord message (no PDF).
+    public bool EnqueueSafety(JsonObject report)
+    {
+        if (!Available) return false;
+        var id = new string(J.Str(report["id"]).Where(char.IsLetterOrDigit).Take(40).ToArray());
+        if (id.Length == 0) return false;
+        var item = new JsonObject
+        {
+            ["kind"] = "safety",
+            ["id"] = "sr" + id,
+            ["reportId"] = id,
+            ["flight"] = J.Str(report["number"]),
+            ["route"] = J.Str(report["typeName"]),
+            ["report"] = report.DeepClone(),
+            ["tries"] = 0,
+            ["nextTry"] = J.Iso(DateTime.UtcNow),
+        };
+        ((JsonObject)item["report"]!)["closed"]?.AsObject().Remove("signature");   // keep the outbox small
+        File.WriteAllText(Path.Combine(_dir, "sr" + id + ".json"), item.ToJsonString());
+        _wake.Release();
+        return true;
+    }
+
     private async Task LoopAsync()
     {
         var token = _cts.Token;
@@ -119,17 +142,24 @@ internal sealed class ReportOutbox : IDisposable
                 if (JsonNode.Parse(await File.ReadAllTextAsync(file, token)) is not JsonObject item) continue;
                 if (!ignoreSchedule && J.Time(item["nextTry"]) is { } next && next > DateTime.UtcNow) continue;
 
-                var (result, waitSeconds) = await TrySendAsync(item, token);
+                var safety = J.Str(item["kind"]) == "safety";
+                var (result, waitSeconds) = safety ? await TrySendSafetyAsync(item, token) : await TrySendAsync(item, token);
                 if (result == Outcome.Sent)
                 {
                     File.Delete(file);
                     sent++;
-                    _store.Notify("Journey log posted", $"{J.Str(item["flight"])} {J.Str(item["route"])} was sent to the NAVDECK Discord.", "good");
+                    if (safety)
+                    {
+                        _store.MarkSafety(J.Str(item["reportId"]), "discord", J.Iso(DateTime.UtcNow));
+                        _store.Notify("Safety report posted", $"{J.Str(item["flight"])} {J.Str(item["route"])} was sent to the NAVDECK Discord.", "good");
+                    }
+                    else _store.Notify("Journey log posted", $"{J.Str(item["flight"])} {J.Str(item["route"])} was sent to the NAVDECK Discord.", "good");
                 }
                 else if (result == Outcome.Rejected)
                 {
                     Directory.CreateDirectory(_failedDir);
                     File.Move(file, Path.Combine(_failedDir, Path.GetFileName(file)), overwrite: true);
+                    if (safety) _store.MarkSafety(J.Str(item["reportId"]), "discord", "failed");
                     _store.Notify("Journey log not sent", $"Discord did not accept the report for {J.Str(item["flight"])}. Export the PDF from the Report tab instead.", "bad");
                 }
                 else
@@ -248,6 +278,73 @@ internal sealed class ReportOutbox : IDisposable
         try { return Convert.FromBase64String(dataUrl[prefix.Length..]); }
         catch (FormatException) { return null; }
     }
+
+    private async Task<(Outcome, double?)> TrySendSafetyAsync(JsonObject item, CancellationToken token)
+    {
+        if (item["report"] is not JsonObject r) return (Outcome.Rejected, null);
+        var flight = r["flight"] as JsonObject;
+        var closed = r["closed"] as JsonObject;
+        string S(JsonNode? n) => J.Str(n) is { Length: > 0 } v ? v : "-";
+        var severity = J.Str(r["severity"]);
+        var color = severity switch { "High" => 0xEF4444, "Medium" => 0xF59E0B, _ => 0x22C55E };
+        var fields = new JsonArray
+        {
+            EmbedField("Report", S(r["number"])),
+            EmbedField("Type", S(r["typeName"])),
+            EmbedField("Severity", S(r["severity"])),
+            EmbedField("Flight", S(flight?["flightNo"])),
+            EmbedField("Route", $"{S(flight?["dep"])}-{S(flight?["arr"])}"),
+            EmbedField("Aircraft", string.Join(" ", new[] { J.Str(flight?["type"]), J.Str(flight?["reg"]) }.Where(x => x.Length > 0)) is { Length: > 0 } ac ? ac : "-"),
+            EmbedField("Reported by", S(r["openedBy"])),
+            EmbedField("Opened", S(r["openedAt"]).Replace('T', ' ').Split('.')[0] + "z"),
+            EmbedField("Closed", S(closed?["time"]).Replace('T', ' ').Split('.')[0] + "z"),
+        };
+        if (r["fields"] is JsonObject details)
+            foreach (var (key, value) in details)
+            {
+                if (fields.Count >= 22) break;
+                var text = J.Str(value);
+                if (text.Length == 0) continue;
+                fields.Add(EmbedField(J.Str(r["labels"]?[key]) is { Length: > 0 } l ? l : key, text));
+            }
+        fields.Add(new JsonObject { ["name"] = "Outcome", ["value"] = Clip(S(closed?["outcome"]), 1000), ["inline"] = false });
+        if (J.Str(closed?["actions"]).Length > 0)
+            fields.Add(new JsonObject { ["name"] = "Actions taken", ["value"] = Clip(J.Str(closed?["actions"]), 1000), ["inline"] = false });
+        fields.Add(new JsonObject { ["name"] = "Closed by", ["value"] = S(closed?["name"]), ["inline"] = true });
+
+        var title = $"Safety report {S(r["number"])}: {S(r["typeName"])}";
+        var payload = new JsonObject
+        {
+            ["username"] = "NAVDECK EFB",
+            ["content"] = $"**{title}**",
+            ["allowed_mentions"] = new JsonObject { ["parse"] = new JsonArray() },
+            ["embeds"] = new JsonArray(new JsonObject
+            {
+                ["title"] = Clip(J.Str(r["title"]) is { Length: > 0 } t ? $"{title} - {t}" : title, 250),
+                ["description"] = Clip(J.Str(r["narrative"]), 3500),
+                ["color"] = color,
+                ["fields"] = fields,
+                ["footer"] = new JsonObject { ["text"] = $"NAVDECK EFB {EfbServer.Version} | Safety report closed" },
+            }),
+        };
+        using var form = new MultipartFormDataContent();
+        form.Add(new StringContent(payload.ToJsonString(), System.Text.Encoding.UTF8, "application/json"), "payload_json");
+        try
+        {
+            var url = _webhook + (_webhook!.Contains('?') ? "&" : "?") + "wait=true";
+            using var response = await Http.PostAsync(url, form, token);
+            if (response.IsSuccessStatusCode) return (Outcome.Sent, null);
+            if (response.StatusCode == HttpStatusCode.TooManyRequests)
+                return (Outcome.RetryLater, response.Headers.RetryAfter?.Delta?.TotalSeconds is { } s ? Math.Max(5, s) : 60);
+            return response.StatusCode is HttpStatusCode.BadRequest ? (Outcome.Rejected, null) : (Outcome.RetryLater, null);
+        }
+        catch (Exception) when (!token.IsCancellationRequested)
+        {
+            return (Outcome.RetryLater, null);
+        }
+    }
+
+    private static string Clip(string s, int max) => s.Length > max ? s[..(max - 1)] + "…" : s;
 
     private static JsonObject EmbedField(string name, string value) =>
         new() { ["name"] = name, ["value"] = value.Length > 1000 ? value[..1000] : value, ["inline"] = true };
