@@ -10,6 +10,9 @@ const MANUAL_FOLDERS = [
   [/^(BCS1|BCS3|A22\d)/, 'Airbus A220'], [/^(A318|A319|A320|A321|A19N|A20N|A21N)/, 'Airbus A320 family'],
   [/^A33/, 'Airbus A330'], [/^A34/, 'Airbus A340'], [/^A35/, 'Airbus A350'],
   [/^(B73|B37M|B38M|B39M|B3XM)/, 'Boeing 737'], [/^B75/, 'Boeing 757'], [/^B76/, 'Boeing 767'], [/^B77/, 'Boeing 777'], [/^B78/, 'Boeing 787'],
+  [/^(A30B|A306|A310|A3ST)/, 'Airbus A300 and A310'], [/^A38/, 'Airbus A380'], [/^B74/, 'Boeing 747'], [/^MD11/, 'McDonnell Douglas MD-11'],
+  [/^MD8/, 'McDonnell Douglas MD-80'], [/^(E17|E75|E19|E29)/, 'Embraer E-Jets'], [/^CRJ/, 'Bombardier CRJ'], [/^AT[4-7]/, 'ATR 42 and 72'],
+  [/^DH8/, 'De Havilland Dash 8-400'], [/^(B46|RJ)/, 'BAe 146'],
 ];
 const manualFolder = type => { const t = String(type || '').toUpperCase().trim(); return (MANUAL_FOLDERS.find(([re]) => re.test(t)) || [])[1]; };
 const baseName = path => path.split('/').pop().replace(/\.(pdf|png|jpe?g)$/i, '');

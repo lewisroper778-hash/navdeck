@@ -65,6 +65,7 @@ export const onError = fn => { toastError = fn; };
 
 export const DEFAULT_SETTINGS = {
   theme: 'night', units: { weight: 'kg', volume: 'l', alt: 'ft', press: 'hpa' }, clock: 'auto',
+  hardLandingFpm: 600, minLandingFuelKg: 1500,
   simbriefUser: '', picName: '', fuelCheckOn: true, fuelCheckMin: 30, hideTocTod: false, autoMessages: true,
   tabs: null, profiles: [], activeProfile: '', gsx: { host: '127.0.0.1', port: 8380, path: '/' },
   vatsimCid: '', vatsimFriends: [], sendReports: true,

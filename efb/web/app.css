@@ -44,12 +44,20 @@ h1, h2, h3, h4, p { margin: 0; }
 #rail a .lbl { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #rail a .dot { position: absolute; top: 3px; right: 9px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--bad); color: #fff; font-size: 10px; font-weight: 700; line-height: 16px; text-align: center; box-shadow: 0 0 0 2px var(--panel); }
 #rail a .dot.warn { background: var(--warn); color: #1a1a1a; }
-@media (max-height: 760px) {
-  #rail a:not(.brand) { padding: 5px 2px; }
-  #rail a .lbl { display: none; }
-  #rail a .ico { height: 32px; width: 40px; }
-  #rail .brand { padding-bottom: 4px; }
+/* short screens: keep the names, tighten the spacing so every section still fits */
+@media (max-height: 800px) {
+  #rail a:not(.brand) { padding: 4px 2px 3px; gap: 1px; font-size: 10px; }
+  #rail a .ico { height: 24px; width: 34px; }
+  #rail a svg { width: 18px; height: 18px; }
+  #rail .rail-group { padding: 4px 0; }
+  #rail .brand { padding: 2px 0 4px; } #rail .brand img { width: 30px; height: 30px; }
   #rail a.active::before { top: 6px; bottom: 6px; }
+}
+@media (max-height: 640px) {
+  #rail a:not(.brand) { padding: 2px; font-size: 9.5px; }
+  #rail a .ico { height: 20px; }
+  #rail a svg { width: 16px; height: 16px; }
+}
 }
 
 #main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -274,6 +282,8 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
 .sr-val { padding: 8px 0; font-weight: 600; }
 .sr-text { white-space: pre-wrap; font-weight: 400; line-height: 1.5; }
 .sr-foot { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.sr-required { align-items: flex-start; }
+.sr-due { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
 .sr-closed { margin-top: 16px; padding: 12px 14px; border-radius: 10px; background: var(--card2); display: flex; flex-direction: column; gap: 6px; }
 .sr-types { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
 .sr-type { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--card2); color: var(--text); text-align: left; cursor: pointer; font: inherit; }

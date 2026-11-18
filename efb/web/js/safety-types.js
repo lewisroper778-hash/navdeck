@@ -102,8 +102,8 @@ export const SAFETY_TYPES = [
     id: 'fuel', name: 'Fuel event', short: 'FUEL', icon: 'M6 20V5a1 1 0 011-1h7a1 1 0 011 1v15M4 20h13M15 9h2l2 2v6a1 1 0 01-2 0v-3h-2',
     hint: 'Minimum or emergency fuel, low fuel on arrival, an imbalance or a suspected leak.',
     fields: [
-      { k: 'event', label: 'Event', kind: 'select', options: ['Minimum fuel declared', 'MAYDAY fuel declared', 'Landed below final reserve', 'Fuel imbalance', 'Suspected fuel leak', 'Fuel below plan'], req: true },
-      { k: 'fuelArr', label: 'Fuel on arrival (kg)', kind: 'num', auto: f => f.fuel?.in ?? f.fuel?.on ?? '' },
+      { k: 'event', label: 'Event', kind: 'select', auto: (f, st) => (f.fuel?.on != null && f.fuel.on < minLandingFuelKg(st) ? 'Landed below minimum fuel' : ''), options: ['Landed below minimum fuel', 'Minimum fuel declared', 'MAYDAY fuel declared', 'Landed below final reserve', 'Fuel imbalance', 'Suspected fuel leak', 'Fuel below plan'], req: true },
+      { k: 'fuelArr', label: 'Fuel at landing (kg)', kind: 'num', auto: f => (f.fuel?.on ?? f.fuel?.in) != null ? Math.round(f.fuel.on ?? f.fuel.in) : '' },
       { k: 'reserve', label: 'Final reserve (kg)', kind: 'num' },
       { k: 'cause', label: 'Main cause', kind: 'select', options: ['Holding / delays', 'Weather', 'Routing', 'Higher burn than planned', 'Planning error', 'Technical', 'Other'], req: true },
     ],
@@ -112,13 +112,24 @@ export const SAFETY_TYPES = [
 
 export const safetyType = id => SAFETY_TYPES.find(t => t.id === id);
 
-// Reports the current flight probably needs (shown as suggestions on the Safety page).
-export function suggestedReports(f, reports) {
+export const hardLandingFpm = st => (+st?.hardLandingFpm > 0 ? +st.hardLandingFpm : 600);
+export const minLandingFuelKg = st => (+st?.minLandingFuelKg > 0 ? +st.minLandingFuelKg : 1500);
+
+// Safety reports this flight must have, filed and closed, before it can be signed and closed:
+// any go-around or touch-and-go, a hard landing, or landing below the minimum fuel.
+// Same rules as Store.RequiredSafety on the Windows host, which enforces them.
+export function requiredReports(f, reports, st) {
   if (!f || f.id === 'none') return [];
   const mine = Object.values(reports || {}).filter(r => r.flight?.id === f.id);
-  const has = type => mine.some(r => r.type === type);
   const out = [];
-  if (f.goArounds?.length && !has('unstable')) out.push({ type: 'unstable', why: `${f.goArounds.length} go-around${f.goArounds.length > 1 ? 's' : ''} recorded on this flight` });
-  if (f.landing?.rate >= 600 && !has('hardlanding')) out.push({ type: 'hardlanding', why: `Landing rate ${Math.round(f.landing.rate)} fpm` });
+  const add = (type, why) => {
+    const list = mine.filter(r => r.type === type);
+    const closed = list.find(r => r.status === 'closed');
+    out.push({ type, why, done: !!closed, report: closed || list.find(r => r.status !== 'closed') || null });
+  };
+  const ga = f.goArounds?.length || 0;
+  if (ga) add('unstable', ga === 1 ? 'go-around detected' : `${ga} go-arounds detected`);
+  if (f.landing?.rate >= hardLandingFpm(st)) add('hardlanding', `landing rate ${Math.round(f.landing.rate)} fpm`);
+  if (f.fuel?.on != null && f.fuel.on < minLandingFuelKg(st)) add('fuel', `landed with ${Math.round(f.fuel.on).toLocaleString('en-GB')} kg, below the ${minLandingFuelKg(st).toLocaleString('en-GB')} kg minimum`);
   return out;
 }

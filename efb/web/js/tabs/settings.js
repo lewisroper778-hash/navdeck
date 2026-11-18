@@ -121,6 +121,11 @@ function topics() {
         toggle(['sendReports'], st.sendReports !== false, 'Post journey logs to the NAVDECK Discord')),
       row('Waiting to be sent', 'Logs are kept and retried automatically when the PC is offline.', h('span', { class: 'mono' }, String(S.info.outbox ?? 0))),
     ] },
+    { id: 'safety', label: 'Safety reports', rows: [
+      row('Hard landing limit (fpm)', 'A landing at or above this rate needs a hard landing safety report before the flight can be closed.', text(['hardLandingFpm'], st.hardLandingFpm, '600', 'number')),
+      row('Minimum fuel at landing (kg)', 'Landing with less fuel than this needs a fuel event safety report before the flight can be closed. Always in kg.', text(['minLandingFuelKg'], st.minLandingFuelKg, '1500', 'number')),
+      row('Go-arounds', 'Every go-around or touch-and-go needs an unstable approach / go-around safety report before the flight can be closed.', h('span', { class: 'muted' }, 'Always required')),
+    ] },
     { id: 'units', label: 'Units', rows: [
       row('Weight and fuel', 'Kilograms or pounds everywhere, including the PDF.', seg(['units', 'weight'], [['kg', 'KG'], ['lb', 'LB']], u.weight)),
       row('Fuel volume', 'Used for uplift.', seg(['units', 'volume'], [['l', 'Litres'], ['usg', 'US gallons']], u.volume)),

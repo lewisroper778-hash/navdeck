@@ -188,7 +188,7 @@ internal sealed class FlightEngine
         {
             ["time"] = J.Iso(now), ["raFt"] = 0.0, ["kind"] = "touch-and-go", ["reason"] = "", ["remark"] = "",
         });
-        _store.Notify("Touch-and-go", message, "warn");
+        _store.Notify("Touch-and-go", message + " A safety report is required before the flight can be closed.", "warn");
     }
 
     private static void ClearLanding(JsonObject f, JsonObject times, JsonObject fuel)
@@ -277,7 +277,7 @@ internal sealed class FlightEngine
         if (_goAround.Update(s, now, airborne: true) is { } ga)
         {
             Arr(f, "goArounds").Add(new JsonObject { ["time"] = J.Iso(now), ["raFt"] = ga.RadioAltFt, ["reason"] = "", ["remark"] = "" });
-            _store.Notify("Go-around detected", "The reason must be entered before the flight can be signed and closed.", "warn");
+            _store.Notify("Go-around detected", "Enter the reason and complete a safety report before the flight can be signed and closed.", "warn");
             changed = true;
         }
 
@@ -416,6 +416,10 @@ internal sealed class FlightEngine
 
         var where = J.Str(landing["runway"]).Length > 0 ? $" on runway {J.Str(landing["runway"])} {J.Str(landing["airport"])}" : "";
         _store.Notify("Landed", $"{_tracker.LandingRate} fpm{where}.", "good");
+        if (_tracker.LandingRate is { } r && r >= _store.HardLandingFpm)
+            _store.Notify("Hard landing: safety report required", $"Landing rate {r:0} fpm. File a hard landing report in Safety before closing the flight.", "bad");
+        if (fobKg is { } low && low < _store.MinLandingFuelKg)
+            _store.Notify("Low fuel: safety report required", $"Landed with {low:N0} kg, below the {_store.MinLandingFuelKg:N0} kg minimum. File a fuel event report in Safety before closing the flight.", "bad");
     }
 
     // ---------------------------------------------------------------- fuel uplift while parked

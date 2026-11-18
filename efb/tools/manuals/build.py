@@ -22,7 +22,9 @@ SIM_ONLY = "For flight simulation only. Not for real-world flight operations."
 
 FOLDERS = {"A220": "Airbus A220", "A320": "Airbus A320 family", "A330": "Airbus A330", "A340": "Airbus A340",
            "A350": "Airbus A350", "737": "Boeing 737", "757": "Boeing 757", "767": "Boeing 767", "777": "Boeing 777",
-           "787": "Boeing 787"}
+           "787": "Boeing 787", "A300": "Airbus A300 and A310", "A380": "Airbus A380", "747": "Boeing 747",
+           "MD-11": "McDonnell Douglas MD-11", "MD-80": "McDonnell Douglas MD-80", "E-Jet": "Embraer E-Jets",
+           "CRJ": "Bombardier CRJ", "ATR": "ATR 42 and 72", "Q400": "De Havilland Dash 8-400", "BAe146": "BAe 146"}
 
 CSS = """
 @page { size: A5; margin: 13mm 11mm 15mm 11mm; }
@@ -133,6 +135,9 @@ def build_qrh(v):
     f = v["f"]
     w = qrh.vocab(f, v)
     chapters = [(title, fn(f, v, w)) for title, fn in qrh.CHAPTERS]
+    if not f.get("apu"):   # aircraft without an APU (ATR): drop APU steps and the APU fire checklist
+        no_apu = lambda st: not (isinstance(st, tuple) and st[0].startswith("APU"))
+        chapters = [(t, [dict(c, steps=[x for x in c["steps"] if no_apu(x)]) for c in cls if c["title"] != "APU fire"]) for t, cls in chapters]
     toc = []
     body = []
     for ci, (title, cls) in enumerate(chapters, 1):
@@ -197,6 +202,24 @@ separate {e(v['title'])} QRH.</p>
     return cover("FCOM", v) + intro + body
 
 
+TURBOPROP_WORDS = [("Thrust levers", "Power levers"), ("thrust levers", "power levers"), ("Thrust lever", "Power lever"),
+                   ("thrust lever", "power lever"), ("Reverse thrust", "Reverse power"), ("reverse thrust", "reverse power"),
+                   ("Thrust reverse", "Reverse power"), ("N2 (or N3)", "NH"), ("% N1", "% TQ"), ("N1", "TQ"), ("EGT", "ITT"),
+                   ("Autothrottle", "Autothrottle (if fitted)"), ("TO/GA, autothrottle", "takeoff power (RTO/TO), PWR MGT TO")]
+
+
+def turboprop_words(v, html_text):
+    """Turboprops use power levers, torque (TQ) and ITT instead of thrust levers, N1 and EGT."""
+    if not v["f"].get("apu"):
+        for a, b in (("Engines and APU", "Engines"), (" (consider before the APU start)", ""), ("Takeoff / initial climb", "Takeoff / initial climb")):
+            html_text = html_text.replace(a, b)
+    if not v["f"].get("turboprop"):
+        return html_text
+    for a, b in TURBOPROP_WORDS:
+        html_text = html_text.replace(a, b)
+    return html_text
+
+
 def page(title, content):
     return f'<!doctype html><html lang="en-GB"><head><meta charset="utf-8"><title>{e(title)}</title><style>{CSS}</style></head><body>{content}</body></html>'
 
@@ -223,7 +246,7 @@ def main():
             os.makedirs(folder, exist_ok=True)
             for doc, builder in (("QRH", build_qrh), ("FCOM", build_fcom)):
                 title = f"{v['title']} {doc}"
-                pg.set_content(page(title, builder(v)), wait_until="load")
+                pg.set_content(page(title, turboprop_words(v, builder(v))), wait_until="load")
                 path = os.path.join(folder, f"{v['key']} {doc}.pdf")
                 pg.pdf(path=path, format="A5", print_background=True, display_header_footer=True,
                        header_template="<span></span>", footer_template=FOOTER.format(doc=doc, title=e(v["title"])),

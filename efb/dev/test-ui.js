@@ -177,6 +177,41 @@ async function sign(page) {
     await page.locator('.modal select').nth(0).selectOption('Unstable approach');
     await page.locator('.modal select').nth(1).selectOption('Accidental touchdown');
     await page.click('.modal-foot .btn.primary');
+    // a go-around makes a safety report mandatory: closing is stopped until it is completed and closed
+    await page.waitForSelector('.modal h3:has-text("Safety report required")');
+    check(/Unstable approach \/ go-around: 2 go-arounds detected \(not filed yet\)/.test(await page.locator('.modal').innerText()), 'go-around makes a safety report mandatory before closing');
+    await page.click('.modal-foot .btn.primary');
+    await page.waitForSelector('.sr-editor');
+    const srText = await page.locator('.sr-editor').innerText();
+    check(/SR-\d{4}-0001/.test(srText) && /Open/.test(srText), 'safety report opened with a number');
+    check(await page.$$eval('.sr-editor input', els => els.some(e => e.value === 'Unstable approach')), 'report filled in from the flight (go-around reason)');
+    await page.click('.sr-editor button:has-text("Sign and close")');
+    await page.waitForSelector('text=Not ready to close');
+    check(await page.locator('.sig-canvas').count() === 0, 'an incomplete report cannot be closed');
+    await page.click('.sr-editor .seg button:has-text("Medium")');
+    const srSelects = page.locator('.sr-editor select');
+    await srSelects.nth(0).selectOption('1000 ft (instrument)');
+    await srSelects.nth(1).selectOption('Sink rate');
+    await page.fill('.sr-editor textarea', 'Sink rate above 1,200 fpm at 600 ft after a late descent clearance. Went around and landed off the second approach.');
+    await page.click('.sr-head');
+    await page.waitForSelector('text=Ready to close.');
+    await page.click('.sr-editor button:has-text("Sign and close")');
+    await page.waitForSelector('.sig-canvas');
+    await sign(page);
+    await page.locator('.modal select').selectOption('Lessons learned shared with pilots');
+    await page.click('.modal-foot .btn.primary');
+    await page.waitForSelector('.sr-editor .tag:has-text("Posted to Discord")');
+    check(true, 'closed safety report posted to Discord');
+    check(await page.locator('.sr-editor textarea, .sr-editor select, .sr-editor button:has-text("Sign and close")').count() === 0, 'a closed report is locked');
+    const lockedTry = await page.evaluate(async () => {
+      const s = await fetch('/api/state').then(r => r.json()); const id = Object.keys(s.safety.reports)[0];
+      await fetch('/api/patch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ doc: 'safety', ops: [{ op: 'set', path: ['reports', id, 'narrative'], value: 'changed' }] }) });
+      return fetch('/api/state').then(r => r.json()).then(x => x.safety.reports[id].narrative);
+    });
+    check(lockedTry.startsWith('Sink rate'), 'server refuses edits to a closed report');
+    await tab('flight');
+    check(await page.locator('.tag.bad:has-text("Required")').count() === 0, 'requirement cleared once the report is closed');
+    await page.click('button:has-text("Sign and close flight")');
     await page.waitForSelector('.sig-canvas');
     await sign(page);
     await page.click('.modal-foot .btn.primary');
@@ -258,39 +293,8 @@ async function sign(page) {
     await tab('flight');
     await shot('16-day-mode');
 
-    // safety reports: suggested from the go-around, opened, completed, signed, closed (locked) and posted to Discord
+    // a second safety report, left open
     await tab('safety');
-    await page.waitForSelector('text=Unstable approach / go-around suggested');
-    check(true, 'go-around suggests an unstable approach report');
-    await page.click('.banner button:has-text("Open report")');
-    await page.waitForSelector('.sr-editor');
-    const srText = await page.locator('.sr-editor').innerText();
-    check(/SR-\d{4}-0001/.test(srText) && /Open/.test(srText), 'safety report opened with a number');
-    check(await page.$$eval('.sr-editor input', els => els.some(e => e.value === 'Unstable approach')), 'report filled in from the flight (go-around reason)');
-    await page.click('.sr-editor button:has-text("Sign and close")');
-    await page.waitForSelector('text=Not ready to close');
-    check(await page.locator('.sig-canvas').count() === 0, 'an incomplete report cannot be closed');
-    await page.click('.sr-editor .seg button:has-text("Medium")');
-    const srSelects = page.locator('.sr-editor select');
-    await srSelects.nth(0).selectOption('1000 ft (instrument)');
-    await srSelects.nth(1).selectOption('Sink rate');
-    await page.fill('.sr-editor textarea', 'Sink rate above 1,200 fpm at 600 ft after a late descent clearance. Went around and landed off the second approach.');
-    await page.click('.sr-head');
-    await page.waitForSelector('text=Ready to close.', { timeout: 5000 }).catch(async e => { await shot('debug-safety'); console.log('DBG', await page.locator('.sr-foot').innerText()); throw e; });
-    await page.click('.sr-editor button:has-text("Sign and close")');
-    await page.waitForSelector('.sig-canvas');
-    await sign(page);
-    await page.locator('.modal select').selectOption('Lessons learned shared with pilots');
-    await page.click('.modal-foot .btn.primary');
-    await page.waitForSelector('.sr-editor .tag:has-text("Posted to Discord")', { timeout: 6000 }).catch(async e => { await shot('debug-safety'); console.log('DBG', await page.locator('body').innerText()); throw e; });
-    check(true, 'closed safety report posted to Discord');
-    check(await page.locator('.sr-editor textarea, .sr-editor select, .sr-editor button:has-text("Sign and close")').count() === 0, 'a closed report is locked');
-    const lockedTry = await page.evaluate(async () => {
-      const s = await fetch('/api/state').then(r => r.json()); const id = Object.keys(s.safety.reports)[0];
-      await fetch('/api/patch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ doc: 'safety', ops: [{ op: 'set', path: ['reports', id, 'narrative'], value: 'changed' }] }) });
-      return fetch('/api/state').then(r => r.json()).then(x => x.safety.reports[id].narrative);
-    });
-    check(lockedTry.startsWith('Sink rate'), 'server refuses edits to a closed report');
     await page.click('button:has-text("New report")');
     await page.click('.sr-type[data-type="birdstrike"]');
     await page.waitForSelector('.sr-editor h3:has-text("Bird strike")');
@@ -298,6 +302,23 @@ async function sign(page) {
     check(await page.locator('#rail a[href="#safety"] .dot').innerText() === '1', 'sidebar counts the open safety report');
     check((await page.locator('.seg button.on').first().innerText()).startsWith('Open (1)'), 'open and closed reports listed separately');
     await shot('20-safety');
+    const rules = await page.evaluate(() => import('/js/safety-types.js').then(m => [
+      m.requiredReports({ id: 'a', goArounds: [], landing: { rate: 640 }, fuel: { on: 3000 } }, {}, {}).map(r => r.type).join(','),
+      m.requiredReports({ id: 'b', goArounds: [], landing: { rate: 300 }, fuel: { on: 1400 } }, {}, {}).map(r => r.type).join(','),
+      m.requiredReports({ id: 'c', goArounds: [], landing: { rate: 300 }, fuel: { on: 1600 } }, {}, {}).length,
+      m.requiredReports({ id: 'd', goArounds: [], landing: { rate: 640 }, fuel: { on: 3000 } }, {}, { hardLandingFpm: 700 }).length]));
+    check(rules[0] === 'hardlanding' && rules[1] === 'fuel' && rules[2] === 0 && rules[3] === 0, 'hard landing (600 fpm) and landing below 1,500 kg need a report: ' + JSON.stringify(rules));
+    const shortPage = await browser.newPage({ viewport: { width: 1180, height: 700 } });
+    await shortPage.goto(BASE + '/#flight');
+    await shortPage.waitForSelector('#rail .lbl');
+    const railOk = await shortPage.evaluate(() => {
+      const r = document.getElementById('rail');
+      const labels = [...r.querySelectorAll('a .lbl')];
+      return labels.length >= 12 && labels.every(l => l.offsetWidth > 0) && r.scrollHeight <= r.clientHeight + 1;
+    });
+    check(railOk, 'sidebar shows every section name and fits a short screen without scrolling');
+    await shortPage.screenshot({ path: path.join(OUT, '22-sidebar-short.png') });
+    await shortPage.close();
     await page.click('.seg button:has-text("Closed")');
     await page.waitForTimeout(200);
     await shot('21-safety-closed');

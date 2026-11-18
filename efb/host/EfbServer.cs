@@ -15,7 +15,7 @@ namespace NavdeckEfb;
 // load the same pages from it and stay in step through /api/events.
 internal sealed class EfbServer : IAsyncDisposable
 {
-    public const string Version = "1.3.0";
+    public const string Version = "1.4.0";
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(20) };
     private readonly Store _store;
     private readonly FlightEngine _engine;
