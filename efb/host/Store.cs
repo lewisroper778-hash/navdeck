@@ -17,6 +17,7 @@ internal sealed class Store : IDisposable
     public JsonObject Flight { get; private set; }
     public JsonObject Settings { get; private set; }
     public JsonObject Library { get; private set; }
+    public JsonObject Safety { get; private set; }
     public JsonArray History { get; private set; } = new JsonArray();
     public string LibraryDir { get; }
     public string DataDir => _dir;
@@ -33,6 +34,8 @@ internal sealed class Store : IDisposable
         Flight = Load("flight") ?? NewFlight();
         Settings = Load("settings") ?? new JsonObject();
         Library = Load("library") ?? new JsonObject();
+        Safety = Load("safety") ?? new JsonObject();
+        if (Safety["reports"] is not JsonObject) Safety["reports"] = new JsonObject();
         LoadHistory();
         _saveTimer = new System.Threading.Timer(_ => Flush(), null, 2000, 2000);
     }
@@ -100,6 +103,7 @@ internal sealed class Store : IDisposable
         "flight" => Flight,
         "settings" => Settings,
         "library" => Library,
+        "safety" => Safety,
         _ => throw new ArgumentException("Unknown document " + name),
     };
 
@@ -111,7 +115,7 @@ internal sealed class Store : IDisposable
         {
             var root = Doc(doc);
             foreach (var op in ops)
-                if (op is JsonObject o) Apply(root, o);
+                if (op is JsonObject o && (doc != "safety" || SafetyOpAllowed(o))) Apply(root, o);
             Touch(doc);
         }
     }
@@ -284,6 +288,100 @@ internal sealed class Store : IDisposable
             _dirty.Add("flight");
             Broadcast(new JsonObject { ["t"] = "history", ["d"] = History.DeepClone() });
             return null;
+        }
+    }
+
+    // ---------------------------------------------------------------- safety reports
+    // Reports live in safety.json, apart from the flight, so they stay open across flights until closed.
+    // A closed report is locked: no more edits, and it cannot be deleted.
+
+    private JsonObject SafetyReports => (JsonObject)Safety["reports"]!;
+
+    private bool SafetyOpAllowed(JsonObject op)
+    {
+        if (op["path"] is not JsonArray path || path.Count < 2 || J.Str(path[0]) != "reports") return false;
+        var report = SafetyReports[J.Str(path[1])] as JsonObject;
+        if (report is null) return false;                                   // reports are opened through OpenSafety
+        if (J.Str(report["status"]) == "closed") return false;
+        if (path.Count == 2) return J.Str(op["op"]) == "del";               // only whole-report delete while open
+        var key = J.Str(path[2]);
+        return key is "fields" or "narrative" or "severity" or "title" or "flight";
+    }
+
+    public JsonObject OpenSafety(JsonObject request, DateTime now)
+    {
+        lock (Gate)
+        {
+            var year = now.Year;
+            var seq = J.Str(Safety["seqYear"]) == year.ToString() ? (int)(J.Num(Safety["seq"]) ?? 0) : 0;
+            seq++;
+            Safety["seq"] = seq;
+            Safety["seqYear"] = year.ToString();
+            var id = Guid.NewGuid().ToString("N")[..12];
+            var report = new JsonObject
+            {
+                ["id"] = id,
+                ["number"] = $"SR-{year}-{seq:0000}",
+                ["type"] = J.Str(request["type"]),
+                ["typeName"] = J.Str(request["typeName"]),
+                ["title"] = J.Str(request["title"]),
+                ["status"] = "open",
+                ["openedAt"] = J.Iso(now),
+                ["openedBy"] = J.Str(request["openedBy"]),
+                ["severity"] = J.Str(request["severity"]),
+                ["flight"] = request["flight"] is JsonObject fl ? fl.DeepClone() : new JsonObject(),
+                ["fields"] = request["fields"] is JsonObject fi ? fi.DeepClone() : new JsonObject(),
+                ["labels"] = request["labels"] is JsonObject la ? la.DeepClone() : new JsonObject(),
+                ["required"] = request["required"] is JsonArray rq ? rq.DeepClone() : new JsonArray(),
+                ["narrative"] = J.Str(request["narrative"]),
+            };
+            SafetyReports[id] = report;
+            Touch("safety");
+            return (JsonObject)report.DeepClone();
+        }
+    }
+
+    // Returns null when closed, or the reason it cannot be closed yet.
+    public string? CloseSafety(string id, JsonObject closure, DateTime now, out JsonObject? closedReport)
+    {
+        closedReport = null;
+        lock (Gate)
+        {
+            if (SafetyReports[id] is not JsonObject r) return "Report not found.";
+            if (J.Str(r["status"]) == "closed") return "This report is already closed.";
+            var missing = new List<string>();
+            if (J.Str(r["severity"]).Length == 0) missing.Add("severity");
+            if (J.Str(r["narrative"]).Trim().Length < 10) missing.Add("what happened (at least a sentence)");
+            var fields = r["fields"] as JsonObject;
+            foreach (var key in (r["required"] as JsonArray ?? new JsonArray()).Select(k => J.Str(k)))
+                if (fields?[key] is null || (J.Str(fields[key]).Trim().Length == 0 && J.Num(fields[key]) is null))
+                    missing.Add(J.Str(r["labels"]?[key]) is { Length: > 0 } l ? l : key);
+            if (J.Str(closure["name"]).Trim().Length == 0) missing.Add("your name");
+            if (J.Str(closure["outcome"]).Trim().Length == 0) missing.Add("the outcome");
+            if (missing.Count > 0) return "Complete before closing: " + string.Join(", ", missing) + ".";
+
+            r["status"] = "closed";
+            r["closed"] = new JsonObject
+            {
+                ["time"] = J.Iso(now),
+                ["name"] = J.Str(closure["name"]).Trim(),
+                ["outcome"] = J.Str(closure["outcome"]).Trim(),
+                ["actions"] = J.Str(closure["actions"]).Trim(),
+                ["signature"] = J.Str(closure["signature"]),
+            };
+            Touch("safety");
+            closedReport = (JsonObject)r.DeepClone();
+            return null;
+        }
+    }
+
+    public void MarkSafety(string id, string key, string value)
+    {
+        lock (Gate)
+        {
+            if (SafetyReports[id] is not JsonObject r) return;
+            r[key] = value;
+            Touch("safety");
         }
     }
 

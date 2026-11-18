@@ -2,7 +2,9 @@
 import { S, h, fmtT, fmtW, fmtDur, fmtDate, diffMs, push, del, api, nowIso, flightTitle, now } from '../core.js';
 import { newFromSimbrief, newBlank, signAndClose, exportPdf } from '../actions.js';
 import { modal, confirmBox, toast, rateRating, rateClass } from '../widgets.js';
-import { CREW_ROLES, SAFETY_CATEGORIES } from '../data.js';
+import { CREW_ROLES } from '../data.js';
+import { safetyType, suggestedReports } from '../safety-types.js';
+import { openReport } from './safety.js';
 
 const PHASES = ['Parked', 'Taxi out', 'Airborne', 'Taxi in', 'Arrived'];
 
@@ -73,23 +75,18 @@ function crewCard() {
       : h('div', { class: 'empty' }, 'No crew entered.'));
 }
 
+// Safety reports linked to this flight. They are filed, completed and closed in the Safety section.
 function safetyCard() {
   const f = S.flight;
-  const add = async () => {
-    const cat = h('select', { class: 'input' }, SAFETY_CATEGORIES.map(r => h('option', null, r)));
-    const text = h('textarea', { class: 'input', rows: 4, placeholder: 'What happened?' });
-    const ok = await modal({ title: 'Safety report', body: h('div', { class: 'stack' }, cat, text), buttons: [{ label: 'Cancel', value: false }, { label: 'File report', value: true, primary: true }] });
-    if (ok && text.value.trim()) {
-      await push('flight', ['safety'], { time: nowIso(), category: cat.value, text: text.value.trim() });
-      toast('Included in the journey log.', 'good', 'Safety report filed');
-    }
-  };
+  const mine = Object.values(S.safety?.reports || {}).filter(r => r.flight?.id === f.id);
+  const tips = suggestedReports(f, S.safety?.reports);
   return h('div', { class: 'card c6' },
-    h('h3', null, 'Safety reports', h('span', { class: 'spacer' }), !f.closed && h('button', { class: 'btn small', onclick: add }, 'New report')),
-    f.safety.length ? h('div', { class: 'stack' }, f.safety.map((r, i) => h('div', { class: 'msg' },
-      h('div', { class: 'body' }, h('div', { class: 'meta' }, fmtT(r.time) + 'z  ·  ' + r.category), r.text),
-      !f.closed && h('button', { class: 'btn small', 'aria-label': 'Remove', onclick: () => del('flight', ['safety', i]) }, '✕'))))
-      : h('div', { class: 'empty' }, 'No safety reports for this flight.'));
+    h('h3', null, 'Safety reports', h('span', { class: 'spacer' }), h('a', { class: 'btn small', href: '#safety' }, 'Open Safety')),
+    tips.map(t => h('div', { class: 'row', style: { marginBottom: '8px' } }, h('span', { class: 'tag warn' }, 'Suggested'), h('span', { style: { flex: '1' } }, `${safetyType(t.type).name}: ${t.why}`),
+      h('button', { class: 'btn small primary', onclick: () => openReport(t.type) }, 'Open'))),
+    mine.length ? h('div', { class: 'stack' }, mine.map(r => h('a', { class: 'msg', href: '#safety', style: { textDecoration: 'none', color: 'inherit' } },
+      h('div', { class: 'body' }, h('div', { class: 'meta' }, `${r.number}  ·  ${r.status === 'closed' ? 'Closed' : 'Open'}${r.severity ? '  ·  ' + r.severity : ''}`), r.typeName + (r.title ? ': ' + r.title : '')))))
+      : !tips.length && h('div', { class: 'empty' }, 'No safety reports for this flight.'));
 }
 
 function historyCard() {
@@ -114,7 +111,7 @@ function historyCard() {
 }
 
 export default {
-  deps: ['flight', 'settings', 'history'],
+  deps: ['flight', 'settings', 'history', 'safety'],
   render(root) {
     const f = S.flight;
     if (!f.dep) {

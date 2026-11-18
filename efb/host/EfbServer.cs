@@ -15,7 +15,7 @@ namespace NavdeckEfb;
 // load the same pages from it and stay in step through /api/events.
 internal sealed class EfbServer : IAsyncDisposable
 {
-    public const string Version = "1.2.0";
+    public const string Version = "1.3.0";
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(20) };
     private readonly Store _store;
     private readonly FlightEngine _engine;
@@ -123,6 +123,7 @@ internal sealed class EfbServer : IAsyncDisposable
                     ["flight"] = _store.Flight.DeepClone(),
                     ["settings"] = _store.Settings.DeepClone(),
                     ["library"] = _store.Library.DeepClone(),
+                    ["safety"] = _store.Safety.DeepClone(),
                     ["history"] = _store.History.DeepClone(),
                     ["sim"] = _engine.Telemetry,
                     ["info"] = new JsonObject
@@ -166,7 +167,7 @@ internal sealed class EfbServer : IAsyncDisposable
         {
             var body = await Body(ctx);
             var doc = J.Str(body?["doc"]);
-            if (body?["ops"] is not JsonArray ops || doc is not ("flight" or "settings" or "library"))
+            if (body?["ops"] is not JsonArray ops || doc is not ("flight" or "settings" or "library" or "safety"))
             {
                 await Json(ctx, new JsonObject { ["error"] = "Bad request" }, 400);
                 return;
@@ -199,6 +200,37 @@ internal sealed class EfbServer : IAsyncDisposable
             }
             if (error is null) await Json(ctx, new JsonObject { ["ok"] = true, ["sending"] = sending });
             else await Json(ctx, new JsonObject { ["error"] = error }, 400);
+        });
+
+        app.MapPost("/api/safety/open", async ctx =>
+        {
+            var body = await Body(ctx);
+            if (body is not JsonObject request || J.Str(request["type"]).Length == 0)
+            {
+                await Json(ctx, new JsonObject { ["error"] = "Bad request" }, 400);
+                return;
+            }
+            await Json(ctx, _store.OpenSafety(request, DateTime.UtcNow));
+        });
+
+        app.MapPost("/api/safety/close", async ctx =>
+        {
+            var body = await Body(ctx);
+            var id = J.Str(body?["id"]);
+            if (body is not JsonObject request || id.Length == 0)
+            {
+                await Json(ctx, new JsonObject { ["error"] = "Bad request" }, 400);
+                return;
+            }
+            var error = _store.CloseSafety(id, request, DateTime.UtcNow, out var closed);
+            if (error is not null)
+            {
+                await Json(ctx, new JsonObject { ["error"] = error }, 400);
+                return;
+            }
+            var sending = Outbox is not null && J.Bool(_store.Settings["sendReports"], true) && Outbox.EnqueueSafety(closed!);
+            _store.MarkSafety(id, "discord", sending ? "sending" : "off");
+            await Json(ctx, new JsonObject { ["ok"] = true, ["sending"] = sending });
         });
 
         app.MapPost("/api/flight/undo-landing", async ctx =>

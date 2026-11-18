@@ -84,7 +84,10 @@ function build() {
   // crew, safety, movement
   const crewAndSafety = [];
   if (f.crew.length) crewAndSafety.push(section('Crew', tbl(['Role', 'Name'], f.crew.map(c => h('tr', null, td(c.role), td(c.name))))));
-  if (f.safety.length) crewAndSafety.push(section('Safety reports', tbl(['Time', 'Category', 'Report'], f.safety.map(r => h('tr', null, td(fmtT(r.time) + 'z'), td(r.category), td(r.text))))));
+  const linked = Object.values(S.safety?.reports || {}).filter(r => r.flight?.id === f.id);
+  const safetyRows = [...f.safety.map(r => [fmtT(r.time) + 'z', r.category, r.text]),
+    ...linked.map(r => [r.number, `${r.typeName}${r.severity ? ' (' + r.severity + ')' : ''}`, `${r.status === 'closed' ? 'Closed' : 'Open'}. ${r.title || r.narrative || ''}`])];
+  if (safetyRows.length) crewAndSafety.push(section('Safety reports', tbl(['Ref', 'Type', 'Report'], safetyRows.map(c => h('tr', null, td(c[0]), td(c[1]), td(c[2]))))));
   if (crewAndSafety.length) body.append(crewAndSafety.length === 2 ? h('div', { class: 'cols' }, crewAndSafety) : crewAndSafety[0]);
   if (f.movement.length) body.append(section('Movement messages', h('div', { class: 'cols' }, f.movement.map(m => h('pre', null, m.text)))));
 

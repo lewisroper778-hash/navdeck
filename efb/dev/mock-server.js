@@ -13,7 +13,7 @@ const MANUALS = path.join(__dirname, '..', 'manuals');
 if (fs.existsSync(MANUALS)) fs.cpSync(MANUALS, path.join(LIB, 'docs'), { recursive: true });
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.pdf': 'application/pdf', '.json': 'application/json', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json' };
 
-const state = { flight: { id: 'none', navlog: [], times: {}, fuel: {}, goArounds: [], fuelChecks: [], crew: [], safety: [], movement: [], occ: { messages: {}, turnaround: {}, delays: [] }, gsx: { receipts: [] } }, settings: {}, library: {}, history: [], archive: {} };
+const state = { flight: { id: 'none', navlog: [], times: {}, fuel: {}, goArounds: [], fuelChecks: [], crew: [], safety: [], movement: [], occ: { messages: {}, turnaround: {}, delays: [] }, gsx: { receipts: [] } }, settings: {}, library: {}, safety: { reports: {} }, history: [], archive: {} };
 let sim = { connected: false };
 const clients = new Set();
 
@@ -120,14 +120,20 @@ http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   const p = decodeURIComponent(url.pathname);
   try {
-    if (p === '/api/state') return json(res, 200, { flight: state.flight, settings: state.settings, library: state.library, history: state.history, sim, info: { urls: ['http://192.168.1.20:' + PORT], version: 'dev' } });
+    if (p === '/api/state') return json(res, 200, { flight: state.flight, settings: state.settings, library: state.library, safety: state.safety, history: state.history, sim, info: { urls: ['http://192.168.1.20:' + PORT], version: 'dev' } });
     if (p === '/api/events') {
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
       res.write(': ok\n\n'); clients.add(res); req.on('close', () => clients.delete(res)); return;
     }
     if (p === '/api/patch' && req.method === 'POST') {
       const body = JSON.parse(await readBody(req));
-      body.ops.forEach(op => applyOp(state[body.doc], op));
+      body.ops.forEach(op => {
+        if (body.doc === 'safety') {   // as on the host: a closed report is locked; reports are opened through /api/safety/open
+          const r = state.safety.reports[op.path[1]];
+          if (op.path[0] !== 'reports' || !r || r.status === 'closed' || (op.path.length === 2 && op.op !== 'del')) return;
+        }
+        applyOp(state[body.doc], op);
+      });
       pushDoc(body.doc);
       return json(res, 200, { ok: true });
     }
@@ -141,6 +147,34 @@ http.createServer(async (req, res) => {
       sim = { ...sim, stage: 2, onGround: false }; send({ t: 'sim', d: sim });
       notify('Landing removed', 'The flight continues; the next landing will be recorded.', 'good'); pushDoc('flight');
       return json(res, 200, { ok: true });
+    }
+    if (p === '/api/safety/open' && req.method === 'POST') {
+      const b = JSON.parse(await readBody(req));
+      state.safety.seq = (state.safety.seq || 0) + 1;
+      const id = Math.random().toString(36).slice(2, 14);
+      const r = { id, number: `SR-${new Date().getUTCFullYear()}-${String(state.safety.seq).padStart(4, '0')}`, type: b.type, typeName: b.typeName, title: '', status: 'open',
+        openedAt: new Date().toISOString(), openedBy: b.openedBy || '', severity: '', flight: b.flight || {}, fields: b.fields || {}, labels: b.labels || {}, required: b.required || [], narrative: b.narrative || '' };
+      state.safety.reports[id] = r; pushDoc('safety');
+      return json(res, 200, r);
+    }
+    if (p === '/api/safety/close' && req.method === 'POST') {
+      const b = JSON.parse(await readBody(req));
+      const r = state.safety.reports[b.id];
+      if (!r) return json(res, 400, { error: 'Report not found.' });
+      if (r.status === 'closed') return json(res, 400, { error: 'This report is already closed.' });
+      const miss = [];
+      if (!r.severity) miss.push('severity');
+      if ((r.narrative || '').trim().length < 10) miss.push('what happened');
+      for (const k of r.required) if (r.fields[k] === '' || r.fields[k] == null) miss.push(r.labels[k] || k);
+      if (!b.name || !b.outcome) miss.push('name and outcome');
+      if (miss.length) return json(res, 400, { error: 'Complete before closing: ' + miss.join(', ') + '.' });
+      r.status = 'closed'; r.closed = { time: new Date().toISOString(), name: b.name, outcome: b.outcome, actions: b.actions || '', signature: b.signature || '' };
+      const sending = state.settings.sendReports !== false;
+      r.discord = sending ? 'sending' : 'off';
+      state.posted = [...(state.posted || []), r.number];
+      pushDoc('safety');
+      if (sending) setTimeout(() => { r.discord = new Date().toISOString(); pushDoc('safety'); notify('Safety report posted', `${r.number} ${r.typeName} was sent to the NAVDECK Discord.`, 'good'); }, 400);
+      return json(res, 200, { ok: true, sending });
     }
     if (p === '/api/flight/close' && req.method === 'POST') {
       const f = state.flight;
