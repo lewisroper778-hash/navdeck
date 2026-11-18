@@ -23,10 +23,14 @@ def vocab(f, v):
         cut, cut_a, fire, fire_a, agent = "Engine start lever (affected)", "CUTOFF", "Engine fire switch (affected)", "PULL", "Discharge"
     else:
         cut, cut_a, fire, fire_a, agent = "FUEL CONTROL switch (affected)", "CUTOFF", "Engine fire switch (affected)", "PULL", "Discharge"
+    if f.get("v_cut"):
+        cut, cut_a = f["v_cut"]
+    if f.get("v_fire"):
+        fire, fire_a = f["v_fire"]
+    thr, thr_a = f.get("v_thr") or (("THR LEVER (affected)", "IDLE") if airbus or fam == "A220" else ("Thrust lever (affected)", "CLOSE"))
     return dict(
         airbus=airbus, fam=fam, cut=cut, cut_a=cut_a, fire=fire, fire_a=fire_a, agent=agent,
-        thr=("THR LEVER (affected)" if airbus or fam == "A220" else "Thrust lever (affected)"),
-        thr_a=("IDLE" if airbus or fam == "A220" else "CLOSE"),
+        thr=thr, thr_a=thr_a,
         at=("A/THR" if airbus or fam == "A220" else "Autothrottle"), at_off=("OFF" if airbus or fam == "A220" else "DISENGAGE"),
         ap=("AP" if airbus or fam == "A220" else "Autopilot"), ap_off=("OFF" if airbus or fam == "A220" else "DISENGAGE"),
         pm="PM", pf="PF", alert=f["alert"],
@@ -456,7 +460,7 @@ def quick_data(f, v, w):
         pitch=pitch,
         flaps=f["flaps"],
         speeds=[("VMO / MMO", f"{f['vmo']} kt / M{f['mmo']:.2f}"), ("Gear extend / retract", f"{f['gear']['vlo_ext']} / {f['gear']['vlo_ret']} kt"),
-                ("Gear extended (VLE)", f"{f['gear']['vle']} kt"), ("Turbulence penetration", "about 270-280 kt / M0.76-0.80" if f["widebody"] else "about 275 kt / M0.76"),
+                ("Gear extended (VLE)", f"{f['gear']['vle']} kt"), ("Turbulence penetration", f"about {f['vmo'] - 30} kt (VMO minus 20-30 kt)" if f.get("turboprop") else ("about 270-280 kt / M0.76-0.80" if f["widebody"] else "about 275 kt / M0.76")),
                 ("Maximum operating altitude", f"{f['ceiling']:,} ft"), ("Max demonstrated crosswind", f"{f['crosswind']} kt")],
         weights=[("MTOW", f"{v['mtow']:,} kg"), ("MLW", f"{v['mlw']:,} kg"), ("MZFW", f"{v['mzfw']:,} kg"),
                  ("Fuel capacity", f"{v['fuel_l']:,} L (about {v['fuel_kg']:,} kg)")],

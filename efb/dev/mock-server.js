@@ -180,6 +180,13 @@ http.createServer(async (req, res) => {
       const f = state.flight;
       if (!f.closed || !f.closed.signature) return json(res, 400, { error: 'The flight must be signed first.' });
       if ((f.goArounds || []).some(g => !g.reason)) return json(res, 400, { error: 'Enter the reason for every go-around first.' });
+      const mine = Object.values(state.safety.reports).filter(r => r.flight && r.flight.id === f.id && r.status === 'closed').map(r => r.type);
+      const need = [];
+      if ((f.goArounds || []).length) need.push(['unstable', 'Unstable approach / go-around']);
+      if (f.landing && f.landing.rate >= (state.settings.hardLandingFpm || 600)) need.push(['hardlanding', 'Hard landing / tailstrike']);
+      if (f.fuel && f.fuel.on != null && f.fuel.on < (state.settings.minLandingFuelKg || 1500)) need.push(['fuel', 'Fuel event']);
+      const missingSr = need.filter(([t]) => !mine.includes(t));
+      if (missingSr.length) return json(res, 400, { error: 'Complete and close the required safety report first: ' + missingSr.map(x => x[1]).join('; ') + '.' });
       state.archive[f.id] = JSON.parse(JSON.stringify(f));
       state.history = [summary(f), ...state.history.filter(h => h.id !== f.id)];
       send({ t: 'history', d: state.history });

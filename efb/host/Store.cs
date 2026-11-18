@@ -279,6 +279,9 @@ internal sealed class Store : IDisposable
                 return "The flight must be signed first.";
             if (Flight["goArounds"] is JsonArray ga && ga.Any(g => J.Str((g as JsonObject)?["reason"]).Length == 0))
                 return "Enter the reason for every go-around first.";
+            var notFiled = RequiredSafety(Flight).Where(r => !r.Closed).ToList();
+            if (notFiled.Count > 0)
+                return "Complete and close the required safety report first: " + string.Join("; ", notFiled.Select(r => $"{r.Name} ({r.Why})")) + ".";
 
             var id = SafeId(J.Str(Flight["id"]));
             WriteAtomic(Path.Combine(_flightsDir, id + ".json"), Flight.ToJsonString());
@@ -296,6 +299,29 @@ internal sealed class Store : IDisposable
     // A closed report is locked: no more edits, and it cannot be deleted.
 
     private JsonObject SafetyReports => (JsonObject)Safety["reports"]!;
+
+    public double HardLandingFpm => J.Num(Settings["hardLandingFpm"]) is { } v && v > 0 ? v : 600;
+    public double MinLandingFuelKg => J.Num(Settings["minLandingFuelKg"]) is { } v && v > 0 ? v : 1500;
+
+    public sealed record RequiredReport(string Type, string Name, string Why, bool Closed);
+
+    // Safety reports a flight must have (filed and closed) before it can be signed and closed:
+    // any go-around or touch-and-go, a hard landing, or landing with less than the minimum fuel.
+    // Same rules as requiredReports() in web/js/safety-types.js. Call inside lock (Gate).
+    public List<RequiredReport> RequiredSafety(JsonObject f)
+    {
+        var need = new List<(string Type, string Name, string Why)>();
+        if (f["goArounds"] is JsonArray ga && ga.Count > 0)
+            need.Add(("unstable", "Unstable approach / go-around", ga.Count == 1 ? "go-around detected" : $"{ga.Count} go-arounds detected"));
+        if (J.Num(f["landing"]?["rate"]) is { } rate && rate >= HardLandingFpm)
+            need.Add(("hardlanding", "Hard landing / tailstrike", $"landing rate {rate:0} fpm"));
+        if (J.Num(f["fuel"]?["on"]) is { } fob && fob < MinLandingFuelKg)
+            need.Add(("fuel", "Fuel event", $"landed with {fob:N0} kg, below the {MinLandingFuelKg:N0} kg minimum"));
+        var id = J.Str(f["id"]);
+        var mine = SafetyReports.Select(kv => kv.Value as JsonObject).Where(r => r is not null && J.Str(r["flight"]?["id"]) == id).ToList();
+        return need.Select(n => new RequiredReport(n.Type, n.Name, n.Why,
+            mine.Any(r => J.Str(r!["type"]) == n.Type && J.Str(r["status"]) == "closed"))).ToList();
+    }
 
     private bool SafetyOpAllowed(JsonObject op)
     {

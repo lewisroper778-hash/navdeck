@@ -1,7 +1,7 @@
 // Safety: pilots open safety reports, complete them, then sign and close them. Closing locks the report and posts it to Discord.
 import { S, h, api, set, del, fmtT, fmtDate } from '../core.js';
 import { modal, confirmBox, toast, signaturePad } from '../widgets.js';
-import { SAFETY_TYPES, SEVERITIES, OUTCOMES, safetyType, suggestedReports } from '../safety-types.js';
+import { SAFETY_TYPES, SEVERITIES, OUTCOMES, safetyType, requiredReports } from '../safety-types.js';
 
 let filter = 'open', selected = '';
 let root = null;
@@ -23,7 +23,7 @@ export async function openReport(typeId) {
   const fields = {}, labels = {};
   for (const fd of type.fields) {
     labels[fd.k] = fd.label;
-    const v = fd.auto ? fd.auto(f) : '';
+    const v = fd.auto ? fd.auto(f, S.settings) : '';
     if (v !== '' && v != null) fields[fd.k] = v;
   }
   const r = await api('/api/safety/open', { method: 'POST', body: {
@@ -35,6 +35,11 @@ export async function openReport(typeId) {
   toast(`${r.number} is open. Complete it, then sign and close it.`, 'good', 'Safety report opened');
   if (location.hash !== '#safety') location.hash = 'safety'; else draw();
   return r;
+}
+
+export function continueReport(id) {
+  selected = id; filter = 'open';
+  if (location.hash !== '#safety') location.hash = 'safety'; else draw();
 }
 
 async function chooseType() {
@@ -160,16 +165,18 @@ function draw() {
   const shown = filter === 'open' ? open : filter === 'closed' ? closed : all;
   if (!shown.some(r => r.id === selected)) selected = shown[0]?.id || '';
   const current = S.safety.reports[selected];
-  const tips = suggestedReports(S.flight, S.safety.reports);
+  const due = requiredReports(S.flight, S.safety.reports, S.settings).filter(t => !t.done);
 
   root.replaceChildren(
     h('div', { class: 'page-head' }, h('h2', null, 'Safety'),
       h('div', { class: 'seg' }, [['open', `Open (${open.length})`], ['closed', `Closed (${closed.length})`], ['all', 'All']].map(([k, l]) => h('button', { class: filter === k ? 'on' : '', onclick: () => { filter = k; draw(); } }, l))),
       h('span', { class: 'spacer' }),
       h('button', { class: 'btn primary', onclick: chooseType }, 'New report')),
-    tips.length ? h('div', { class: 'banner b-warn', style: { marginBottom: '14px' } }, h('div', { class: 'stack', style: { gap: '6px', flex: '1' } },
-      tips.map(t => h('div', { class: 'row' }, h('span', { style: { flex: '1' } }, h('b', null, safetyType(t.type).name + ' suggested. '), t.why + '.'),
-        h('button', { class: 'btn small primary', onclick: () => openReport(t.type) }, 'Open report'))))) : null,
+    due.length ? h('div', { class: 'banner b-bad sr-required' }, h('div', { class: 'stack', style: { gap: '6px', flex: '1' } },
+      h('b', null, `Safety report required: the flight cannot be signed and closed until ${due.length === 1 ? 'this report is' : 'these reports are'} completed and closed.`),
+      due.map(t => h('div', { class: 'row' }, h('span', { style: { flex: '1' } }, h('b', null, safetyType(t.type).name + ': '), t.why + (t.report ? ` (${t.report.number} open)` : '.')),
+        t.report ? h('button', { class: 'btn small primary', onclick: () => continueReport(t.report.id) }, 'Continue report')
+          : h('button', { class: 'btn small primary', onclick: () => openReport(t.type) }, 'Open report'))))) : null,
     h('div', { class: 'sr-layout' },
       h('div', { class: 'card sr-list' }, shown.length ? shown.map(listItem)
         : h('div', { class: 'empty' }, filter === 'closed' ? 'No closed reports yet.' : 'No open safety reports. Use New report to file one.')),

@@ -164,7 +164,26 @@ internal static class SelfTest
             store.ApplyOps("flight", new JsonArray(new JsonObject { ["op"] = "set", ["path"] = new JsonArray("goArounds", 0, "reason"), ["value"] = "Accidental touchdown" }));
             Check(store.CloseFlight() is { } stillMissing && stillMissing.Contains("go-around"), "every go-around and touch-and-go needs a reason");
             store.ApplyOps("flight", new JsonArray(new JsonObject { ["op"] = "set", ["path"] = new JsonArray("goArounds", 1, "reason"), ["value"] = "Unstable approach" }));
-            Check(store.CloseFlight() is null, "closes once signed and the reason is entered");
+            Check(store.CloseFlight() is { } needsReport && needsReport.Contains("safety report") && needsReport.Contains("go-around"), "a go-around makes a safety report mandatory before closing");
+            {
+                string flightId;
+                lock (store.Gate) flightId = J.Str(store.Flight["id"]);
+                var ga = store.OpenSafety(new JsonObject
+                {
+                    ["type"] = "unstable", ["typeName"] = "Unstable approach / go-around", ["openedBy"] = "TEST",
+                    ["flight"] = new JsonObject { ["id"] = flightId, ["flightNo"] = "BAW123" },
+                }, clock);
+                Check(store.CloseFlight() is { } stillOpen && stillOpen.Contains("safety report"), "an open (not closed) safety report is not enough");
+                store.ApplyOps("safety", new JsonArray(
+                    new JsonObject { ["op"] = "set", ["path"] = new JsonArray("reports", J.Str(ga["id"]), "severity"), ["value"] = "Low" },
+                    new JsonObject { ["op"] = "set", ["path"] = new JsonArray("reports", J.Str(ga["id"]), "narrative"), ["value"] = "Unstable at 1000 ft, went around." }));
+                Check(store.CloseSafety(J.Str(ga["id"]), new JsonObject { ["name"] = "TEST", ["outcome"] = "No further action" }, clock, out _) is null, "go-around safety report closed");
+                var hard = new JsonObject { ["id"] = "x1", ["goArounds"] = new JsonArray(), ["landing"] = new JsonObject { ["rate"] = 650 }, ["fuel"] = new JsonObject { ["on"] = 1400.0 } };
+                List<Store.RequiredReport> need;
+                lock (store.Gate) need = store.RequiredSafety(hard);
+                Check(need.Select(n => n.Type).SequenceEqual(new[] { "hardlanding", "fuel" }), "hard landing (600 fpm) and landing below 1,500 kg need a report");
+            }
+            Check(store.CloseFlight() is null, "closes once signed, the reason is entered and the safety report is closed");
             Check(store.History.Count == 1, "closed flight added to the logbook");
 
             // journey log is posted to the Discord webhook (a stand-in here): first Discord is busy, then it accepts

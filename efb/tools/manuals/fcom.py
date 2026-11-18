@@ -17,6 +17,17 @@ def _airbus(v):
     return v["f"]["maker"] == "Airbus" and v["family"] != "A220"
 
 
+ENGINE_WORDS = {2: "two", 3: "three", 4: "four"}
+
+
+def cruise(f):
+    return f["perf"]["cruise_short"] if f.get("perf") else f"M{f['cruise_mach']:.2f}"
+
+
+def climb_mach(f):
+    return f"M{max(0.70, f['cruise_mach'] - 0.02):.2f}"
+
+
 def _is_ab_style(v):
     return v["f"]["maker"] == "Airbus"
 
@@ -32,13 +43,13 @@ def general(v):
                  "variant, engine or software standard. Where it differs, your add-on's own documentation wins."),
         ("h", "The aircraft"),
         ("p", f"The {v['title']} is a {'twin-aisle, wide-body' if f['widebody'] else 'single-aisle, narrow-body'} airliner "
-              f"with {'four' if f['engines'] == 4 else 'two'} {v['engine']} engines. {f['doors']} "
+              f"with {ENGINE_WORDS[f['engines']]} {v['engine']} {'turboprop engines' if f.get('turboprop') else 'engines'}. {f['doors']} "
               f"Typical seating is {v['seats']}, and typical range is about {v['range']:,} nm."),
         ("t", ["Item", "Typical value"], [
             ("Engines", f"{f['engines']} x {v['engine']}"), ("Length", f"{v['length']} m"), ("Wingspan", f"{v['span']} m"),
             ("Seats", v["seats"]), ("Range", f"{v['range']:,} nm"), ("Max operating altitude", f"{f['ceiling']:,} ft"),
-            ("Cruise speed", f"M{f['cruise_mach']:.2f}"), ("Typical fuel burn in cruise", f"about {v['burn']:,} kg/h"),
-            ("APU", f["apu"]),
+            ("Cruise speed", cruise(f)), ("Typical fuel burn in cruise", f"about {v['burn']:,} kg/h"),
+            ("APU", f["apu"] or "None (Hotel mode on engine 2)"),
         ]),
         ("h", "Cockpit philosophy"),
         ("p", (
@@ -92,7 +103,7 @@ def limitations(v):
         ("ul", ["Use the takeoff/go-around thrust limit for no more than 5 minutes (10 minutes with an engine out).",
                 "Starter: a fixed duty cycle applies (typically 2 or 3 attempts, then a cooling period).",
                 "Reverse thrust: do not use in flight. Reduce to idle reverse by about 70 kt on the ground.",
-                f"APU ({f['apu']}): bleed use has an altitude limit, typically around 20,000 to 25,000 ft; the generator works up to the ceiling."]),
+                (f"APU ({f['apu']}): bleed use has an altitude limit, typically around 20,000 to 25,000 ft; the generator works up to the ceiling." if f["apu"] else f.get("hotel", "No APU."))]),
         ("h", "Fuel"),
         ("ul", ["Do not take off with a fuel imbalance between the wing tanks beyond the limit set in your add-on (often about 500 to 1,500 kg).",
                 "Fuel in the centre tank is used first; the wing tanks must be full when the centre tank holds fuel.",
@@ -146,7 +157,7 @@ def systems(v):
     out += [("h", "Flight controls"),
             ("p", f["fbw_note"] + " " + (
                 "Normal law protects against high angle of attack, overspeed, excessive bank (67°) and excessive pitch. Each sidestick "
-                "input commands a rate of turn or a load factor; when released, the aircraft holds its attitude." if ab or fam == "A220" else
+                "input commands a rate of turn or a load factor; when released, the aircraft holds its attitude." if (ab and f.get("sidestick")) or fam == "A220" else
                 ("Normal mode protects against stall, overspeed and excessive bank, while keeping a conventional feel." if f.get("law") else
                  "The stabilizer is the main pitch trim. Use small, frequent trim inputs. The rudder has a yaw damper."))),
             ("t", ["Setting", "Max speed (kt)"], [(a, str(s)) for a, s in f["flaps"]])]
@@ -168,13 +179,17 @@ def systems(v):
             ("p", "Two (or three) inertial reference systems with GPS update give position. The FMS computes the route and performance. "
                   "Radio navigation: VOR, DME, ILS and (on newer aircraft) GLS. Weather radar, TCAS and terrain warning (EGPWS) are fitted.")]
     out += [("h", "APU"),
-            ("p", f"The {f['apu']} supplies electrical power" + (" and bleed air" if bleed else "") +
-                  " on the ground and as a backup in flight. It starts from the battery. Allow about 1 to 2 minutes for it to start and become available. "
-                  "After using APU bleed, let the APU run for about 1 to 2 minutes before shutting it down (cooling).")]
+            ("p", (f"The {f['apu']} supplies electrical power" + (" and bleed air" if bleed else "") +
+                   " on the ground and as a backup in flight. It starts from the battery. Allow about 1 to 2 minutes for it to start and become available. "
+                   "After using APU bleed, let the APU run for about 1 to 2 minutes before shutting it down (cooling).") if f["apu"] else
+                  f.get("hotel", "No APU is fitted.") + " Use external power when it is available.")]
     out += [("h", "Engines"),
             ("p", f"{f['engines']} x {v['engine']}. The engines are controlled by FADEC (full authority digital engine control), "
                   "which sets the thrust for the lever position, protects the limits and runs the start sequence automatically on most aircraft. "
                   "Watch the start: N2 (or N3), fuel flow, EGT rise and oil pressure."),
+            ("t", ["Phase", "Power setting"], [("Takeoff", "Takeoff power (TO / RTO), propellers at 100%"), ("Climb", "Climb power, propellers at climb RPM"),
+                                               ("Cruise", "Cruise power, propellers at cruise RPM"), ("Approach", "Set manually (autothrottle if fitted)"),
+                                               ("Reverse", "Ground idle or reverse on landing, ground idle by about 60 kt")]) if f.get("turboprop") else
             ("t", ["Phase", "Thrust setting"], [("Takeoff", "FLEX / derated (reduced) thrust when performance allows, else TOGA / full"),
                                                  ("Climb", "CLB / climb thrust, reduced climb on light aircraft"),
                                                  ("Cruise", "Set by the autothrust for the cruise speed"),
@@ -205,7 +220,9 @@ def normal(v):
         ("h", "4. Engine start"),
         ("p", f"Start the engines in the order your operator uses (often engine {'2 then 1' if ab else '2 then 1 (right then left)'}). "
               "Monitor every start: rotation, light-off within about 10-15 s of fuel, EGT peak within limits, oil pressure rising, stabilised idle."),
-        ("flow", ([("ENG MODE selector", "IGN / START"), ("ENG MASTER (one engine)", "ON"), ("Start sequence", "Monitor"),
+        ("flow", ([("Start selector / ignition", "START / ON"), (f["v_start"][0] + " (one engine)", f["v_start"][1]), ("Start sequence", "Monitor"),
+                   ("Next engine", "Repeat"), ("Start selector / ignition", "OFF / NORM")] if f.get("v_start") else
+                  [("ENG MODE selector", "IGN / START"), ("ENG MASTER (one engine)", "ON"), ("Start sequence", "Monitor"),
                    ("Second engine", "Repeat"), ("ENG MODE selector", "NORM")] if ab and v["family"] != "A220" else
                   [("Engine start switch / selector", "GND / START"), (("Engine start lever" if v["family"] == "737" else "Fuel control switch / ENG RUN"), "IDLE / RUN at the correct N2 (typically 25%)"),
                    ("Start", "Monitor; switch off automatically at about 56% N2"), ("Second engine", "Repeat")])),
@@ -221,11 +238,13 @@ def normal(v):
                 "Positive climb: gear up. At acceleration altitude: lower the nose, retract flaps on schedule.",
                 "Use NAVDECK EFB: the gate-out, takeoff and wheels-up times are logged automatically from FSUIPC."]),
         ("h", "7. Climb"),
-        ("ul", ["Climb at 250 kt below FL100, then at the climb speed (typically 290-310 kt) until the crossover to Mach.",
-                f"Above FL100: landing lights OFF, signs as required. Typical climb Mach is M{max(0.74, f['cruise_mach'] - 0.02):.2f}.",
+        ("ul", ([f"Climb at about {f['perf']['climb_low']} below FL100 and {f['perf']['climb_high']} above.",
+                 "Above FL100: landing lights OFF, signs as required. Set climb power and keep an eye on ITT and torque."] if f.get("perf") else
+                ["Climb at 250 kt below FL100, then at the climb speed (typically 290-310 kt) until the crossover to Mach.",
+                 f"Above FL100: landing lights OFF, signs as required. Typical climb Mach is {climb_mach(f)}."]) + [
                 "Check fuel against the plan at top of climb. NAVDECK EFB records fuel at each waypoint."]),
         ("h", "8. Cruise"),
-        ("ul", [f"Typical cruise speed M{f['cruise_mach']:.2f} or cost-index speed.",
+        ("ul", [f"Typical cruise speed {cruise(f)} or cost-index speed.",
                 "Step climb when about 2,000-4,000 ft below optimum altitude and the weight allows.",
                 "Check fuel every 30 min or at each waypoint: actual versus planned, and the fuel at destination.",
                 "Watch the weather radar and plan diversions. Get the destination weather and ATIS before the descent."]),
@@ -233,7 +252,7 @@ def normal(v):
         ("ul", ["About 100 nm before top of descent: brief the arrival, approach, missed approach and taxi-in.",
                 "Set the approach in the FMS, landing minimums, autobrake and landing flaps (" + "/".join(flaps_ld) + ").",
                 "Descent rule of thumb: 3 nm per 1,000 ft to lose, plus 1 nm per 10 kt to slow down.",
-                "Below FL100: 250 kt, landing lights ON."]),
+                "Below FL100: 250 kt or less" + (f" ({f['perf']['descent']} is typical)" if f.get("perf") else "") + ", landing lights ON."]),
         ("h", "10. Approach and landing"),
         ("ul", ["Decelerate and configure in time to be stable by 1,000 ft (instrument) or 500 ft (visual):",
                 "on the final path, landing configuration, speed between VAPP and VAPP+10, thrust stabilised, landing checklist done.",
@@ -302,11 +321,11 @@ def performance(v):
         ("note", "Simulator rule-of-thumb figures only. Use your add-on's FMS, a performance calculator or SimBrief for real numbers."),
         ("h", "Typical profile"),
         ("t", ["Phase", "Speed", "Notes"], [
-            ("Climb below FL100", "250 kt", "ATC speed limit"),
-            ("Climb above FL100", "290-310 kt then M" + f"{max(0.74, f['cruise_mach'] - 0.02):.2f}", "or cost-index speed"),
-            ("Cruise", f"M{f['cruise_mach']:.2f}", "LRC / cost-index"),
-            ("Descent", f"M{f['cruise_mach']:.2f} / 290-300 kt", "3 nm per 1,000 ft"),
-            ("Holding", "about 210-230 kt" if not f["widebody"] else "about 230-250 kt", "Green dot / maneuvering speed"),
+            ("Climb below FL100", f["perf"]["climb_low"] if f.get("perf") else "250 kt", "ATC speed limit 250 kt"),
+            ("Climb above FL100", f["perf"]["climb_high"] if f.get("perf") else "290-310 kt then " + climb_mach(f), "or cost-index speed"),
+            ("Cruise", f["perf"]["cruise"] if f.get("perf") else f"M{f['cruise_mach']:.2f}", "LRC / cost-index"),
+            ("Descent", f["perf"]["descent"] if f.get("perf") else f"M{f['cruise_mach']:.2f} / 290-300 kt", "3 nm per 1,000 ft"),
+            ("Holding", f["perf"]["hold"] if f.get("perf") else ("about 210-230 kt" if not f["widebody"] else "about 230-250 kt"), "Minimum clean / maneuvering speed"),
             ("Final approach", f"VREF about {vref_full} kt at MLW", "add wind correction (half the headwind plus all the gust, max +15/20 kt)")]),
         ("h", "Fuel planning (rough)"),
         ("t", ["Item", "Typical value"], [("Cruise fuel flow", f"about {v['burn']:,} kg/h total"),

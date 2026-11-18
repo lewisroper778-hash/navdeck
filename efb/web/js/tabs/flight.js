@@ -3,8 +3,8 @@ import { S, h, fmtT, fmtW, fmtDur, fmtDate, diffMs, push, del, api, nowIso, flig
 import { newFromSimbrief, newBlank, signAndClose, exportPdf } from '../actions.js';
 import { modal, confirmBox, toast, rateRating, rateClass } from '../widgets.js';
 import { CREW_ROLES } from '../data.js';
-import { safetyType, suggestedReports } from '../safety-types.js';
-import { openReport } from './safety.js';
+import { safetyType, requiredReports } from '../safety-types.js';
+import { openReport, continueReport } from './safety.js';
 
 const PHASES = ['Parked', 'Taxi out', 'Airborne', 'Taxi in', 'Arrived'];
 
@@ -79,11 +79,12 @@ function crewCard() {
 function safetyCard() {
   const f = S.flight;
   const mine = Object.values(S.safety?.reports || {}).filter(r => r.flight?.id === f.id);
-  const tips = suggestedReports(f, S.safety?.reports);
+  const tips = requiredReports(f, S.safety?.reports, S.settings).filter(t => !t.done);
   return h('div', { class: 'card c6' },
     h('h3', null, 'Safety reports', h('span', { class: 'spacer' }), h('a', { class: 'btn small', href: '#safety' }, 'Open Safety')),
-    tips.map(t => h('div', { class: 'row', style: { marginBottom: '8px' } }, h('span', { class: 'tag warn' }, 'Suggested'), h('span', { style: { flex: '1' } }, `${safetyType(t.type).name}: ${t.why}`),
-      h('button', { class: 'btn small primary', onclick: () => openReport(t.type) }, 'Open'))),
+    tips.map(t => h('div', { class: 'row', style: { marginBottom: '8px' } }, h('span', { class: 'tag bad' }, 'Required'), h('span', { style: { flex: '1' } }, `${safetyType(t.type).name}: ${t.why}`),
+      t.report ? h('button', { class: 'btn small primary', onclick: () => continueReport(t.report.id) }, 'Continue')
+        : h('button', { class: 'btn small primary', onclick: () => openReport(t.type) }, 'Open'))),
     mine.length ? h('div', { class: 'stack' }, mine.map(r => h('a', { class: 'msg', href: '#safety', style: { textDecoration: 'none', color: 'inherit' } },
       h('div', { class: 'body' }, h('div', { class: 'meta' }, `${r.number}  ·  ${r.status === 'closed' ? 'Closed' : 'Open'}${r.severity ? '  ·  ' + r.severity : ''}`), r.typeName + (r.title ? ': ' + r.title : '')))))
       : !tips.length && h('div', { class: 'empty' }, 'No safety reports for this flight.'));

@@ -4,6 +4,8 @@ import { flightFromOfp, planAt, ofpFromFile } from './simbrief.js';
 import { toast, modal, confirmBox, signaturePad, keypad } from './widgets.js';
 import { GO_AROUND_REASONS } from './data.js';
 import { airlineOf } from './airlines.js';
+import { requiredReports, safetyType } from './safety-types.js';
+import { openReport, continueReport } from './tabs/safety.js';
 
 export async function startFlight(flight) {
   await api('/api/flight/new', { method: 'POST', body: { flight } });
@@ -145,6 +147,18 @@ export async function signAndClose() {
   if (f.closed) { toast('This flight is already closed.'); return; }
   if (!f.dep) { toast('There is no flight to close.'); return; }
   if (!(await askGoAroundReasons())) return;
+  const due = requiredReports(f, S.safety?.reports, S.settings).filter(t => !t.done);
+  if (due.length) {
+    const go = await modal({
+      title: 'Safety report required',
+      body: h('div', { class: 'stack' },
+        h('p', null, 'This flight cannot be signed and closed until the following safety ' + (due.length === 1 ? 'report is' : 'reports are') + ' completed, signed and closed:'),
+        h('ul', { class: 'sr-due' }, due.map(t => h('li', null, h('b', null, safetyType(t.type).name), ': ', t.why, t.report ? ` (${t.report.number} is open)` : ' (not filed yet)')))),
+      buttons: [{ label: 'Cancel', value: false }, { label: due[0].report ? 'Continue report' : 'Open report', value: true, primary: true }],
+    });
+    if (go) { if (due[0].report) continueReport(due[0].report.id); else await openReport(due[0].type); }
+    return;
+  }
   if (!f.times.in && !(await confirmBox('No on-blocks time yet', 'The flight has no on-blocks (IN) time. Close it anyway?', 'Close anyway'))) return;
 
   const pic = f.crew.find(c => c.role === 'PIC')?.name || S.settings.picName || '';
