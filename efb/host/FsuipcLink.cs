@@ -15,8 +15,16 @@ internal readonly record struct Sample(
     double HeadingDeg = 0,
     double RadioAltFt = double.NaN,
     double VerticalSpeedFpm = double.NaN,
-    bool Engine1On = true)
+    bool Engine1On = true,
+    double GroundElevFt = double.NaN,
+    bool? GearDown = null)
 {
+    // Height above the ground: the radio altimeter, or altitude minus ground elevation when the
+    // aircraft's radio altimeter reads nothing (some MSFS aircraft, or above its range).
+    public double AglFt =>
+        double.IsFinite(RadioAltFt) && RadioAltFt > 1 ? RadioAltFt :
+        double.IsFinite(GroundElevFt) ? Math.Max(0, AltFt - GroundElevFt) : RadioAltFt;
+
     public bool HasPosition =>
         double.IsFinite(Lat) && double.IsFinite(Lon) &&
         Lat is >= -90 and <= 90 && Lon is >= -180 and <= 180 &&
@@ -43,6 +51,8 @@ internal sealed class FsuipcLink : IDisposable
     private readonly Offset<long> _alt = new(Group, 0x0570);             // metres * 65536 * 65536
     private readonly Offset<int> _radioAlt = new(Group, 0x31E4);         // metres * 65536
     private readonly Offset<int> _verticalSpeed = new(Group, 0x02C8);    // m/s * 256
+    private readonly Offset<int> _groundElev = new(Group, 0x0020);       // metres * 256
+    private readonly Offset<int> _gearHandle = new(Group, 0x0BE8);       // 0 up, 16383 down
     private readonly Offset<short> _engine1 = new(Group, 0x0894);        // combustion flag
     private readonly Offset<byte> _second = new(Group, 0x023A);          // simulator clock
     private readonly Offset<byte> _zuluHour = new(Group, 0x023B);
@@ -94,7 +104,9 @@ internal sealed class FsuipcLink : IDisposable
                 HeadingDeg: _heading.Value * 360.0 / 4294967296.0,
                 RadioAltFt: _radioAlt.Value / 65536.0 * 3.28084,
                 VerticalSpeedFpm: _verticalSpeed.Value / 256.0 * MpsToFpm,
-                Engine1On: _engine1.Value != 0);
+                Engine1On: _engine1.Value != 0,
+                GroundElevFt: _groundElev.Value / 256.0 * 3.28084,
+                GearDown: _gearHandle.Value > 8000);
         }
         catch (Exception)
         {

@@ -132,7 +132,7 @@ internal sealed class FlightTracker
 
         // Off the ground again. A bounce stays low and keeps the first contact as the touchdown;
         // climbing away means it was a touch-and-go and the flight carries on.
-        var lowBounce = double.IsFinite(s.RadioAltFt) && s.RadioAltFt < 50 &&
+        var lowBounce = double.IsFinite(s.AglFt) && s.AglFt < 50 &&
                         (!double.IsFinite(s.VerticalSpeedFpm) || s.VerticalSpeedFpm < 600) &&
                         now - _contactAt < TimeSpan.FromSeconds(15);
         if (lowBounce) return null;

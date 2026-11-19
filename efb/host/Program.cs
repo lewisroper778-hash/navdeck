@@ -96,7 +96,7 @@ internal sealed class SimPoller : IDisposable
                 _engine.Feed(sample, DateTime.UtcNow, link.SimUtc, link.AircraftTitle);
 
                 // Faster sampling near the ground so the touchdown point is precise.
-                var nearGround = !sample.OnGround && double.IsFinite(sample.RadioAltFt) && sample.RadioAltFt < 400;
+                var nearGround = !sample.OnGround && double.IsFinite(sample.AglFt) && sample.AglFt < 400;
                 token.WaitHandle.WaitOne(nearGround ? 100 : 250);
             }
             catch (Exception)
