@@ -15,7 +15,7 @@ internal sealed class FlightEngine
     private string _flightId = "";
     private bool _resumeChecked;
     private bool _lastOnGround = true;
-    private int _fixIndex = -1;
+    private string? _fixKey;   // the fix being tracked, by identity: waypoints can be deleted or skipped (direct to)
     private double _minDist = double.MaxValue;
     private double? _nextDistNm;
     private DateTime _lastTelemetry = DateTime.MinValue;
@@ -54,7 +54,7 @@ internal sealed class FlightEngine
             if (id != _flightId)
             {
                 _flightId = id;
-                _fixIndex = -1;
+                _fixKey = null;
                 _minDist = double.MaxValue;
                 _fuelBase = _fuelLast = double.NaN;
                 _goAround.Reset();
@@ -316,14 +316,14 @@ internal sealed class FlightEngine
             break;
         }
         if (index < 0) { _nextDistNm = null; return false; }
-        if (index != _fixIndex)
-        {
-            _fixIndex = index;
-            _minDist = double.MaxValue;
-        }
-
         var fix = (JsonObject)nav[index]!;
         double lat = J.Num(fix["lat"])!.Value, lon = J.Num(fix["lon"])!.Value;
+        var key = $"{J.Str(fix["ident"])}|{lat:F4}|{lon:F4}";
+        if (key != _fixKey)
+        {
+            _fixKey = key;
+            _minDist = double.MaxValue;
+        }
         var d = Nm(s.Lat, s.Lon, lat, lon);
         _nextDistNm = d;
         _minDist = Math.Min(_minDist, d);

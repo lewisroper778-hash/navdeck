@@ -289,3 +289,7 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
 .sr-type:hover { border-color: var(--accent); }
 .sr-type .sr-icon { color: var(--accent); width: 26px; height: 26px; }
 .sr-type small { color: var(--muted); line-height: 1.4; }
+
+/* ---------- NavLog waypoint actions */
+.nav-actions { white-space: nowrap; text-align: right; width: 1%; }
+.nav-actions .btn + .btn { margin-left: 6px; }

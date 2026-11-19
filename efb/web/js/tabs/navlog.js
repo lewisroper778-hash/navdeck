@@ -1,7 +1,7 @@
 // NavLog: planned and actual times and fuel at every fix, fuel checks and the diversion log.
-import { S, h, fmtT, fmtW, fmtSignedW, fmtAlt, fmtDur, setF, setS, nowIso, addNotice, num, wUnit, now } from '../core.js';
+import { S, h, fmtT, fmtW, fmtSignedW, fmtAlt, fmtDur, setF, setS, nowIso, addNotice, num, wUnit, now, patch } from '../core.js';
 import { editTime, editWeight, recordFuelCheck } from '../actions.js';
-import { modal } from '../widgets.js';
+import { modal, confirmBox, toast } from '../widgets.js';
 
 // Planned time over each fix, and the estimate revised by how early or late the flight is running.
 export function navTimes(f) {
@@ -23,6 +23,37 @@ function fuelDiff(x) {
     (d >= 0 ? '▲ ' : '▼ ') + fmtSignedW(d));
 }
 
+// Removing waypoints: one at a time, or every fix before the one you were cleared direct to. The last change can be undone.
+let undo = null;   // { flightId, items: [{ i, x }] }
+
+function removeFixes(indexes, label) {
+  const f = S.flight;
+  const sorted = [...indexes].sort((a, b) => b - a);
+  undo = { flightId: f.id, label, items: sorted.map(i => ({ i, x: JSON.parse(JSON.stringify(f.navlog[i])) })).reverse() };
+  patch('flight', ...sorted.map(i => ({ op: 'del', path: ['navlog', i] })));
+  toast(label + '. Use Undo at the top of the NavLog to put it back.', 'good');
+}
+
+function undoRemove() {
+  if (!undo || undo.flightId !== S.flight.id) { undo = null; return; }
+  const list = S.flight.navlog.map(x => x);
+  for (const { i, x } of undo.items) list.splice(Math.min(i, list.length), 0, x);
+  setF(['navlog'], list);
+  toast('Waypoints restored.', 'good');
+  undo = null;
+}
+
+async function directTo(i) {
+  const f = S.flight;
+  const from = f.navlog.findIndex(x => !x.ata);
+  const skip = [];
+  for (let k = from; k < i; k++) if (!f.navlog[k].ata && !['apt', 'toc', 'tod'].includes(f.navlog[k].type)) skip.push(k);   // airports, TOC and TOD stay
+  if (!skip.length) return;
+  const names = skip.map(k => f.navlog[k].ident).join(', ');
+  if (!(await confirmBox(`Direct to ${f.navlog[i].ident}`, `Remove ${skip.length} waypoint${skip.length > 1 ? 's' : ''} before ${f.navlog[i].ident}: ${names}?`, 'Go direct'))) return;
+  removeFixes(skip, `Direct to ${f.navlog[i].ident}: ${skip.length} waypoint${skip.length > 1 ? 's' : ''} removed`);
+}
+
 function table() {
   const f = S.flight, times = navTimes(f), lock = !!f.closed;
   const hide = S.settings.hideTocTod;
@@ -40,12 +71,15 @@ function table() {
       h('td', { class: 'num' }, fmtW(x.planFob, false)),
       h('td', { class: 'num' }, tap(x.fob != null ? fmtW(x.fob, false) : '--', x.fob != null ? (x.auto ? 'auto' : 'set') : '', () => editWeight(`FOB at ${x.ident}`, ['navlog', i, 'fob'], x.fob))),
       h('td', { class: 'num' }, fuelDiff(x)),
-      h('td', { class: 'num muted' }, x.alt != null ? fmtAlt(x.alt) : x.planAlt != null ? fmtAlt(x.planAlt) : ''));
+      h('td', { class: 'num muted' }, x.alt != null ? fmtAlt(x.alt) : x.planAlt != null ? fmtAlt(x.planAlt) : ''),
+      h('td', { class: 'nav-actions' }, !lock && !x.ata && x.type !== 'apt' && [
+        i > nextIndex && h('button', { class: 'btn small', title: `Direct to ${x.ident}: remove the waypoints before it`, onclick: () => directTo(i) }, 'Direct'),
+        h('button', { class: 'btn small', 'aria-label': `Delete ${x.ident}`, title: `Delete ${x.ident}`, onclick: () => removeFixes([i], `${x.ident} removed`) }, '✕')]));
   });
   return h('div', { class: 'table-wrap' }, h('table', { class: 'tbl' },
     h('thead', null, h('tr', null,
       h('th', null, 'Fix'), h('th', { class: 'num' }, 'Plan'), h('th', { class: 'num' }, 'ETO'), h('th', { class: 'num' }, 'ATA'),
-      h('th', { class: 'num' }, `Plan FOB ${wUnit()}`), h('th', { class: 'num' }, `FOB ${wUnit()}`), h('th', { class: 'num' }, 'vs plan'), h('th', { class: 'num' }, 'Altitude'))),
+      h('th', { class: 'num' }, `Plan FOB ${wUnit()}`), h('th', { class: 'num' }, `FOB ${wUnit()}`), h('th', { class: 'num' }, 'vs plan'), h('th', { class: 'num' }, 'Altitude'), h('th', null, ''))),
     h('tbody', null, rows)));
 }
 
@@ -139,6 +173,7 @@ export default {
   render(root) {
     const f = S.flight, st = S.settings;
     root.append(h('div', { class: 'page-head' }, h('h2', null, 'NavLog'), h('div', { class: 'spacer' }),
+      undo && undo.flightId === f.id && !f.closed && h('button', { class: 'btn small', onclick: undoRemove }, 'Undo: ' + undo.label.split(':')[0]),
       h('span', { class: 'muted' }, 'Hide TOC and TOD'),
       h('button', { class: 'switch' + (st.hideTocTod ? ' on' : ''), 'aria-label': 'Hide TOC and TOD', onclick: () => setS(['hideTocTod'], !st.hideTocTod) })));
     if (!f.navlog.length) {
