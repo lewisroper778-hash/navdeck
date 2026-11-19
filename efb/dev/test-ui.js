@@ -318,6 +318,10 @@ async function sign(page) {
     });
     check(railOk, 'sidebar shows every section name and fits a short screen without scrolling');
     await shortPage.screenshot({ path: path.join(OUT, '22-sidebar-short.png') });
+    await shortPage.goto(BASE + '/#times');
+    await shortPage.waitForTimeout(500);
+    const viewScroll = await shortPage.evaluate(() => { const v = document.getElementById('view'); v.scrollTop = 99999; return [v.scrollTop, v.clientHeight, window.innerHeight]; });
+    check(viewScroll[0] > 0 && viewScroll[1] < viewScroll[2], 'pages scroll to show the rest of the information on a short screen: ' + JSON.stringify(viewScroll));
     await shortPage.close();
     await page.click('.seg button:has-text("Closed")');
     await page.waitForTimeout(200);

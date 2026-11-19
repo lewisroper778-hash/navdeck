@@ -58,7 +58,6 @@ h1, h2, h3, h4, p { margin: 0; }
   #rail a .ico { height: 20px; }
   #rail a svg { width: 16px; height: 16px; }
 }
-}
 
 #main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 #topbar { height: 58px; flex: none; display: flex; align-items: center; gap: 14px; padding: 0 18px; border-bottom: 1px solid var(--line); background: var(--panel); }
