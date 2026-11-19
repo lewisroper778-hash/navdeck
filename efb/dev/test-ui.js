@@ -86,6 +86,24 @@ async function sign(page) {
     check(await page.locator('.tbl tbody tr:has-text("TOC")').count() === 0, 'TOC and TOD can be hidden');
     await page.click('button[aria-label="Hide TOC and TOD"]');
 
+    // waypoints can be deleted, or skipped with Direct, and the change undone
+    const fixCount = await page.locator('.tbl tbody tr').count();
+    await page.click('button[aria-label="Delete HELEN"]');
+    await page.waitForTimeout(200);
+    check(await page.locator('.tbl tbody tr').count() === fixCount - 1 && await page.locator('.tbl tbody tr:has-text("HELEN")').count() === 0, 'a waypoint can be deleted');
+    await page.click('button:has-text("Undo:")');
+    await page.waitForTimeout(200);
+    check(await page.locator('.tbl tbody tr:has-text("HELEN")').count() === 1, 'a deleted waypoint can be put back');
+    await page.click('tr:has-text("KOK") button:has-text("Direct")');
+    await page.click('.modal-foot .btn.primary');
+    await page.waitForTimeout(200);
+    const afterDirect = await page.evaluate(() => fetch('/api/state').then(r => r.json()).then(s => s.flight.navlog.map(x => x.ident).join(' ')));
+    check(afterDirect === 'TOC KOK TOD HELEN SUGOL EHAM', 'direct to KOK removes the waypoints before it: ' + afterDirect);
+    await page.click('button:has-text("Undo:")');
+    await page.waitForTimeout(300);
+    const restored = await page.evaluate(() => fetch('/api/state').then(r => r.json()).then(s => s.flight.navlog.map(x => x.ident).join(' ')));
+    check(restored === 'DET DVR TOC KONAN KOK TOD HELEN SUGOL EHAM', 'direct can be undone: ' + restored);
+
     await tab('loads');
     await page.click('text=Create booking figures');
     await page.waitForSelector('text=Close boarding and issue final load sheet');
