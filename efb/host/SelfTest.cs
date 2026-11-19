@@ -86,6 +86,37 @@ internal static class SelfTest
             var receipts = F()["gsx"]?["receipts"] as JsonArray;
             Check(receipts?.Count == 1 && J.Str(receipts[0]?["type"]) == "Fuel", "fuel uplift saved as a receipt automatically");
 
+            // go-around detection on its own, with synthetic approaches (samples every 0.25 s)
+            {
+                int Fly(bool raWorks, bool? gear, params (double FromAgl, double ToAgl, double Fpm)[] legs)
+                {
+                    var d = new GoAroundDetector();
+                    var t = new DateTime(2026, 11, 16, 12, 0, 0, DateTimeKind.Utc);
+                    const double elev = 250;
+                    var found = 0;
+                    foreach (var (from, to, fpm) in legs)
+                    {
+                        var steps = Math.Max(1, (int)Math.Round(Math.Abs(to - from) / Math.Abs(fpm) * 60 / 0.25));
+                        for (var k = 1; k <= steps; k++)
+                        {
+                            var agl = from + (to - from) * k / steps;
+                            t = t.AddSeconds(0.25);
+                            var sample = new Sample(false, 140, 0, false, 10000, 51.4, -0.4, agl + elev, 270,
+                                raWorks ? agl : 0, raWorks ? fpm : 0, true, elev, gear);
+                            if (d.Update(sample, t, airborne: true) is not null) found++;
+                        }
+                    }
+                    return found;
+                }
+                Check(Fly(true, true, (3000, 2900, -800), (2900, 350, -800), (350, 2500, 1500)) == 1, "go-around near minimums detected once");
+                Check(Fly(false, null, (3000, 2900, -800), (2900, 350, -800), (350, 2500, 1500)) == 1, "go-around detected when the radio altimeter reads nothing");
+                Check(Fly(true, true, (3000, 1800, -700), (1800, 3000, 1200)) == 1, "go-around from 1,800 ft with the gear down detected");
+                Check(Fly(true, null, (3000, 700, -900), (700, 900, 600), (900, 2000, 800)) == 1, "slow go-around (600-800 fpm) detected");
+                Check(Fly(true, false, (3000, 2200, -700), (2200, 3000, 1000)) == 0, "climbing on vectors before the approach is not a go-around");
+                Check(Fly(true, true, (3000, 600, -800), (600, 625, 500), (625, 0.5, -700)) == 0, "a turbulence bump on final is not a go-around");
+                Check(Fly(true, null, (0.5, 3500, 2000)) == 0, "the climb after take-off is not a go-around");
+            }
+
             // taxi out, take-off, cruise, approach
             var pos = gate;
             for (var i = 0; i < 60; i++) { pos = MoveBy(pos.Lat, pos.Lon, 90, 8); Step(S(true, 15, pos, 200, 0, 0), 1); }

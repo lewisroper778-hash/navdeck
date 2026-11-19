@@ -76,7 +76,7 @@ internal sealed class FlightEngine
                 var hasOn = J.Str(times["on"]).Length > 0;
                 var hasIn = J.Str(times["in"]).Length > 0;
                 var clearlyFlying = !s.OnGround && s.GroundSpeedKt > 60 &&
-                                    (!double.IsFinite(s.RadioAltFt) || s.RadioAltFt > 100);
+                                    (!double.IsFinite(s.AglFt) || s.AglFt > 100);
                 if (hasOn && !hasIn && clearlyFlying)
                 {
                     // A landing was recorded but the aircraft is flying (for example a touch-and-go logged

@@ -164,6 +164,16 @@ async function sign(page) {
     check(await page.locator('text=164 fpm').count() >= 1, 'landing rate shown');
     check(await page.locator('td:has-text("Touch-and-go")').count() === 1, 'touch-and-go listed with the go-arounds');
     await shot('06-landing');
+    // a go-around the EFB missed can be logged by hand
+    await page.click('button:has-text("Log a go-around")');
+    await page.locator('.modal select').selectOption('Unstable approach');
+    await page.fill('.modal input[type=number]', '450');
+    await page.click('.modal-foot .btn.primary');
+    await page.waitForTimeout(300);
+    check(await page.locator('td:has-text("logged by hand")').count() === 1 && await page.locator('td:has-text("450 ft AGL")').count() === 1, 'a missed go-around can be logged by hand');
+    await page.evaluate(() => fetch('/api/state').then(r => r.json()).then(s => fetch('/api/patch', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ doc: 'flight', ops: [{ op: 'set', path: ['goArounds'], value: s.flight.goArounds.filter(g => !g.manual) }] }) })));
+    await page.waitForTimeout(200);
 
     // a wrong landing can be undone, then the real one is recorded again
     await page.click('button:has-text("Undo landing")');
