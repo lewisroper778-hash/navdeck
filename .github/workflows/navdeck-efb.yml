@@ -33,6 +33,7 @@ jobs:
         shell: pwsh
         run: |
           Get-ChildItem efb/web/js -Recurse -Filter *.js | ForEach-Object { node --check $_.FullName; if ($LASTEXITCODE -ne 0) { exit 1 } }
+          node -e "const c=require('fs').readFileSync('efb/web/app.css','utf8').replace(/\/\*[\s\S]*?\*\//g,'');let d=0;for(const ch of c){if(ch==='{')d++;else if(ch==='}'&&--d<0)break}if(d!==0){console.error('app.css has unbalanced braces');process.exit(1)}"
 
       - name: Bundle the PDF viewer (pdf.js) for charts and documents
         shell: pwsh
